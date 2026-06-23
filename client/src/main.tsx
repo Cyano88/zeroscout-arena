@@ -9,6 +9,7 @@ import { MatchupPage } from "./pages/MatchupPage";
 import { DocsPage } from "./pages/DocsPage";
 import { CampaignDetailPage, CampaignsPage } from "./pages/CampaignsPage";
 import { EmbedPage } from "./pages/EmbedPage";
+import { IntegratePage } from "./pages/IntegratePage";
 import ogLogo from "./assets/og-logo.jpeg";
 import zeroScoutMark from "./assets/zeroscout-mark.png";
 import grailMark from "./assets/grail-mark.png";
@@ -40,6 +41,7 @@ function App() {
             <NavLink to="/campaigns">Campaigns</NavLink>
             <NavLink to="/projects">Projects</NavLink>
             <NavLink to="/compare">Compare</NavLink>
+            <NavLink to="/integrate">Integrate</NavLink>
             <NavLink to="/" end>Create</NavLink>
             <NavLink to="/verify">Verify</NavLink>
           </nav>
@@ -60,6 +62,7 @@ function App() {
           <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
           <Route path="/compare" element={<MatchupPage />} />
+          <Route path="/integrate" element={<IntegratePage />} />
           <Route path="/verify" element={<DocsPage />} />
           <Route path="/embed/:campaignId" element={<EmbedPage />} />
           <Route path="/capsules/:id" element={<CapsulePage />} />

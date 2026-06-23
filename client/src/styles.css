@@ -864,6 +864,96 @@ input:focus, textarea:focus, select:focus {
   padding-top: 28px;
   padding-bottom: 32px;
 }
+
+/* === Integrations page === */
+.integrate-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.integrate-step {
+  min-height: 190px;
+  padding: 22px;
+  border-right: 1px solid var(--line);
+}
+.integrate-step:last-child { border-right: 0; }
+.integrate-step span {
+  font-family: var(--mono);
+  color: var(--muted-2);
+  font-size: 11px;
+}
+.integrate-step h2 {
+  margin: 30px 0 8px;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+.integrate-step p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.integrate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 26px;
+}
+.integration-card {
+  display: flex;
+  min-height: 300px;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.integration-card h2 {
+  margin: 18px 0 8px;
+  font-size: 20px;
+}
+.integration-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.integration-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: auto 0 16px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.integration-copy code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.usecase-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+.usecase-grid h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.usecase-grid p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
 .row .name {
   display: grid;
   gap: 2px;
@@ -993,7 +1083,9 @@ input:focus, textarea:focus, select:focus {
   .campaign-meta {
     grid-column: 2 / -1;
   }
-  .campaign-stats { grid-template-columns: 1fr; }
+  .campaign-stats, .integrate-flow, .integrate-grid, .usecase-grid { grid-template-columns: 1fr; }
+  .integrate-step { border-right: 0; border-bottom: 1px solid var(--line); min-height: auto; }
+  .integrate-step:last-child { border-bottom: 0; }
 }
 
 @media (max-width: 640px) {

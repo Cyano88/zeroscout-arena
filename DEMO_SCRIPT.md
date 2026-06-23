@@ -13,7 +13,8 @@
 9. Show storage root, content hash, AI provider, readiness signal, fixes, and share kit.
 10. Open `/campaigns/grail-builders-university`.
 11. Show hosted link, embed snippet, API feed, and campaign profiles.
-12. Open Compare and compare two Project Passports from any campaign.
+12. Open `/integrate` and show how a new organization starts without Zero Cup or Grail.
+13. Open Compare and compare two Project Passports from any campaign.
 
 ## Proof Line
 

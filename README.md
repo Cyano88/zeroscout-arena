@@ -56,6 +56,7 @@ ZG_CHAIN_ID=16661
 /campaigns         Campaign templates
 /campaigns/:id     Campaign dashboard and integration links
 /compare           Compare any two Project Passports
+/integrate         Organization onboarding and integration paths
 /verify            How proof works
 /embed/:campaignId Embeddable campaign widget
 ```
@@ -63,6 +64,12 @@ ZG_CHAIN_ID=16661
 Legacy routes `/leaderboard`, `/matchup`, and `/docs` redirect to the new routes.
 
 ## Plug-And-Play Integration
+
+Organizations can start at:
+
+```txt
+/integrate
+```
 
 Hosted campaign link:
 

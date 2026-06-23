@@ -23,7 +23,10 @@ export function CampaignsPage() {
       <header className="page-heading">
         <span className="eyebrow">Campaigns</span>
         <h1>Builder programs using ZeroScout</h1>
-        <p>Pick a campaign, cohort, or solo path. Each one creates the same 0G-backed Project Passport with AI Scout Signals.</p>
+        <p>Pick a campaign, cohort, or solo path. Starting from scratch? Use Integrate to plug ZeroScout into your own builder program.</p>
+        <Link to="/integrate" className="btn btn-ghost btn-sm" style={{ display: "inline-flex", marginTop: 14 }}>
+          Integrate ZeroScout <ArrowRight size={13} />
+        </Link>
       </header>
 
       <div className="campaign-stack">
