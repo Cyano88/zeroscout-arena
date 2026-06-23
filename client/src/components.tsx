@@ -103,13 +103,13 @@ export function ProjectRow({ capsule }: { capsule: CapsuleIndexRecord }) {
   const pct = Math.max(0, Math.min(100, capsule.scores.total));
   const real = isRealProof(capsule.storageMode);
   return (
-    <Link className="row" to={`/capsules/${capsule.id}`}>
+    <Link className="row" to={`/projects/${capsule.id}`}>
       <div className="name">
         <strong>{capsule.projectName}</strong>
         <span>{capsule.tagline}</span>
       </div>
       <div className="builder">{capsule.teamName}</div>
-      <div className="round">{capsule.round}</div>
+      <div className="round">{capsule.checkpointLabel ?? capsule.round}</div>
       <div className="signal">
         <div className="bar"><i style={{ width: `${pct}%` }} /></div>
         <em style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--muted)", fontStyle: "normal" }}>{capsule.scores.total}</em>

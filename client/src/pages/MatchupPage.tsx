@@ -46,8 +46,8 @@ export function MatchupPage() {
     <main className="page-narrow section-stack">
       <header className="page-heading">
         <span className="eyebrow">Compare</span>
-        <h1>Compare two projects</h1>
-        <p>Pick two profiles, get a plain-English breakdown of who has the clearer record, the stronger demo, and the next move.</p>
+        <h1>Compare two Project Passports</h1>
+        <p>Pick any two profiles from any campaign and get a neutral breakdown of proof clarity, demo strength, public story, and next move.</p>
       </header>
 
       <section className="surface surface-pad">

@@ -1,20 +1,21 @@
 # Deployment
 
-## Railway Backend
+## Railway Full-Stack Deploy
 
 1. Create a Railway project.
 2. Connect this repo.
-3. Set the service start command:
+3. Railway uses `railway.json`. The build command builds the client and server, and Express serves the React app:
 
 ```bash
-npm run build:server && npm run start
+npm install && npm run build
+npm run start
 ```
 
 4. Add environment variables:
 
 ```env
 PORT=8787
-CORS_ORIGIN=https://your-frontend-domain.vercel.app
+CORS_ORIGIN=*
 ZG_NETWORK=mainnet
 ZG_RPC_URL=https://evmrpc.0g.ai
 ZG_STORAGE_INDEXER=https://indexer-storage-turbo.0g.ai
@@ -30,7 +31,7 @@ DEV_STORAGE_FALLBACK=false
 
 Never expose `ZG_PRIVATE_KEY` or AI keys in the frontend.
 
-## Vercel Frontend
+## Optional Vercel Frontend
 
 1. Import the repo into Vercel.
 2. Build command:
@@ -55,5 +56,7 @@ VITE_API_BASE_URL=https://your-railway-api.up.railway.app
 
 - `/api/health` returns `storageConfigured: true`.
 - `/api/config/public` says storage mode is `0G mainnet`.
-- Creating a capsule fails if 0G upload fails.
-- Public capsule page shows mainnet proof, not local fallback.
+- Creating a Project Passport fails if 0G upload fails.
+- Public Project Passport page shows stored proof, not local fallback.
+- `/campaigns/grail-builders-university` loads integration links.
+- `/embed/grail-builders-university` loads the embeddable campaign widget.

@@ -1,43 +1,44 @@
-# ZeroScout Arena
+# ZeroScout
 
-ZeroScout turns a builder's repo, demo, and progress notes into a verified public project profile backed by 0G Storage.
+ZeroScout is a plug-and-play proof layer for builder programs.
 
-For Zero Cup teams, it answers the practical questions that matter before every cut:
+It turns a builder's repo, demo, and checkpoint notes into an AI-reviewed Project Passport stored on 0G. Hackathons, universities, grant programs, accelerators, demo days, and ecosystem teams can use it to collect real progress proof without building their own review system.
 
-- What does this project do?
-- What proof exists?
-- What does 0G actually power?
-- What should the team fix next?
-- What should users, voters, backers, or agents share?
+Zero Cup is the launch campaign. Grail Builders University is the first real-world cohort template.
 
-Zero Cup is the first supported arena. The same product can support hackathons, grants, accelerators, demo days, and ecosystem project discovery.
+## What It Does
+
+- Builders create public Project Passports.
+- AI generates a scout brief, readiness signal, risks, next steps, and share copy.
+- 0G stores the canonical proof capsule.
+- Organizations get campaign links, campaign dashboards, and embed/API paths.
+- Agents can consume structured project JSON from the proof record.
 
 ## Why It Is AI-Native
 
-ZeroScout uses an AI project analyst to turn raw submission data into useful public output:
+ZeroScout uses an AI project analyst to turn raw project data into useful action:
 
-- Project brief
-- Technical summary
+- project brief
+- technical summary
 - 0G proof analysis
-- Project strength scores
-- Risks and fixes
-- Next steps
-- Progress delta between two snapshots
-- Share kit for public distribution
+- readiness signal
+- risks and fixes
+- progress delta between checkpoints
+- share kit for mentors, voters, sponsors, users, and agents
 
-The AI output is not temporary UI text. It becomes part of the canonical project profile stored on 0G.
+The AI output is stored inside the 0G-backed Project Passport.
 
 ## Exact 0G Usage
 
-ZeroScout uses 0G as the durable memory and proof layer.
+0G is the durable memory and proof layer.
 
-- Canonical project profile JSON is uploaded to 0G Storage.
+- Project Passport JSON is uploaded to 0G Storage.
 - Project comparison reports are uploaded to 0G Storage.
-- The app records storage root hash, content hash, network, timestamp, and transaction hash when available.
-- Local storage is only an index/cache for list pages and routing.
+- The app records storage root, content hash, network, timestamp, and transaction hash when available.
+- The local JSON index is only for discovery and routing.
 - 0G Compute Router is preferred for AI generation when `ZG_COMPUTE_API_KEY` is configured.
 
-Mainnet defaults follow the official 0G docs:
+Mainnet defaults:
 
 ```env
 ZG_NETWORK=mainnet
@@ -46,13 +47,63 @@ ZG_STORAGE_INDEXER=https://indexer-storage-turbo.0g.ai
 ZG_CHAIN_ID=16661
 ```
 
+## Routes
+
+```txt
+/                  Create a Project Passport
+/projects          Browse Project Passports
+/projects/:id      Public Project Passport
+/campaigns         Campaign templates
+/campaigns/:id     Campaign dashboard and integration links
+/compare           Compare any two Project Passports
+/verify            How proof works
+/embed/:campaignId Embeddable campaign widget
+```
+
+Legacy routes `/leaderboard`, `/matchup`, and `/docs` redirect to the new routes.
+
+## Plug-And-Play Integration
+
+Hosted campaign link:
+
+```txt
+https://zeroscout-arena-production.up.railway.app/?campaign=grail-builders-university
+```
+
+Prefilled link:
+
+```txt
+/?campaign=zero-cup&project=ZeroScout&repo=https://github.com/Cyano88/zeroscout-arena
+```
+
+Embed:
+
+```html
+<iframe src="https://zeroscout-arena-production.up.railway.app/embed/grail-builders-university" width="100%" height="760" style="border:0"></iframe>
+```
+
+Campaign API:
+
+```txt
+GET /api/campaigns
+GET /api/campaigns/:id
+GET /api/campaigns/:id/capsules
+POST /api/integrations/capsules
+```
+
+## Campaign Templates
+
+- Zero Cup: hackathon campaign with tournament checkpoints.
+- Grail Builders University: cohort campaign with application, weekly, and demo-day checkpoints.
+- Custom Builder Program: flexible template for grants, accelerators, demo days, and internal programs.
+
 ## Stack
 
 - Frontend: Vite, React, TypeScript
 - Backend: Node, Express, TypeScript
 - Storage: `@0gfoundation/0g-storage-ts-sdk`, `ethers`
 - AI: 0G Compute Router first, OpenAI-compatible fallback if configured
-- Deployment: Vercel frontend, Railway backend
+- Deployment: Railway full-stack deployment
 
 ## Setup
 
@@ -62,7 +113,7 @@ cp .env.example .env
 npm run dev
 ```
 
-For production proof, set:
+For production proof:
 
 ```env
 ZG_PRIVATE_KEY=your_0g_mainnet_wallet_private_key
@@ -76,78 +127,67 @@ For local UI development without storage credentials:
 DEV_STORAGE_FALLBACK=true
 ```
 
-Local fallback is clearly labeled and must not be used as a mainnet proof claim.
+Local fallback is clearly labeled and must not be used as a 0G proof claim.
 
 ## Demo Flow
 
 1. Open ZeroScout.
-2. Enter project name, team, repo, demo, round, product description, and 0G usage.
-3. Create a verified project page.
-4. Backend packages the canonical profile JSON.
-5. Backend uploads the artifact to 0G Storage mainnet.
-6. Public profile page shows storage root, content hash, provider label, project brief, next steps, and share kit.
-7. Create a second profile for the same project to show progress since the last proof.
-8. Compare two projects and store the comparison report on 0G.
-
-## Architecture
-
-```txt
-React UI
-  -> Express API
-    -> AI service
-       -> 0G Compute Router when configured
-       -> OpenAI-compatible fallback if configured
-       -> deterministic local fallback for development
-    -> canonical artifact packager
-    -> 0G Storage SDK upload
-    -> local JSON index/cache
-```
+2. Choose a campaign: Zero Cup, Grail Builders University, or Custom.
+3. Enter project name, builder, repo, demo, checkpoint, product description, and 0G usage.
+4. Create the Project Passport.
+5. Show AI Scout Signal, readiness signal, next steps, and share kit.
+6. Show the 0G proof status, storage root, content hash, and JSON artifact.
+7. Open `/campaigns/grail-builders-university` to show hosted link, embed snippet, API feed, and campaign profiles.
+8. Open `/compare` to compare any two Project Passports.
 
 ## Zero Cup Rules Alignment
 
 - AI-native: the core workflow is an AI project analyst.
-- 0G does real work: canonical project profiles and comparison reports are stored on 0G Storage.
+- 0G does real work: Project Passports and comparison reports are stored on 0G Storage.
 - Built for the tournament window: scoped as a new repo and product.
 - Public repo and working demo: this README and deployment docs define the path.
 - Demo matches code: no hardcoded 0G responses.
 - One team, one project: ZeroScout is the project.
-- Improve and resubmit: progress delta is built around round-by-round snapshots.
+- Improve and resubmit: checkpoints create versioned progress proof.
 
-## Round Roadmap
+## Roadmap
 
-Group Stage MVP:
-- Verified project page creation
-- AI project brief
+Group Stage:
+- Project Passport creation
+- AI Scout Signal
 - 0G Storage proof
 - Public profile page
+- Campaign links and embed preview
 
 Round of 32:
 - Better repo ingestion
-- Wallet-linked team profiles
-- Richer proof receipts
+- Wallet-linked builder profiles
+- richer proof receipts
 
 Round of 16:
-- Stronger comparison mode
-- More specific progress deltas by opponent
+- stronger comparison mode
+- improvement deltas per checkpoint
 
 Quarter Finals:
-- Community voting UI
-- Share cards
-- Campaign analytics
+- community voting UI
+- share cards
+- campaign analytics
 
 Semi/Final:
-- Live project dashboard
-- Social distribution layer
-- Stronger verification and proof analytics
+- live campaign dashboard
+- social distribution layer
+- stronger verification and analytics
 
 ## Product Language
 
 Use:
 
-- Verified project profile
-- Project strength
+- Project Passport
+- readiness signal
+- AI Scout Signal
 - 0G proof
-- Progress delta
-- Share kit
+- checkpoint
+- campaign
+- share kit
 
 Do not call ZeroScout output an official judge score or official ranking.

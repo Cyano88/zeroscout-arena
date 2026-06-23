@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
 import type { CapsuleIndexRecord, MatchupReport, ProjectCapsule } from "../../shared/types.js";
+import { findCampaignPreset } from "../../shared/campaigns.js";
 
 interface StoreFile {
   capsules: CapsuleIndexRecord[];
@@ -38,37 +39,50 @@ async function writeStore(store: StoreFile): Promise<void> {
 
 export async function listCapsules(): Promise<CapsuleIndexRecord[]> {
   const store = await readStore();
-  return store.capsules.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return store.capsules.map(withCampaignDefaults).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function listCapsulesByCampaign(campaignId: string): Promise<CapsuleIndexRecord[]> {
+  const all = await listCapsules();
+  return all.filter((item) => item.campaignId === campaignId);
 }
 
 export async function getCapsule(id: string): Promise<ProjectCapsule | undefined> {
   const store = await readStore();
-  return store.capsuleBodies[id];
+  const capsule = store.capsuleBodies[id];
+  return capsule ? withCapsuleCampaignDefaults(capsule) : undefined;
 }
 
 export async function saveCapsule(capsule: ProjectCapsule): Promise<void> {
   const store = await readStore();
+  const normalized = withCapsuleCampaignDefaults(capsule);
+  const campaign = findCampaignPreset(normalized.campaignId);
   const record: CapsuleIndexRecord = {
-    id: capsule.id,
-    projectName: capsule.projectName,
-    teamName: capsule.teamName,
-    tagline: capsule.tagline,
-    round: capsule.round,
-    stage: capsule.stage,
-    scores: capsule.scores,
-    storageRoot: capsule.storageRoot,
-    storageUri: capsule.storageUri,
-    capsuleHash: capsule.capsuleHash,
-    storageTxHash: capsule.storageTxHash,
-    network: capsule.network,
-    storageMode: capsule.storageMode,
-    aiProvider: capsule.aiProvider,
-    createdAt: capsule.createdAt,
-    updatedAt: capsule.updatedAt
+    id: normalized.id,
+    projectName: normalized.projectName,
+    teamName: normalized.teamName,
+    tagline: normalized.tagline,
+    round: normalized.round,
+    stage: normalized.stage,
+    campaignId: normalized.campaignId ?? campaign.id,
+    campaignName: normalized.campaignName ?? campaign.name,
+    campaignType: normalized.campaignType ?? campaign.type,
+    checkpointLabel: normalized.checkpointLabel ?? normalized.round,
+    helpNeeded: normalized.helpNeeded,
+    scores: normalized.scores,
+    storageRoot: normalized.storageRoot,
+    storageUri: normalized.storageUri,
+    capsuleHash: normalized.capsuleHash,
+    storageTxHash: normalized.storageTxHash,
+    network: normalized.network,
+    storageMode: normalized.storageMode,
+    aiProvider: normalized.aiProvider,
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt
   };
 
-  store.capsuleBodies[capsule.id] = capsule;
-  store.capsules = [record, ...store.capsules.filter((item) => item.id !== capsule.id)];
+  store.capsuleBodies[normalized.id] = normalized;
+  store.capsules = [record, ...store.capsules.filter((item) => item.id !== normalized.id)];
   await writeStore(store);
 }
 
@@ -81,4 +95,27 @@ export async function saveMatchup(matchup: MatchupReport): Promise<void> {
 export async function listMatchups(): Promise<MatchupReport[]> {
   const store = await readStore();
   return store.matchups.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function withCampaignDefaults(record: CapsuleIndexRecord): CapsuleIndexRecord {
+  const campaign = findCampaignPreset(record.campaignId);
+  return {
+    ...record,
+    campaignId: record.campaignId ?? campaign.id,
+    campaignName: record.campaignName ?? campaign.name,
+    campaignType: record.campaignType ?? campaign.type,
+    checkpointLabel: record.checkpointLabel ?? record.round
+  };
+}
+
+function withCapsuleCampaignDefaults(capsule: ProjectCapsule): ProjectCapsule {
+  const campaign = findCampaignPreset(capsule.campaignId);
+  return {
+    ...capsule,
+    campaignId: capsule.campaignId ?? campaign.id,
+    campaignName: capsule.campaignName ?? campaign.name,
+    campaignType: capsule.campaignType ?? campaign.type,
+    checkpointLabel: capsule.checkpointLabel ?? capsule.round,
+    checkpointNumber: capsule.checkpointNumber ?? campaign.checkpoints.indexOf(capsule.checkpointLabel ?? capsule.round)
+  };
 }

@@ -8,9 +8,21 @@ export const rounds = [
 ] as const;
 
 export const stages = ["prototype", "MVP", "live", "scaling"] as const;
+export const campaignTypes = ["hackathon", "cohort", "grant", "accelerator", "demo-day", "custom"] as const;
 
 export type Round = (typeof rounds)[number];
 export type ProjectStage = (typeof stages)[number];
+export type CampaignType = (typeof campaignTypes)[number];
+
+export interface CampaignPreset {
+  id: string;
+  name: string;
+  type: CampaignType;
+  description: string;
+  checkpointLabel: string;
+  checkpoints: string[];
+  helpOptions: string[];
+}
 
 export interface ScoreSet {
   ogNativeDepth: number;
@@ -51,6 +63,19 @@ export interface ProjectCapsuleInput {
   pitchNotes?: string;
   stage: ProjectStage;
   previousCapsuleId?: string;
+  campaignId?: string;
+  campaignName?: string;
+  campaignType?: CampaignType;
+  checkpointLabel?: string;
+  checkpointNumber?: number;
+  builderWallet?: string;
+  builderEmail?: string;
+  mentorFocus?: string;
+  helpNeeded?: string;
+  visibility?: "public" | "unlisted";
+  source?: "hosted" | "deeplink" | "widget" | "api";
+  externalUserId?: string;
+  externalOrgId?: string;
 }
 
 export interface ProjectCapsule extends ProjectCapsuleInput {
@@ -81,6 +106,11 @@ export interface CapsuleIndexRecord {
   tagline: string;
   round: Round;
   stage: ProjectStage;
+  campaignId: string;
+  campaignName: string;
+  campaignType: CampaignType;
+  checkpointLabel: string;
+  helpNeeded?: string;
   scores: ScoreSet;
   storageRoot: string;
   storageUri: string;

@@ -60,7 +60,7 @@ export async function generateScout(input: ProjectCapsuleInput, previous?: Proje
 
 export async function generateMatchup(a: ProjectCapsule, b: ProjectCapsule): Promise<MatchupResult> {
   const ai = getAiClient();
-  const prompt = `Compare these two Zero Cup proof capsules for a neutral tournament scouting brief.
+  const prompt = `Compare these two ZeroScout Project Passports for a neutral builder-program scouting brief.
 
 Project A: ${JSON.stringify(summaryForAi(a))}
 Project B: ${JSON.stringify(summaryForAi(b))}
@@ -80,10 +80,10 @@ Return JSON with keys summary, strongerProof, clearerDemo, strongerPublicVoteCas
       });
       const content = response.choices[0]?.message?.content;
       if (content) {
-        const parsed = JSON.parse(content) as Partial<MatchupResult>;
+          const parsed = JSON.parse(content) as Partial<MatchupResult>;
         return {
           aiProvider: ai.label,
-          summary: text(parsed.summary, `${a.projectName} and ${b.projectName} show different strengths for the next Zero Cup cut.`),
+          summary: text(parsed.summary, `${a.projectName} and ${b.projectName} show different strengths for their next campaign checkpoint.`),
           strongerProof: text(parsed.strongerProof, `${higher(a.scores.ogNativeDepth, b.scores.ogNativeDepth, a.projectName, b.projectName, "Both capsules")} show the clearer 0G proof signal today.`),
           clearerDemo: text(parsed.clearerDemo, `${higher(a.scores.demoClarity, b.scores.demoClarity, a.projectName, b.projectName, "Both capsules")} show the clearer demo signal.`),
           strongerPublicVoteCase: text(parsed.strongerPublicVoteCase, `${higher(a.scores.communityShareability, b.scores.communityShareability, a.projectName, b.projectName, "Both capsules")} show the stronger campaign signal.`),
@@ -132,9 +132,13 @@ function getAiClient(): { client: OpenAI; model: string; label: string } | undef
 }
 
 function scoutPrompt(input: ProjectCapsuleInput, previous?: ProjectCapsule): string {
-  return `Create a real-world Zero Cup scouting capsule for this team.
+  return `Create a real-world ZeroScout Project Passport intelligence brief for this builder.
 
-Zero Cup context: 0G Global Vibe Coding Tournament, six-round knockout. Teams must build AI-native apps, agents, companions, or games using 0G. 0G must do real work. Teams improve and resubmit between cuts. Early rounds are judged; quarter finals onward use community voting.
+Product context: ZeroScout is a plug-and-play proof layer for builder programs. Hackathons, cohorts, grants, accelerators, demo days, and universities use it to collect AI-reviewed project progress and store canonical proof capsules on 0G.
+
+If campaignId is zero-cup, use Zero Cup context: 0G Global Vibe Coding Tournament, six-round knockout. Teams must build AI-native apps, agents, companions, or games using 0G. 0G must do real work. Teams improve and resubmit between cuts.
+
+If campaignId is grail-builders-university, use cohort context: students submit checkpoint proof for mentors, sponsors, ecosystem leads, and agents. Focus on what changed, what needs review, and what help is needed.
 
 Current submission:
 ${JSON.stringify(input)}
@@ -149,7 +153,7 @@ risks array, nextRoundTasks array,
 campaignPack { voterPitch, xPost, telegramPost, sponsorSummary },
 survivalDelta optional { improved, stillWeak, ogUsageDelta, demoClarityDelta, communityReadinessDelta, topPriorities }.
 
-Make it specific, practical, and useful to a team trying to survive the next cut.`;
+Make it specific, practical, and useful to a builder trying to improve before the next checkpoint. Use "readiness signal" and "AI Scout Signal", never official judge score.`;
 }
 
 function normalizeScout(raw: Partial<ScoutResult>, provider: string, input: ProjectCapsuleInput, previous?: ProjectCapsule): ScoutResult {
@@ -165,19 +169,21 @@ function normalizeScout(raw: Partial<ScoutResult>, provider: string, input: Proj
         topPriorities: list(raw.survivalDelta?.topPriorities, ["Ship proof walkthrough", "Make root hash visible", "Publish voter pitch"])
       }
     : undefined;
+  const checkpoint = input.checkpointLabel ?? input.round;
+  const campaignName = input.campaignName ?? "builder program";
 
   return {
     aiProvider: provider,
-    scoutBrief: text(raw.scoutBrief, `${input.projectName} is positioned as a ${input.stage} Zero Cup contender with a clear need to prove 0G-native work.`),
-    technicalSummary: text(raw.technicalSummary, `${input.projectName} connects ${input.repoUrl} and ${input.demoUrl} into a public build snapshot for ${input.round}.`),
+    scoutBrief: text(raw.scoutBrief, `${input.projectName} is positioned as a ${input.stage} project in ${campaignName}. The next checkpoint should make the 0G proof path visible and useful.`),
+    technicalSummary: text(raw.technicalSummary, `${input.projectName} connects ${input.repoUrl} and ${input.demoUrl} into a public project checkpoint for ${checkpoint}.`),
     proofAnalysis: text(raw.proofAnalysis, `The submitted 0G claims must be visible in the demo and backed by storage, compute, or chain proof.`),
     scores,
     risks: list(raw.risks, ["0G integration may read as a bolt-on unless proof is shown directly in the user flow."]),
     nextRoundTasks: list(raw.nextRoundTasks, ["Add a public proof walkthrough", "Tighten the demo path", "Prepare community voting copy"]),
     campaignPack: {
-      voterPitch: text(raw.campaignPack?.voterPitch, `${input.projectName} gives Zero Cup voters a clear build to inspect, verify, and share.`),
-      xPost: text(raw.campaignPack?.xPost, `We just published our ${input.round} proof capsule for ${input.projectName} on ZeroScout Arena.`),
-      telegramPost: text(raw.campaignPack?.telegramPost, `${input.projectName} is live in the Zero Cup arena. Review the proof capsule, demo, and next-round roadmap.`),
+      voterPitch: text(raw.campaignPack?.voterPitch, `${input.projectName} gives reviewers, mentors, sponsors, and community members a clear build to inspect, verify, and share.`),
+      xPost: text(raw.campaignPack?.xPost, `We just published our ${checkpoint} Project Passport for ${input.projectName} on ZeroScout.`),
+      telegramPost: text(raw.campaignPack?.telegramPost, `${input.projectName} has a new ZeroScout proof checkpoint. Review the profile, demo, 0G proof, and next steps.`),
       sponsorSummary: text(raw.campaignPack?.sponsorSummary, `${input.projectName} is a ${input.stage} project with a public repo, demo, and 0G usage claims ready for inspection.`)
     },
     survivalDelta: delta
@@ -186,10 +192,12 @@ function normalizeScout(raw: Partial<ScoutResult>, provider: string, input: Proj
 
 function deterministicScout(input: ProjectCapsuleInput, previous?: ProjectCapsule): ScoutResult {
   const scores = normalizeScores(undefined, input);
+  const checkpoint = input.checkpointLabel ?? input.round;
+  const campaignName = input.campaignName ?? "builder program";
   return normalizeScout(
     {
-      scoutBrief: `${input.projectName} is a ${input.round} Zero Cup contender from ${input.teamName}. The scout signal is strongest when the demo makes the 0G proof path visible in the first minute.`,
-      technicalSummary: `${input.projectName} links a public repo and demo into a round snapshot. The product claim is: ${input.tagline}`,
+      scoutBrief: `${input.projectName} is a ${checkpoint} project from ${input.teamName} in ${campaignName}. The scout signal is strongest when the demo makes the proof path visible in the first minute.`,
+      technicalSummary: `${input.projectName} links a public repo and demo into a checkpoint snapshot. The product claim is: ${input.tagline}`,
       proofAnalysis: `0G usage claim: ${input.ogUsageClaims}. The next credibility step is to show the exact storage, compute, or chain action inside the live flow.`,
       scores,
       risks: [
@@ -200,12 +208,12 @@ function deterministicScout(input: ProjectCapsuleInput, previous?: ProjectCapsul
       nextRoundTasks: [
         "Add a one-click proof inspector to the public page.",
         "Record a 60-second demo that shows the 0G action directly.",
-        "Pin the next deadline and top three upgrade tasks on the capsule."
+        "Pin the next checkpoint and top three upgrade tasks on the passport."
       ],
       campaignPack: {
-        voterPitch: `${input.projectName} is building in public for the Zero Cup. Inspect the demo, verify the proof capsule, and track how the team improves before the next cut.`,
-        xPost: `New Zero Cup proof capsule: ${input.projectName} by ${input.teamName}. Scout signal, 0G proof trail, and next-round plan are live. ${input.demoUrl}`,
-        telegramPost: `${input.projectName} just entered the ZeroScout Arena for ${input.round}. The capsule shows what works, how 0G is used, and what ships before the next cut.`,
+        voterPitch: `${input.projectName} is building in public. Inspect the demo, verify the proof capsule, and track how the team improves before the next checkpoint.`,
+        xPost: `New ZeroScout Project Passport: ${input.projectName} by ${input.teamName}. Scout signal, 0G proof trail, and next checkpoint plan are live. ${input.demoUrl}`,
+        telegramPost: `${input.projectName} just published a ZeroScout checkpoint for ${checkpoint}. The passport shows what works, how 0G is used, and what ships next.`,
         sponsorSummary: `${input.teamName} is shipping ${input.projectName}, a ${input.stage} project with public repo, demo, and a 0G proof-focused improvement path.`
       }
     },
@@ -261,6 +269,9 @@ function summaryForAi(capsule: ProjectCapsule) {
     projectName: capsule.projectName,
     teamName: capsule.teamName,
     round: capsule.round,
+    campaignName: capsule.campaignName,
+    campaignType: capsule.campaignType,
+    checkpointLabel: capsule.checkpointLabel,
     stage: capsule.stage,
     tagline: capsule.tagline,
     scoutBrief: capsule.scoutBrief,

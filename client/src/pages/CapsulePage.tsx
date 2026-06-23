@@ -27,7 +27,7 @@ export function CapsulePage() {
   return (
     <main className="page-narrow section-stack">
       <div>
-        <Link to="/leaderboard" className="btn btn-ghost btn-sm" style={{ display: "inline-flex" }}>
+        <Link to="/projects" className="btn btn-ghost btn-sm" style={{ display: "inline-flex" }}>
           <ArrowLeft size={12} /> All projects
         </Link>
       </div>
@@ -35,7 +35,9 @@ export function CapsulePage() {
       <section className="surface profile-header">
         <div>
           <div className="profile-meta">
-            <span>{capsule.round}</span>
+            <span>{capsule.campaignName ?? "ZeroScout"}</span>
+            <span className="dot" />
+            <span>{capsule.checkpointLabel ?? capsule.round}</span>
             <span className="dot" />
             <span>{capsule.stage}</span>
             <span className="dot" />
@@ -75,7 +77,7 @@ export function CapsulePage() {
       </section>
 
       <section className="surface section">
-        <h2>Scout brief</h2>
+        <h2>AI Scout Signal</h2>
         <p>{capsule.scoutBrief}</p>
       </section>
 
@@ -110,6 +112,8 @@ export function CapsulePage() {
       <section className="surface section">
         <h2>Record</h2>
         <div className="record-rows">
+          <Row k="Campaign" value={capsule.campaignName ?? "ZeroScout"} disableCopy />
+          <Row k="Checkpoint" value={capsule.checkpointLabel ?? capsule.round} disableCopy />
           <Row k="Root" value={capsule.storageRoot} />
           <Row k="Content hash" value={capsule.capsuleHash} />
           <Row k="Transaction" value={capsule.storageTxHash ?? "-"} disabled={!capsule.storageTxHash} />

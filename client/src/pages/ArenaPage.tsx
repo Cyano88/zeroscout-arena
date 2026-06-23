@@ -1,7 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Copy, ExternalLink, Loader2 } from "lucide-react";
-import { rounds, stages, type CapsuleIndexRecord, type ProjectCapsuleInput, type ProjectCapsule } from "../../../shared/types";
+import { rounds, stages, type CampaignPreset, type CapsuleIndexRecord, type ProjectCapsuleInput, type ProjectCapsule } from "../../../shared/types";
+import { campaignPresets, findCampaignPreset } from "../../../shared/campaigns";
 import { api } from "../api";
 import { ProofLogo, ProofRail, type ProofState } from "../components";
 import { isRealProof, shortHash } from "../utils";
@@ -30,14 +31,32 @@ function detailsReady(form: ProjectCapsuleInput): boolean {
   return Boolean(form.projectName && form.teamName && form.tagline && form.repoUrl && form.demoUrl && form.description && form.ogUsageClaims);
 }
 
-export function ArenaPage() {
+export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaignId?: string; compact?: boolean }) {
   const [capsules, setCapsules] = useState<CapsuleIndexRecord[]>([]);
-  const [form, setForm] = useState<ProjectCapsuleInput>(emptyForm);
+  const [campaigns, setCampaigns] = useState<CampaignPreset[]>(campaignPresets);
+  const [searchParams] = useSearchParams();
+  const initialCampaign = findCampaignPreset(forcedCampaignId ?? searchParams.get("campaign") ?? "zero-cup");
+  const [form, setForm] = useState<ProjectCapsuleInput>({
+    ...emptyForm,
+    campaignId: initialCampaign.id,
+    campaignName: initialCampaign.name,
+    campaignType: initialCampaign.type,
+    checkpointLabel: searchParams.get("checkpoint") ?? initialCampaign.checkpointLabel,
+    projectName: searchParams.get("project") ?? "",
+    teamName: searchParams.get("builder") ?? searchParams.get("team") ?? "",
+    repoUrl: searchParams.get("repo") ?? "",
+    demoUrl: searchParams.get("demo") ?? "",
+    tagline: searchParams.get("tagline") ?? "",
+    builderWallet: searchParams.get("wallet") ?? undefined,
+    helpNeeded: searchParams.get("help") ?? undefined,
+    source: forcedCampaignId ? "widget" : searchParams.toString() ? "deeplink" : "hosted"
+  });
   const [flow, setFlow] = useState<FlowState>({ kind: "idle" });
   const navigate = useNavigate();
 
   useEffect(() => {
     void api.capsules().then(setCapsules).catch(() => undefined);
+    void api.campaigns().then(setCampaigns).catch(() => undefined);
   }, []);
 
   const previousOptions = useMemo(
@@ -50,6 +69,7 @@ export function ArenaPage() {
   const stored = flow.kind === "stored";
   const fallback = flow.kind === "fallback";
   const errored = flow.kind === "error";
+  const activeCampaign = findCampaignPreset(form.campaignId);
 
   const steps = railSteps({ ready, submitting, stored, fallback, errored });
   const logoState: ProofState = stored ? "complete" : submitting ? "active" : errored || fallback ? "error" : "pending";
@@ -78,20 +98,41 @@ export function ArenaPage() {
   return (
     <main className="page">
       <header className="page-heading">
-        <span className="eyebrow">Create</span>
+        <span className="eyebrow">{activeCampaign.name}</span>
         <h1>Create a verified project profile</h1>
-        <p>Paste your repo, demo, and 0G usage notes. ZeroScout drafts the intelligence, stores the canonical record on 0G, and gives you a public proof page you can share.</p>
+        <p>Paste your repo, demo, and progress notes. ZeroScout drafts the intelligence, stores the canonical record on 0G, and gives you a public Project Passport.</p>
       </header>
 
-      <div className="checkout-grid">
+      <div className={compact ? "checkout-grid compact" : "checkout-grid"}>
         <section className="surface surface-pad">
           <form className="checkout-form" onSubmit={submit}>
+            {!forcedCampaignId && (
+              <div className="field">
+                <label>Campaign</label>
+                <Segmented
+                  value={form.campaignId ?? activeCampaign.id}
+                  options={campaigns.map((campaign) => campaign.id)}
+                  labels={Object.fromEntries(campaigns.map((campaign) => [campaign.id, campaign.name]))}
+                  onChange={(id) => {
+                    const campaign = findCampaignPreset(id);
+                    setForm({
+                      ...form,
+                      campaignId: campaign.id,
+                      campaignName: campaign.name,
+                      campaignType: campaign.type,
+                      checkpointLabel: campaign.checkpointLabel
+                    });
+                  }}
+                />
+              </div>
+            )}
+
             <div className="field-row two">
               <Field label="Project name" value={form.projectName} onChange={(v) => setForm({ ...form, projectName: v })} placeholder="ZeroScout Arena" required />
               <Field label="Builder or team" value={form.teamName} onChange={(v) => setForm({ ...form, teamName: v })} placeholder="Your team" required />
             </div>
 
-            <Field label="One-line promise" value={form.tagline} onChange={(v) => setForm({ ...form, tagline: v })} placeholder="What should a judge understand in one sentence?" required />
+            <Field label="One-line promise" value={form.tagline} onChange={(v) => setForm({ ...form, tagline: v })} placeholder="What should someone understand in one sentence?" required />
 
             <div className="field-row two">
               <Field label="Repo URL" type="url" value={form.repoUrl} onChange={(v) => setForm({ ...form, repoUrl: v })} placeholder="https://github.com/..." required />
@@ -99,8 +140,16 @@ export function ArenaPage() {
             </div>
 
             <div className="field">
-              <label>Round</label>
-              <Segmented value={form.round} options={[...rounds]} onChange={(v) => setForm({ ...form, round: v as ProjectCapsuleInput["round"] })} />
+              <label>Checkpoint</label>
+              <Segmented
+                value={form.checkpointLabel ?? form.round}
+                options={activeCampaign.checkpoints}
+                onChange={(v) => setForm({
+                  ...form,
+                  checkpointLabel: v,
+                  round: rounds.includes(v as ProjectCapsuleInput["round"]) ? v as ProjectCapsuleInput["round"] : form.round
+                })}
+              />
             </div>
 
             <div className="field">
@@ -114,7 +163,7 @@ export function ArenaPage() {
                 <select value={form.previousCapsuleId ?? ""} onChange={(e) => setForm({ ...form, previousCapsuleId: e.target.value || undefined })}>
                   <option value="">None</option>
                   {previousOptions.map((item) => (
-                    <option key={item.id} value={item.id}>{item.projectName} - {item.round}</option>
+                    <option key={item.id} value={item.id}>{item.projectName} - {item.checkpointLabel ?? item.round}</option>
                   ))}
                 </select>
               </div>
@@ -122,12 +171,13 @@ export function ArenaPage() {
 
             <Textarea label="What does the product do?" value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder="Explain it plainly: who uses it and what they get." required />
             <Textarea label="What does 0G power?" value={form.ogUsageClaims} onChange={(v) => setForm({ ...form, ogUsageClaims: v })} placeholder="Storage, compute, chain, retrieval, agent memory..." required />
-            <Textarea label="What should people remember?" value={form.pitchNotes ?? ""} onChange={(v) => setForm({ ...form, pitchNotes: v })} placeholder="The line you want voters, users, sponsors to repeat." />
+            <Textarea label="What should people remember?" value={form.pitchNotes ?? ""} onChange={(v) => setForm({ ...form, pitchNotes: v })} placeholder="The line you want mentors, users, sponsors, or voters to repeat." />
+            <Textarea label="What help do you need?" value={form.helpNeeded ?? ""} onChange={(v) => setForm({ ...form, helpNeeded: v })} placeholder={activeCampaign.helpOptions.join(", ")} />
 
             {errored && <div className="error-banner">{flow.message}</div>}
             {fallback && (
               <div className="error-banner" style={{ color: "var(--warn)", borderColor: "color-mix(in srgb, var(--warn) 50%, var(--line))", background: "color-mix(in srgb, var(--warn) 8%, transparent)" }}>
-                Local fallback used - proof was not stored on 0G. Check your 0G keys before submitting to Zero Cup.
+                Local fallback used - proof was not stored on 0G. Check your 0G keys before sharing this proof.
               </div>
             )}
 
@@ -141,12 +191,12 @@ export function ArenaPage() {
 
         <aside>
           <ProofRail steps={steps} footer={<ProofLogo state={logoState} caption={proofCaption(flow)} />} />
-          {stored && <Confirmation capsule={flow.capsule} onOpen={() => navigate(`/capsules/${flow.capsule.id}`)} />}
-          {fallback && <FallbackNote capsule={flow.capsule} onOpen={() => navigate(`/capsules/${flow.capsule.id}`)} />}
+          {stored && <Confirmation capsule={flow.capsule} onOpen={() => navigate(`/projects/${flow.capsule.id}`)} />}
+          {fallback && <FallbackNote capsule={flow.capsule} onOpen={() => navigate(`/projects/${flow.capsule.id}`)} />}
         </aside>
       </div>
 
-      {capsules.length > 0 && (
+      {!compact && capsules.length > 0 && (
         <section style={{ marginTop: 64 }}>
           <header className="page-heading" style={{ marginBottom: 16 }}>
             <h1 style={{ fontSize: 20 }}>Recent profiles</h1>
@@ -155,13 +205,13 @@ export function ArenaPage() {
           <ul className="list" style={{ display: "grid", gap: 0 }}>
             {capsules.slice(0, 5).map((capsule) => (
               <li key={capsule.id} style={{ display: "block", padding: 0 }}>
-                <Link to={`/capsules/${capsule.id}`} className="row" style={{ borderRadius: 10, marginTop: 8, border: "1px solid var(--line)", background: "var(--surface)" }}>
+                <Link to={`/projects/${capsule.id}`} className="row" style={{ borderRadius: 10, marginTop: 8, border: "1px solid var(--line)", background: "var(--surface)" }}>
                   <div className="name">
                     <strong>{capsule.projectName}</strong>
                     <span>{capsule.tagline}</span>
                   </div>
                   <div className="builder">{capsule.teamName}</div>
-                  <div className="round">{capsule.round}</div>
+                  <div className="round">{capsule.checkpointLabel ?? capsule.round}</div>
                   <div className="signal">
                     <div className="bar"><i style={{ width: `${capsule.scores.total}%` }} /></div>
                     <em style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--muted)", fontStyle: "normal" }}>{capsule.scores.total}</em>
@@ -174,7 +224,7 @@ export function ArenaPage() {
             ))}
           </ul>
           <div style={{ marginTop: 16 }}>
-            <Link to="/leaderboard" className="btn btn-ghost btn-sm" style={{ display: "inline-flex" }}>View all projects <ArrowRight size={13} /></Link>
+            <Link to="/projects" className="btn btn-ghost btn-sm" style={{ display: "inline-flex" }}>View all projects <ArrowRight size={13} /></Link>
           </div>
         </section>
       )}
@@ -192,13 +242,13 @@ function railSteps({ ready, submitting, stored, fallback, errored }: { ready: bo
     { label: "Project details", sub: ready ? "Ready" : "Fill in repo, demo, and 0G usage", state: detailsState },
     { label: "AI intelligence", sub: stored || fallback ? "Generated" : submitting ? "Drafting brief..." : "Waiting", state: intelState },
     { label: "Stored on 0G", sub: stored ? "Confirmed" : fallback ? "Local fallback only" : submitting ? "Submitting..." : "Waiting", state: storedState },
-    { label: "Public page", sub: stored ? "Ready to share" : "Waiting", state: pageState }
+    { label: "Project Passport", sub: stored ? "Ready to share" : "Waiting", state: pageState }
   ];
 }
 
 function proofCaption(flow: FlowState): { title: string; sub?: string } {
   switch (flow.kind) {
-    case "submitting": return { title: "Storing proof", sub: "Submitting capsule to 0G" };
+    case "submitting": return { title: "Storing proof", sub: "Submitting passport to 0G" };
     case "stored": return { title: "Proof stored", sub: shortHash(flow.capsule.storageRoot) };
     case "fallback": return { title: "Local fallback", sub: "Not stored on 0G" };
     case "error": return { title: "Proof failed", sub: "Try again" };
@@ -207,7 +257,7 @@ function proofCaption(flow: FlowState): { title: string; sub?: string } {
 }
 
 function Confirmation({ capsule, onOpen }: { capsule: ProjectCapsule; onOpen: () => void }) {
-  const shareUrl = `${window.location.origin}/capsules/${capsule.id}`;
+  const shareUrl = `${window.location.origin}/projects/${capsule.id}`;
   return (
     <div className="confirmation" style={{ marginTop: 18 }}>
       <div>
@@ -217,7 +267,7 @@ function Confirmation({ capsule, onOpen }: { capsule: ProjectCapsule; onOpen: ()
       <div className="confirmation-mono"><span style={{ color: "var(--muted)" }}>root</span>{shortHash(capsule.storageRoot)}</div>
       <div className="confirmation-actions">
         <button className="btn btn-primary btn-sm" type="button" onClick={onOpen} style={{ width: "auto" }}>
-          Open public page <ArrowRight size={13} />
+          Open Project Passport <ArrowRight size={13} />
         </button>
         <button className="btn btn-ghost btn-sm" type="button" onClick={() => navigator.clipboard.writeText(shareUrl)}>
           <Copy size={13} /> Copy link
@@ -231,7 +281,7 @@ function FallbackNote({ capsule, onOpen }: { capsule: ProjectCapsule; onOpen: ()
   return (
     <div className="surface surface-pad-sm" style={{ marginTop: 18 }}>
       <div style={{ fontSize: 13, color: "var(--warn)", marginBottom: 6, fontWeight: 600 }}>Local only</div>
-      <div style={{ fontSize: 14, color: "var(--text-2)", lineHeight: 1.55 }}>The capsule was created with the local fallback. Do not submit this version to Zero Cup until 0G storage succeeds.</div>
+      <div style={{ fontSize: 14, color: "var(--text-2)", lineHeight: 1.55 }}>This passport was created with the local fallback. Do not share it as verified proof until 0G storage succeeds.</div>
       <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button className="btn btn-ghost btn-sm" type="button" onClick={onOpen}>Open draft <ExternalLink size={12} /></button>
       </div>
@@ -257,11 +307,11 @@ function Textarea({ label, value, onChange, required = false, placeholder = "" }
   );
 }
 
-function Segmented({ value, options, onChange }: { value: string; options: string[]; onChange: (value: string) => void }) {
+function Segmented({ value, options, labels, onChange }: { value: string; options: string[]; labels?: Record<string, string>; onChange: (value: string) => void }) {
   return (
     <div className="segmented" role="tablist">
       {options.map((opt) => (
-        <button type="button" key={opt} className={value === opt ? "on" : ""} onClick={() => onChange(opt)}>{opt}</button>
+        <button type="button" key={opt} className={value === opt ? "on" : ""} onClick={() => onChange(opt)}>{labels?.[opt] ?? opt}</button>
       ))}
     </div>
   );

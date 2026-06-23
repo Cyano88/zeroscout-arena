@@ -4,10 +4,11 @@ import { nanoid } from "nanoid";
 import path from "node:path";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { getCapsule, listCapsules, listMatchups, saveCapsule, saveMatchup } from "./repository.js";
+import { getCapsule, listCapsules, listCapsulesByCampaign, listMatchups, saveCapsule, saveMatchup } from "./repository.js";
 import { generateMatchup, generateScout } from "./services/ai.js";
 import { storeCanonicalArtifact } from "./services/storage.js";
-import type { HealthResponse, MatchupReport, ProjectCapsule } from "../../shared/types.js";
+import type { HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
+import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
 
 const app = express();
 
@@ -29,7 +30,43 @@ app.get("/api/config/public", (_req, res) => {
   res.json(publicConfig());
 });
 
+app.get("/api/campaigns", (_req, res) => {
+  res.json(campaignPresets);
+});
+
+app.get("/api/campaigns/:id", async (req, res, next) => {
+  try {
+    const campaign = findCampaignPreset(req.params.id);
+    const capsules = await listCapsulesByCampaign(campaign.id);
+    res.json({
+      ...campaign,
+      profileCount: capsules.length,
+      storedProofs: capsules.filter((item) => item.storageMode !== "local-dev-fallback").length,
+      latestProfiles: capsules.slice(0, 8)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/campaigns/:id/capsules", async (req, res, next) => {
+  try {
+    const campaign = findCampaignPreset(req.params.id);
+    res.json(await listCapsulesByCampaign(campaign.id));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/capsules", async (_req, res, next) => {
+  try {
+    res.json(await listCapsules());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/projects", async (_req, res, next) => {
   try {
     res.json(await listCapsules());
   } catch (error) {
@@ -65,36 +102,71 @@ app.get("/api/capsules/:id.json", async (req, res, next) => {
 
 app.post("/api/capsules", async (req, res, next) => {
   try {
-    const input = capsuleInputSchema.parse(req.body);
-    const previous = input.previousCapsuleId ? await getCapsule(input.previousCapsuleId) : undefined;
-    const id = nanoid(10);
-    const now = new Date().toISOString();
-    const scout = await generateScout(input, previous);
-
-    const artifactWithoutProof = {
-      id,
-      ...input,
-      ...scout,
-      createdAt: now,
-      updatedAt: now,
-      artifactType: "zeroscout.project-capsule",
-      artifactVersion: "1.0.0",
-      zeroCupUse: "AI Scout Signal and proof capsule for round-by-round tournament improvement."
-    };
-
-    const proof = await storeCanonicalArtifact("capsule", id, artifactWithoutProof);
-
-    const capsule: ProjectCapsule = {
-      ...artifactWithoutProof,
-      ...proof
-    };
-
-    await saveCapsule(capsule);
+    const capsule = await createProjectCapsule(capsuleInputSchema.parse(req.body));
     res.status(201).json(capsule);
   } catch (error) {
     next(error);
   }
 });
+
+app.post("/api/projects", async (req, res, next) => {
+  try {
+    const capsule = await createProjectCapsule(capsuleInputSchema.parse(req.body));
+    res.status(201).json(capsule);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/integrations/capsules", async (req, res, next) => {
+  try {
+    const capsule = await createProjectCapsule(capsuleInputSchema.parse({ ...req.body, source: "api" }));
+    res.status(201).json({
+      id: capsule.id,
+      projectUrl: `/projects/${capsule.id}`,
+      capsuleUrl: `/api/capsules/${capsule.id}.json`,
+      storageRoot: capsule.storageRoot,
+      capsuleHash: capsule.capsuleHash,
+      storageTxHash: capsule.storageTxHash,
+      readinessSignal: capsule.scores.total
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+async function createProjectCapsule(parsed: ProjectCapsuleInput): Promise<ProjectCapsule> {
+  const campaign = findCampaignPreset(parsed.campaignId);
+  const checkpoint = parsed.checkpointLabel ?? parsed.round ?? campaign.checkpointLabel;
+  const input: ProjectCapsuleInput = {
+    ...parsed,
+    campaignId: campaign.id,
+    campaignName: parsed.campaignName ?? campaign.name,
+    campaignType: parsed.campaignType ?? campaign.type,
+    checkpointLabel: checkpoint,
+    checkpointNumber: parsed.checkpointNumber ?? Math.max(0, campaign.checkpoints.indexOf(checkpoint)),
+    visibility: parsed.visibility ?? "public",
+    source: parsed.source ?? "hosted"
+  };
+  const previous = input.previousCapsuleId ? await getCapsule(input.previousCapsuleId) : undefined;
+  const id = nanoid(10);
+  const now = new Date().toISOString();
+  const scout = await generateScout(input, previous);
+  const artifactWithoutProof = {
+    id,
+    ...input,
+    ...scout,
+    createdAt: now,
+    updatedAt: now,
+    artifactType: "zeroscout.project-capsule",
+    artifactVersion: "1.0.0",
+    productUse: "AI-reviewed Project Passport for builder programs, campaigns, cohorts, grants, hackathons, and agent-readable project registries."
+  };
+  const proof = await storeCanonicalArtifact("capsule", id, artifactWithoutProof);
+  const capsule: ProjectCapsule = { ...artifactWithoutProof, ...proof };
+  await saveCapsule(capsule);
+  return capsule;
+}
 
 app.get("/api/matchups", async (_req, res, next) => {
   try {

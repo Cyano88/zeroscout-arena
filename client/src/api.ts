@@ -1,4 +1,4 @@
-import type { CapsuleIndexRecord, MatchupReport, ProjectCapsule, ProjectCapsuleInput, PublicConfig } from "../../shared/types";
+import type { CampaignPreset, CapsuleIndexRecord, MatchupReport, ProjectCapsule, ProjectCapsuleInput, PublicConfig } from "../../shared/types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -16,6 +16,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   config: () => request<PublicConfig>("/api/config/public"),
+  campaigns: () => request<CampaignPreset[]>("/api/campaigns"),
+  campaign: (id: string) => request<CampaignPreset & { profileCount: number; storedProofs: number; latestProfiles: CapsuleIndexRecord[] }>(`/api/campaigns/${id}`),
+  campaignCapsules: (id: string) => request<CapsuleIndexRecord[]>(`/api/campaigns/${id}/capsules`),
   capsules: () => request<CapsuleIndexRecord[]>("/api/capsules"),
   capsule: (id: string) => request<ProjectCapsule>(`/api/capsules/${id}`),
   createCapsule: (input: ProjectCapsuleInput) =>
