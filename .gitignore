@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.local
+.railway
+server/data/*.json
+server/data/fallback-artifacts/
+!server/data/.gitkeep
+npm-debug.log*
+*.log
+*.err

@@ -1,0 +1,44 @@
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const network = process.env.ZG_NETWORK ?? "mainnet";
+const isMainnet = network === "mainnet";
+
+export const config = {
+  port: Number(process.env.PORT ?? 8787),
+  corsOrigin: process.env.CORS_ORIGIN ?? "*",
+  network,
+  chainId: Number(process.env.ZG_CHAIN_ID ?? (isMainnet ? 16661 : 16602)),
+  rpcUrl: process.env.ZG_RPC_URL ?? (isMainnet ? "https://evmrpc.0g.ai" : "https://evmrpc-testnet.0g.ai"),
+  storageIndexer:
+    process.env.ZG_STORAGE_INDEXER ??
+    (isMainnet ? "https://indexer-storage-turbo.0g.ai" : "https://indexer-storage-testnet-turbo.0g.ai"),
+  explorerUrl: process.env.ZG_EXPLORER_URL ?? (isMainnet ? "https://chainscan.0g.ai" : "https://chainscan-galileo.0g.ai"),
+  storageExplorerUrl:
+    process.env.ZG_STORAGE_EXPLORER_URL ?? (isMainnet ? "https://storagescan.0g.ai" : "https://storagescan-galileo.0g.ai"),
+  privateKey: process.env.ZG_PRIVATE_KEY,
+  computeApiKey: process.env.ZG_COMPUTE_API_KEY,
+  computeBaseUrl: process.env.ZG_COMPUTE_BASE_URL ?? (isMainnet ? "https://router-api.0g.ai/v1" : "https://router-api-testnet.integratenetwork.work/v1"),
+  computeModel: process.env.ZG_COMPUTE_MODEL ?? "zai-org/GLM-5-FP8",
+  openAiApiKey: process.env.OPENAI_API_KEY,
+  openAiBaseUrl: process.env.OPENAI_BASE_URL,
+  openAiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  devStorageFallback: process.env.DEV_STORAGE_FALLBACK === "true",
+  dataDir: process.env.DATA_DIR ?? "server/data"
+};
+
+export function publicConfig() {
+  const has0gStorage = Boolean(config.privateKey);
+  const has0gCompute = Boolean(config.computeApiKey);
+
+  return {
+    network: config.network,
+    chainId: config.chainId,
+    storageIndexer: config.storageIndexer,
+    explorerUrl: config.explorerUrl,
+    storageExplorerUrl: config.storageExplorerUrl,
+    computeMode: has0gCompute ? "0G Compute Router" : config.openAiApiKey ? "OpenAI-compatible fallback" : "deterministic local scout fallback",
+    storageMode: has0gStorage ? `0G ${config.network}` : config.devStorageFallback ? "local dev fallback" : "not configured"
+  };
+}
