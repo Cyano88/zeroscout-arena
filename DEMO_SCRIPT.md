@@ -11,10 +11,9 @@
 7. "The canonical Project Passport JSON is stored on 0G. The app indexes only lightweight metadata."
 8. Open the public Project Passport.
 9. Show storage root, content hash, AI provider, readiness signal, fixes, and share kit.
-10. Open `/campaigns/grail-builders-university`.
-11. Show hosted link, embed snippet, API feed, and campaign profiles.
-12. Open `/integrate` and show how a new organization starts without Zero Cup or Grail.
-13. Open Compare and compare two Project Passports from any campaign.
+10. Open `/projects` and show public project cards labeled by source: hackathon/ecosystem, university/cohort, or solo builder.
+11. Open `/integrate` and show how a new organization starts without Zero Cup or Grail.
+12. Open Compare and compare two public Project Passports.
 
 ## Proof Line
 

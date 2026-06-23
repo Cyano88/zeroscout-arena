@@ -38,7 +38,6 @@ function App() {
             <span>ZeroScout</span>
           </NavLink>
           <nav className="top-nav">
-            <NavLink to="/campaigns">Campaigns</NavLink>
             <NavLink to="/projects">Projects</NavLink>
             <NavLink to="/compare">Compare</NavLink>
             <NavLink to="/integrate">Integrate</NavLink>

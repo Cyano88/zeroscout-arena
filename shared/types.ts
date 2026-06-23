@@ -111,6 +111,7 @@ export interface CapsuleIndexRecord {
   campaignType: CampaignType;
   checkpointLabel: string;
   helpNeeded?: string;
+  visibility?: "public" | "unlisted";
   scores: ScoreSet;
   storageRoot: string;
   storageUri: string;

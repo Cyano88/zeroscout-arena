@@ -18,7 +18,7 @@ export function MatchupPage() {
   const [state, setState] = useState<State>({ kind: "idle" });
 
   useEffect(() => {
-    void api.capsules().then((items) => {
+    void api.projects().then((items) => {
       setCapsules(items);
       setA(items[0]?.id ?? "");
       setB(items[1]?.id ?? "");

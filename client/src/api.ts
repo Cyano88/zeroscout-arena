@@ -19,6 +19,7 @@ export const api = {
   campaigns: () => request<CampaignPreset[]>("/api/campaigns"),
   campaign: (id: string) => request<CampaignPreset & { profileCount: number; storedProofs: number; latestProfiles: CapsuleIndexRecord[] }>(`/api/campaigns/${id}`),
   campaignCapsules: (id: string) => request<CapsuleIndexRecord[]>(`/api/campaigns/${id}/capsules`),
+  projects: () => request<CapsuleIndexRecord[]>("/api/projects"),
   capsules: () => request<CapsuleIndexRecord[]>("/api/capsules"),
   capsule: (id: string) => request<ProjectCapsule>(`/api/capsules/${id}`),
   createCapsule: (input: ProjectCapsuleInput) =>

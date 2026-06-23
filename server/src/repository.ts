@@ -42,8 +42,18 @@ export async function listCapsules(): Promise<CapsuleIndexRecord[]> {
   return store.capsules.map(withCampaignDefaults).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+export async function listPublicCapsules(): Promise<CapsuleIndexRecord[]> {
+  const all = await listCapsules();
+  return all.filter((item) => item.visibility !== "unlisted");
+}
+
 export async function listCapsulesByCampaign(campaignId: string): Promise<CapsuleIndexRecord[]> {
   const all = await listCapsules();
+  return all.filter((item) => item.campaignId === campaignId);
+}
+
+export async function listPublicCapsulesByCampaign(campaignId: string): Promise<CapsuleIndexRecord[]> {
+  const all = await listPublicCapsules();
   return all.filter((item) => item.campaignId === campaignId);
 }
 
@@ -69,6 +79,7 @@ export async function saveCapsule(capsule: ProjectCapsule): Promise<void> {
     campaignType: normalized.campaignType ?? campaign.type,
     checkpointLabel: normalized.checkpointLabel ?? normalized.round,
     helpNeeded: normalized.helpNeeded,
+    visibility: normalized.visibility,
     scores: normalized.scores,
     storageRoot: normalized.storageRoot,
     storageUri: normalized.storageUri,

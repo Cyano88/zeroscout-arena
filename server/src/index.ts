@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import path from "node:path";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { getCapsule, listCapsules, listCapsulesByCampaign, listMatchups, saveCapsule, saveMatchup } from "./repository.js";
+import { getCapsule, listCapsules, listCapsulesByCampaign, listMatchups, listPublicCapsules, listPublicCapsulesByCampaign, saveCapsule, saveMatchup } from "./repository.js";
 import { generateMatchup, generateScout } from "./services/ai.js";
 import { storeCanonicalArtifact } from "./services/storage.js";
 import type { HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
@@ -37,7 +37,7 @@ app.get("/api/campaigns", (_req, res) => {
 app.get("/api/campaigns/:id", async (req, res, next) => {
   try {
     const campaign = findCampaignPreset(req.params.id);
-    const capsules = await listCapsulesByCampaign(campaign.id);
+    const capsules = await listPublicCapsulesByCampaign(campaign.id);
     res.json({
       ...campaign,
       profileCount: capsules.length,
@@ -52,7 +52,7 @@ app.get("/api/campaigns/:id", async (req, res, next) => {
 app.get("/api/campaigns/:id/capsules", async (req, res, next) => {
   try {
     const campaign = findCampaignPreset(req.params.id);
-    res.json(await listCapsulesByCampaign(campaign.id));
+    res.json(await listPublicCapsulesByCampaign(campaign.id));
   } catch (error) {
     next(error);
   }
@@ -68,7 +68,7 @@ app.get("/api/capsules", async (_req, res, next) => {
 
 app.get("/api/projects", async (_req, res, next) => {
   try {
-    res.json(await listCapsules());
+    res.json(await listPublicCapsules());
   } catch (error) {
     next(error);
   }

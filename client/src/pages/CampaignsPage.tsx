@@ -21,9 +21,9 @@ export function CampaignsPage() {
   return (
     <main className="page">
       <header className="page-heading">
-        <span className="eyebrow">Campaigns</span>
-        <h1>Builder programs using ZeroScout</h1>
-        <p>Pick a campaign, cohort, or solo path. Starting from scratch? Use Integrate to plug ZeroScout into your own builder program.</p>
+        <span className="eyebrow">Programs</span>
+        <h1>Integrated builder programs</h1>
+        <p>These are sources projects can come from: hackathons, ecosystems, universities, cohorts, and solo builder paths. Public projects from every source appear in Projects.</p>
         <Link to="/integrate" className="btn btn-ghost btn-sm" style={{ display: "inline-flex", marginTop: 14 }}>
           Integrate ZeroScout <ArrowRight size={13} />
         </Link>

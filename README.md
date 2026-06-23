@@ -51,10 +51,8 @@ ZG_CHAIN_ID=16661
 
 ```txt
 /                  Create a Project Passport
-/projects          Browse Project Passports
+/projects          Browse public Project Passports across every source
 /projects/:id      Public Project Passport
-/campaigns         Campaign templates
-/campaigns/:id     Campaign dashboard and integration links
 /compare           Compare any two Project Passports
 /integrate         Organization onboarding and integration paths
 /verify            How proof works
@@ -144,8 +142,9 @@ Local fallback is clearly labeled and must not be used as a 0G proof claim.
 4. Create the Project Passport.
 5. Show AI Scout Signal, readiness signal, next steps, and share kit.
 6. Show the 0G proof status, storage root, content hash, and JSON artifact.
-7. Open `/campaigns/grail-builders-university` to show hosted link, embed snippet, API feed, and campaign profiles.
-8. Open `/compare` to compare any two Project Passports.
+7. Open `/projects` to show public projects grouped by hackathon/ecosystem, university/cohort, and solo builder paths.
+8. Open `/integrate` to show how a new organization starts from zero.
+9. Open `/compare` to compare any two public Project Passports.
 
 ## Zero Cup Rules Alignment
 

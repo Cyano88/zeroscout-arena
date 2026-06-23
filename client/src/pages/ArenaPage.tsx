@@ -49,13 +49,14 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
     tagline: searchParams.get("tagline") ?? "",
     builderWallet: searchParams.get("wallet") ?? undefined,
     helpNeeded: searchParams.get("help") ?? undefined,
+    visibility: searchParams.get("visibility") === "unlisted" ? "unlisted" : "public",
     source: forcedCampaignId ? "widget" : searchParams.toString() ? "deeplink" : "hosted"
   });
   const [flow, setFlow] = useState<FlowState>({ kind: "idle" });
   const navigate = useNavigate();
 
   useEffect(() => {
-    void api.capsules().then(setCapsules).catch(() => undefined);
+    void api.projects().then(setCapsules).catch(() => undefined);
     void api.campaigns().then(setCampaigns).catch(() => undefined);
   }, []);
 
@@ -100,7 +101,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
       <header className="page-heading">
         <span className="eyebrow">Create</span>
         <h1>Create a verified project profile</h1>
-        <p>Start from a campaign, cohort, or solo path. ZeroScout drafts the intelligence, stores the canonical record on 0G, and gives you a public Project Passport.</p>
+        <p>Start from a hackathon, cohort, ecosystem, or solo path. ZeroScout drafts the intelligence, stores the canonical record on 0G, and gives you a Project Passport.</p>
       </header>
 
       <div className={compact ? "checkout-grid compact" : "checkout-grid"}>
@@ -108,7 +109,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
           <form className="checkout-form" onSubmit={submit}>
             {!forcedCampaignId && (
               <div className="field">
-                <label>Campaign</label>
+                <label>Program</label>
                 <Segmented
                   value={form.campaignId ?? activeCampaign.id}
                   options={campaigns.map((campaign) => campaign.id)}
@@ -155,6 +156,17 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
             <div className="field">
               <label>Stage</label>
               <Segmented value={form.stage} options={[...stages]} onChange={(v) => setForm({ ...form, stage: v as ProjectCapsuleInput["stage"] })} />
+            </div>
+
+            <div className="field">
+              <label>Visibility</label>
+              <Segmented
+                value={form.visibility ?? "public"}
+                options={["public", "unlisted"]}
+                labels={{ public: "Public", unlisted: "Unlisted" }}
+                onChange={(v) => setForm({ ...form, visibility: v as ProjectCapsuleInput["visibility"] })}
+              />
+              <span className="hint">{form.visibility === "unlisted" ? "Hidden from Projects and Compare. Share by direct link only." : "Listed publicly and available for Compare."}</span>
             </div>
 
             {previousOptions.length > 0 && (
