@@ -10,7 +10,7 @@
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "tsc -p server/tsconfig.json",
-    "start": "node dist/server/index.js",
+    "start": "node dist/server/server/src/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
     "lint": "eslint . --ext ts,tsx --max-warnings 0"
   },
