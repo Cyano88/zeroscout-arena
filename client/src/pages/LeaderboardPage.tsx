@@ -24,7 +24,7 @@ export function LeaderboardPage() {
       <header className="page-heading">
         <span className="eyebrow">Projects</span>
         <h1>Project Passports</h1>
-        <p>Browse current builder profiles across campaigns. The readiness signal is an AI scouting signal, not an official ranking.</p>
+        <p>Browse individual builds from any campaign or solo path. Use this directory to inspect proof, track progress, or pick projects to compare with yours.</p>
       </header>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>

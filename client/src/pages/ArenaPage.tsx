@@ -98,9 +98,9 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
   return (
     <main className="page">
       <header className="page-heading">
-        <span className="eyebrow">{activeCampaign.name}</span>
+        <span className="eyebrow">Create</span>
         <h1>Create a verified project profile</h1>
-        <p>Paste your repo, demo, and progress notes. ZeroScout drafts the intelligence, stores the canonical record on 0G, and gives you a public Project Passport.</p>
+        <p>Start from a campaign, cohort, or solo path. ZeroScout drafts the intelligence, stores the canonical record on 0G, and gives you a public Project Passport.</p>
       </header>
 
       <div className={compact ? "checkout-grid compact" : "checkout-grid"}>

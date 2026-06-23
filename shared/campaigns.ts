@@ -7,7 +7,7 @@ export const campaignPresets: CampaignPreset[] = [
     id: "zero-cup",
     name: "Zero Cup",
     type: "hackathon",
-    description: "0G's tournament campaign for AI-native apps, agents, companions, and games.",
+    description: "Hackathon and ecosystem campaign for AI-native apps, agents, companions, and games.",
     checkpointLabel: "Group Stage",
     checkpoints: ["Group Stage", "Round of 32", "Round of 16", "Quarter Finals", "Semi Finals", "Final"],
     helpOptions: ["0G proof", "AI usefulness", "demo clarity", "product polish", "community campaign"]
@@ -16,16 +16,16 @@ export const campaignPresets: CampaignPreset[] = [
     id: "grail-builders-university",
     name: "Grail Builders University",
     type: "cohort",
-    description: "A builder cohort checkpoint system for students shipping agent-powered products.",
+    description: "University and tutor-program checkpoint system for students shipping agent-powered products.",
     checkpointLabel: "Application",
     checkpoints: ["Application", "Week 1", "Week 2", "Week 3", "Demo Day"],
     helpOptions: ["product", "agents", "BD", "funding", "distribution", "ecosystem intros"]
   },
   {
     id: "custom",
-    name: "Custom Builder Program",
+    name: "Solo Builder Program",
     type: "custom",
-    description: "A flexible campaign for grants, accelerators, cohorts, demo days, and internal builder programs.",
+    description: "Independent Project Passports for builders growing traction without an affiliated campaign.",
     checkpointLabel: "Checkpoint 1",
     checkpoints: ["Checkpoint 1", "Checkpoint 2", "Milestone", "Demo Day"],
     helpOptions: ["product", "technical review", "funding", "distribution", "mentor review"]

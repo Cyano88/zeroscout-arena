@@ -11,6 +11,7 @@ import { CampaignDetailPage, CampaignsPage } from "./pages/CampaignsPage";
 import { EmbedPage } from "./pages/EmbedPage";
 import ogLogo from "./assets/og-logo.jpeg";
 import zeroScoutMark from "./assets/zeroscout-mark.png";
+import grailMark from "./assets/grail-mark.png";
 import "./styles.css";
 
 function App() {
@@ -24,6 +25,7 @@ function App() {
   useEffect(() => {
     document.documentElement.style.setProperty("--brand-img", `url("${ogLogo}")`);
     document.documentElement.style.setProperty("--zeroscout-mark", `url("${zeroScoutMark}")`);
+    document.documentElement.style.setProperty("--grail-mark", `url("${grailMark}")`);
   }, []);
 
   return (
@@ -35,10 +37,10 @@ function App() {
             <span>ZeroScout</span>
           </NavLink>
           <nav className="top-nav">
-            <NavLink to="/" end>Create</NavLink>
-            <NavLink to="/projects">Projects</NavLink>
             <NavLink to="/campaigns">Campaigns</NavLink>
+            <NavLink to="/projects">Projects</NavLink>
             <NavLink to="/compare">Compare</NavLink>
+            <NavLink to="/" end>Create</NavLink>
             <NavLink to="/verify">Verify</NavLink>
           </nav>
           <button

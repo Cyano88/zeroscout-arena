@@ -22,20 +22,24 @@ export function CampaignsPage() {
     <main className="page">
       <header className="page-heading">
         <span className="eyebrow">Campaigns</span>
-        <h1>Launch a proof flow for any builder program</h1>
-        <p>Use a hosted link today. Embed and API integrations share the same 0G-backed Project Passport system.</p>
+        <h1>Builder programs using ZeroScout</h1>
+        <p>Pick a campaign, cohort, or solo path. Each one creates the same 0G-backed Project Passport with AI Scout Signals.</p>
       </header>
 
-      <div className="campaign-grid">
+      <div className="campaign-stack">
         {campaigns.map((campaign) => (
-          <Link className="surface surface-pad campaign-tile" to={`/campaigns/${campaign.id}`} key={campaign.id}>
-            <div>
-              <span className="status-tag"><span className="dot" />{campaign.type}</span>
-              <h2>{campaign.name}</h2>
-              <p>{campaign.description}</p>
+          <Link className="campaign-card-row" to={`/campaigns/${campaign.id}`} key={campaign.id}>
+            <CampaignMark id={campaign.id} />
+            <div className="campaign-main">
+              <h2>{campaignTitle(campaign)}</h2>
+              <p>{campaign.name}</p>
             </div>
-            <div className="campaign-actions">
-              <span>{campaign.checkpoints.length} checkpoints</span>
+            <div className="campaign-meta">
+              <span>{campaign.description}</span>
+              <b>{campaignStatus(campaign)}</b>
+            </div>
+            <div className="campaign-view">
+              <span>View</span>
               <ArrowRight size={15} />
             </div>
           </Link>
@@ -43,6 +47,24 @@ export function CampaignsPage() {
       </div>
     </main>
   );
+}
+
+function CampaignMark({ id }: { id: string }) {
+  if (id === "zero-cup") return <span className="campaign-mark og" aria-hidden="true" />;
+  if (id === "grail-builders-university") return <span className="campaign-mark grail" aria-hidden="true" />;
+  return <span className="campaign-mark zs" aria-hidden="true" />;
+}
+
+function campaignTitle(campaign: CampaignPreset): string {
+  if (campaign.id === "zero-cup") return "Hackathons / Ecosystems";
+  if (campaign.id === "grail-builders-university") return "Universities / Cohorts";
+  return "Solo Builders";
+}
+
+function campaignStatus(campaign: CampaignPreset): string {
+  if (campaign.id === "zero-cup") return "Zero Cup live";
+  if (campaign.id === "grail-builders-university") return "Builder cohort ready";
+  return "Independent proof path";
 }
 
 export function CampaignDetailPage() {

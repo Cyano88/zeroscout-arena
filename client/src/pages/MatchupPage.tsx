@@ -47,7 +47,7 @@ export function MatchupPage() {
       <header className="page-heading">
         <span className="eyebrow">Compare</span>
         <h1>Compare two Project Passports</h1>
-        <p>Pick any two profiles from any campaign and get a neutral breakdown of proof clarity, demo strength, public story, and next move.</p>
+        <p>Pick live projects already on ZeroScout. If a project is missing, create a quick Project Passport first, then compare proof clarity, demo strength, public story, and next move.</p>
       </header>
 
       <section className="surface surface-pad">
