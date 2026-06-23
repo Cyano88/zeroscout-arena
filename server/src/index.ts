@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { nanoid } from "nanoid";
+import path from "node:path";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
 import { getCapsule, listCapsules, listMatchups, saveCapsule, saveMatchup } from "./repository.js";
@@ -143,6 +144,16 @@ app.post("/api/matchups", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+const clientDir = path.join(process.cwd(), "dist", "client");
+app.use(express.static(clientDir));
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    next();
+    return;
+  }
+  res.sendFile(path.join(clientDir, "index.html"));
 });
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

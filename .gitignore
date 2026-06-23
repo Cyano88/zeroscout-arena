@@ -9,3 +9,5 @@ server/data/fallback-artifacts/
 npm-debug.log*
 *.log
 *.err
+
+.vercel
