@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Download, ExternalLink, GitBranch, Share2 } from "lucide-react";
+import { ArrowLeft, Copy, Download, ExternalLink, GitBranch, Share2 } from "lucide-react";
 import type { ProjectCapsule } from "../../../shared/types";
 import { api } from "../api";
-import { CopyButton, ExternalProofLink, ProofBadge, ScoreBars, TaskList } from "../components";
-import { shortHash } from "../utils";
+import { CopyButton, ProofLogo, ScoreStrip, TaskList, type ProofState } from "../components";
+import { explorerTxUrl, isRealProof, shortHash } from "../utils";
 
 export function CapsulePage() {
   const { id } = useParams();
@@ -16,67 +16,90 @@ export function CapsulePage() {
     void api.capsule(id).then(setCapsule).catch((err) => setError(err instanceof Error ? err.message : "Project not found"));
   }, [id]);
 
-  if (error) return <main className="single-page"><div className="panel error-box">{error}</div></main>;
-  if (!capsule) return <main className="single-page"><div className="panel">Loading project...</div></main>;
+  if (error) return <main className="page-narrow"><div className="error-banner">{error}</div></main>;
+  if (!capsule) return <main className="page-narrow"><div className="empty">Loading project profile...</div></main>;
 
+  const real = isRealProof(capsule.storageMode);
+  const proofState: ProofState = real ? "complete" : "error";
   const shareUrl = window.location.href;
-  const explorerTx = capsule.storageTxHash ? `${capsule.network.includes("mainnet") ? "https://chainscan.0g.ai" : "https://chainscan-galileo.0g.ai"}/tx/${capsule.storageTxHash}` : "";
+  const txUrl = explorerTxUrl(capsule.network, capsule.storageTxHash);
 
   return (
-    <main className="capsule-layout">
-      <section className="panel capsule-hero">
+    <main className="page-narrow section-stack">
+      <div>
+        <Link to="/leaderboard" className="btn btn-ghost btn-sm" style={{ display: "inline-flex" }}>
+          <ArrowLeft size={12} /> All projects
+        </Link>
+      </div>
+
+      <section className="surface profile-header">
         <div>
-          <span className="eyebrow">{capsule.round} - {capsule.stage}</span>
+          <div className="profile-meta">
+            <span>{capsule.round}</span>
+            <span className="dot" />
+            <span>{capsule.stage}</span>
+            <span className="dot" />
+            <span className={`status-tag ${real ? "ok" : "warn"}`} style={{ borderRadius: 999 }}>
+              <span className="dot" />{real ? "Verified" : "Draft"}
+            </span>
+          </div>
           <h1>{capsule.projectName}</h1>
-          <p>{capsule.tagline}</p>
+          <p className="profile-promise">{capsule.tagline}</p>
+          <div className="profile-byline">
+            <span><strong>{capsule.teamName}</strong> - builder</span>
+            <span><strong>{shortHash(capsule.storageRoot)}</strong> - root</span>
+            {capsule.storageTxHash && <span><strong>{shortHash(capsule.storageTxHash)}</strong> - tx</span>}
+          </div>
         </div>
-        <ProofBadge capsule={capsule} />
-      </section>
-
-      <section className="panel proof-panel">
-        <h2>Record</h2>
-        <div className="proof-grid">
-          <ProofLine label="Root" value={capsule.storageRoot} />
-          <ProofLine label="Content hash" value={capsule.capsuleHash} />
-          <ProofLine label="Tx" value={capsule.storageTxHash ?? "pending / unavailable"} />
-          <ProofLine label="AI" value={capsule.aiProvider} />
-        </div>
-        <div className="actions">
-          <a className="secondary-button" href={`/api/capsules/${capsule.id}.json`} target="_blank" rel="noreferrer"><Download size={16} /> JSON</a>
-          <button className="secondary-button" onClick={() => navigator.clipboard.writeText(shareUrl)}><Share2 size={16} /> Share</button>
-          {explorerTx && <ExternalProofLink href={explorerTx} label="Open tx" />}
+        <div className="profile-proof">
+          <ProofLogo state={proofState} size="sm" caption={{ title: real ? "Proof stored" : "Local fallback", sub: shortHash(capsule.storageRoot) }} />
         </div>
       </section>
 
-      <section className="panel">
-        <h2>Project brief</h2>
-        <p className="large-copy">{capsule.scoutBrief}</p>
-        <h3>What it is</h3>
+      <section className="surface score-block">
+        <div className="score-top">
+          <div className="score-total"><b>{capsule.scores.total}</b><small>/ 100 readiness signal</small></div>
+          <span className="label">Signal</span>
+        </div>
+        <ScoreStrip scores={capsule.scores} />
+      </section>
+
+      <section className="surface section">
+        <h2>What it does</h2>
         <p>{capsule.technicalSummary}</p>
-        <h3>0G record</h3>
+      </section>
+
+      <section className="surface section">
+        <h2>What 0G powers</h2>
         <p>{capsule.proofAnalysis}</p>
       </section>
 
-      <section className="panel"><ScoreBars scores={capsule.scores} /></section>
+      <section className="surface section">
+        <h2>Scout brief</h2>
+        <p>{capsule.scoutBrief}</p>
+      </section>
 
-      <section className="panel">
+      <section className="surface section">
         <h2>Next steps</h2>
         <TaskList items={capsule.nextRoundTasks} />
+        {capsule.risks.length > 0 && (
+          <>
+            <h2 style={{ marginTop: 22 }}>What to fix</h2>
+            <TaskList items={capsule.risks} />
+          </>
+        )}
         {capsule.survivalDelta && (
-          <div className="delta-box">
-            <h3><GitBranch size={16} /> Progress since last version</h3>
-            <p>{capsule.survivalDelta.ogUsageDelta}</p>
+          <div style={{ marginTop: 22, padding: 18, border: "1px solid var(--line)", borderRadius: 10, background: "var(--surface-2)" }}>
+            <h2 style={{ fontSize: 14, marginBottom: 8, display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <GitBranch size={14} /> Progress since previous version
+            </h2>
+            <p style={{ marginBottom: 10 }}>{capsule.survivalDelta.ogUsageDelta}</p>
             <TaskList items={capsule.survivalDelta.topPriorities} />
           </div>
         )}
       </section>
 
-      <section className="panel">
-        <h2>What to fix</h2>
-        <TaskList items={capsule.risks} />
-      </section>
-
-      <section className="panel campaign-panel">
+      <section className="surface section">
         <h2>Share kit</h2>
         <Campaign label="Short pitch" value={capsule.campaignPack.voterPitch} />
         <Campaign label="X post" value={capsule.campaignPack.xPost} />
@@ -84,19 +107,52 @@ export function CapsulePage() {
         <Campaign label="Sponsor summary" value={capsule.campaignPack.sponsorSummary} />
       </section>
 
-      <section className="panel link-panel">
-        <a href={capsule.repoUrl} target="_blank" rel="noreferrer">Repo <ExternalLink size={14} /></a>
-        <a href={capsule.demoUrl} target="_blank" rel="noreferrer">Demo <ExternalLink size={14} /></a>
-        <Link to="/matchup">Compare projects <ExternalLink size={14} /></Link>
+      <section className="surface section">
+        <h2>Record</h2>
+        <div className="record-rows">
+          <Row k="Root" value={capsule.storageRoot} />
+          <Row k="Content hash" value={capsule.capsuleHash} />
+          <Row k="Transaction" value={capsule.storageTxHash ?? "-"} disabled={!capsule.storageTxHash} />
+          <Row k="AI provider" value={capsule.aiProvider} disableCopy />
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+          <a className="btn btn-ghost btn-sm" href={`/api/capsules/${capsule.id}.json`} target="_blank" rel="noreferrer">
+            <Download size={13} /> Verify JSON
+          </a>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => navigator.clipboard.writeText(shareUrl)}>
+            <Share2 size={13} /> Copy share link
+          </button>
+          {txUrl && (
+            <a className="btn btn-ghost btn-sm" href={txUrl} target="_blank" rel="noreferrer">
+              Open tx <ExternalLink size={13} />
+            </a>
+          )}
+          <a className="btn btn-ghost btn-sm" href={capsule.repoUrl} target="_blank" rel="noreferrer">Repo <ExternalLink size={13} /></a>
+          <a className="btn btn-ghost btn-sm" href={capsule.demoUrl} target="_blank" rel="noreferrer">Demo <ExternalLink size={13} /></a>
+        </div>
       </section>
     </main>
   );
 }
 
-function ProofLine({ label, value }: { label: string; value: string }) {
-  return <div className="proof-line"><span>{label}</span><code>{shortHash(value)}</code><CopyButton value={value} /></div>;
+function Row({ k, value, disabled, disableCopy }: { k: string; value: string; disabled?: boolean; disableCopy?: boolean }) {
+  return (
+    <div className="record-row" style={disabled ? { opacity: 0.55 } : undefined}>
+      <span className="k">{k}</span>
+      <span className="v" title={value}>{disableCopy ? value : shortHash(value)}</span>
+      {disableCopy ? <span /> : <CopyButton value={value} />}
+    </div>
+  );
 }
 
 function Campaign({ label, value }: { label: string; value: string }) {
-  return <div className="campaign-copy"><span>{label}</span><p>{value}</p><CopyButton value={value} /></div>;
+  return (
+    <div className="campaign-row">
+      <span className="k">{label}</span>
+      <p>{value}</p>
+      <button className="icon-btn" type="button" title="Copy" onClick={() => navigator.clipboard.writeText(value)}>
+        <Copy size={13} />
+      </button>
+    </div>
+  );
 }

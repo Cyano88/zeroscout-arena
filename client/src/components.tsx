@@ -1,63 +1,78 @@
 import { Link } from "react-router-dom";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import type { CapsuleIndexRecord, ProjectCapsule, ScoreSet } from "../../shared/types";
-import { scoreRows, shortHash } from "./utils";
+import { scoreRows, shortHash, isRealProof } from "./utils";
 
-export function ProofBadge({ capsule }: { capsule: Pick<ProjectCapsule | CapsuleIndexRecord, "storageMode" | "network" | "storageRoot"> }) {
-  const real = capsule.storageMode !== "local-dev-fallback";
+export type ProofState = "pending" | "active" | "complete" | "error";
+
+export function ProofLogo({ state, size = "md", caption }: { state: ProofState; size?: "xs" | "sm" | "md"; caption?: { title: string; sub?: string } }) {
+  const sizeClass = size === "md" ? "" : ` ${size}`;
   return (
-    <div className={real ? "proof-badge" : "proof-badge warning"}>
-      <span>{real ? "Stored" : "Local"}</span>
-      <code>{shortHash(capsule.storageRoot)}</code>
+    <div className="proof-logo-wrap">
+      <div className={`proof-logo${sizeClass} ${state}`} aria-label="0G proof status" role="img" />
+      {caption && (
+        <div className="proof-logo-caption">
+          <strong>{caption.title}</strong>
+          {caption.sub && <span>{caption.sub}</span>}
+        </div>
+      )}
     </div>
   );
 }
 
-export function ScoreBars({ scores }: { scores: ScoreSet }) {
+export interface ProofRailStep {
+  label: string;
+  sub?: string;
+  state: ProofState;
+}
+
+export function ProofRail({ steps, footer }: { steps: ProofRailStep[]; footer?: React.ReactNode }) {
   return (
-    <div className="score-bars">
-      <div className="total-score">
-        <span>{scores.total}</span>
-        <small>Strength</small>
+    <div className="surface proof-rail">
+      <div className="proof-rail-head">
+        <h3>Proof status</h3>
       </div>
-      {scoreRows(scores).map(([label, value, max]) => (
-        <div className="score-row" key={label}>
-          <div><span>{label}</span><b>{value}/{max}</b></div>
-          <meter min={0} max={max} value={value} />
+      {steps.map((step, index) => (
+        <div className={`proof-step ${step.state}`} key={step.label}>
+          <span className="dot">{step.state === "complete" ? <Check size={12} strokeWidth={3} /> : index + 1}</span>
+          <div>
+            <div className="label">{step.label}</div>
+            {step.sub && <span className="sub">{step.sub}</span>}
+          </div>
         </div>
       ))}
+      {footer}
     </div>
   );
 }
 
-export function CapsuleCard({ capsule }: { capsule: CapsuleIndexRecord }) {
+export function ScoreStrip({ scores }: { scores: ScoreSet }) {
   return (
-    <Link className="capsule-card" to={`/capsules/${capsule.id}`}>
-      <div className="card-topline">
-        <span>{capsule.round}</span>
-        <b>{capsule.scores.total}<small>/100</small></b>
-      </div>
-      <h3>{capsule.projectName}</h3>
-      <p>{capsule.tagline}</p>
-      <div className="card-footer">
-        <span>{capsule.teamName}</span>
-        <span>{capsule.storageMode === "local-dev-fallback" ? "Local" : "Stored"}</span>
-      </div>
-    </Link>
+    <div className="score-strip">
+      {scoreRows(scores).map(([label, value, max]) => {
+        const pct = Math.max(0, Math.min(100, (value / max) * 100));
+        return (
+          <div className="row" key={label}>
+            <div className="row-top"><span>{label}</span><em>{value}/{max}</em></div>
+            <div className="bar"><i style={{ width: `${pct}%` }} /></div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-export function CopyButton({ value }: { value: string }) {
+export function CopyButton({ value, label }: { value: string; label?: string }) {
   return (
-    <button className="icon-button" onClick={() => navigator.clipboard.writeText(value)} type="button" title="Copy">
-      <Copy size={16} />
+    <button className="icon-btn" type="button" title={label ?? "Copy"} onClick={() => navigator.clipboard.writeText(value)}>
+      <Copy size={13} />
     </button>
   );
 }
 
-export function ExternalProofLink({ href, label }: { href: string; label: string }) {
+export function ExternalLinkRow({ href, label }: { href: string; label: string }) {
   return (
-    <a className="small-link" href={href} target="_blank" rel="noreferrer">
+    <a className="btn btn-ghost btn-sm" href={href} target="_blank" rel="noreferrer">
       {label} <ExternalLink size={13} />
     </a>
   );
@@ -65,10 +80,43 @@ export function ExternalProofLink({ href, label }: { href: string; label: string
 
 export function TaskList({ items }: { items: string[] }) {
   return (
-    <ul className="task-list">
+    <ul className="list">
       {items.map((item) => (
-        <li key={item}><Check size={15} /> {item}</li>
+        <li key={item}><Check size={14} strokeWidth={2.4} /><span>{item}</span></li>
       ))}
     </ul>
+  );
+}
+
+export function ProofTag({ record }: { record: Pick<ProjectCapsule | CapsuleIndexRecord, "storageMode" | "storageRoot"> }) {
+  const real = isRealProof(record.storageMode);
+  return (
+    <span className={`status-tag ${real ? "ok" : "warn"}`} title={real ? "Stored on 0G" : "Local fallback"}>
+      <span className="dot" />
+      {real ? "Stored" : "Local"}
+      <span style={{ fontFamily: "var(--mono)", color: "var(--muted)" }}>{shortHash(record.storageRoot)}</span>
+    </span>
+  );
+}
+
+export function ProjectRow({ capsule }: { capsule: CapsuleIndexRecord }) {
+  const pct = Math.max(0, Math.min(100, capsule.scores.total));
+  const real = isRealProof(capsule.storageMode);
+  return (
+    <Link className="row" to={`/capsules/${capsule.id}`}>
+      <div className="name">
+        <strong>{capsule.projectName}</strong>
+        <span>{capsule.tagline}</span>
+      </div>
+      <div className="builder">{capsule.teamName}</div>
+      <div className="round">{capsule.round}</div>
+      <div className="signal">
+        <div className="bar"><i style={{ width: `${pct}%` }} /></div>
+        <em style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--muted)", fontStyle: "normal" }}>{capsule.scores.total}</em>
+      </div>
+      <div>
+        <span className={`status-tag ${real ? "ok" : "warn"}`}><span className="dot" />{real ? "Stored" : "Local"}</span>
+      </div>
+    </Link>
   );
 }

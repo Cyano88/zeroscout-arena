@@ -1,64 +1,120 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Loader2, Scale } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import type { CapsuleIndexRecord, MatchupReport } from "../../../shared/types";
 import { api } from "../api";
-import { ProofBadge, TaskList } from "../components";
+import { ProofLogo, TaskList, type ProofState } from "../components";
+import { isRealProof, shortHash } from "../utils";
+
+type State =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ready"; report: MatchupReport }
+  | { kind: "error"; message: string };
 
 export function MatchupPage() {
   const [capsules, setCapsules] = useState<CapsuleIndexRecord[]>([]);
   const [a, setA] = useState("");
   const [b, setB] = useState("");
-  const [report, setReport] = useState<MatchupReport | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [state, setState] = useState<State>({ kind: "idle" });
 
   useEffect(() => {
     void api.capsules().then((items) => {
       setCapsules(items);
       setA(items[0]?.id ?? "");
       setB(items[1]?.id ?? "");
-    });
+    }).catch(() => undefined);
   }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setLoading(true);
-    setError("");
+    if (!a || !b || a === b) return;
+    setState({ kind: "loading" });
     try {
-      setReport(await api.createMatchup(a, b));
+      const report = await api.createMatchup(a, b);
+      setState({ kind: "ready", report });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Comparison failed");
-    } finally {
-      setLoading(false);
+      setState({ kind: "error", message: err instanceof Error ? err.message : "Comparison failed" });
     }
   }
 
+  const report = state.kind === "ready" ? state.report : null;
+  const proofState: ProofState = report
+    ? isRealProof(report.storageMode) ? "complete" : "error"
+    : state.kind === "loading" ? "active" : "pending";
+
   return (
-    <main className="single-page">
-      <section className="panel">
-        <span className="eyebrow">Project comparison</span>
+    <main className="page-narrow section-stack">
+      <header className="page-heading">
+        <span className="eyebrow">Compare</span>
         <h1>Compare two projects</h1>
-        <p className="large-copy">Pick two projects and get a plain-English comparison: clearer record, stronger demo, better public story, and the next move for each team.</p>
-        <form className="matchup-form" onSubmit={submit}>
-          <select value={a} onChange={(e) => setA(e.target.value)}>{capsules.map((item) => <option value={item.id} key={item.id}>{item.projectName}</option>)}</select>
-          <select value={b} onChange={(e) => setB(e.target.value)}>{capsules.map((item) => <option value={item.id} key={item.id}>{item.projectName}</option>)}</select>
-          <button className="primary-button" disabled={loading || !a || !b}>{loading ? <Loader2 className="spin" size={18} /> : <Scale size={18} />} Compare projects</button>
-        </form>
-        {error && <div className="error-box">{error}</div>}
-      </section>
-      {report && (
-        <section className="panel matchup-report">
-          <div className="section-head compact"><h2>{report.capsuleAName} vs {report.capsuleBName}</h2><ProofBadge capsule={report} /></div>
-          <p className="large-copy">{report.summary}</p>
-          <div className="two-col">
-            <div><h3>Clearer record</h3><p>{report.strongerProof}</p></div>
-            <div><h3>Clearer demo</h3><p>{report.clearerDemo}</p></div>
+        <p>Pick two profiles, get a plain-English breakdown of who has the clearer record, the stronger demo, and the next move.</p>
+      </header>
+
+      <section className="surface surface-pad">
+        <form className="compare-form" onSubmit={submit}>
+          <div className="field">
+            <label>Project A</label>
+            <select value={a} onChange={(e) => setA(e.target.value)}>
+              {capsules.map((item) => <option value={item.id} key={item.id}>{item.projectName}</option>)}
+            </select>
           </div>
-          <h3>Public story</h3>
-          <p>{report.strongerPublicVoteCase}</p>
-          <div className="two-col">
-            <div><h3>Fix for {report.capsuleAName}</h3><TaskList items={report.risksForA} /><p><b>Next move:</b> {report.nextMoveForA}</p></div>
-            <div><h3>Fix for {report.capsuleBName}</h3><TaskList items={report.risksForB} /><p><b>Next move:</b> {report.nextMoveForB}</p></div>
+          <div className="compare-vs">vs</div>
+          <div className="field">
+            <label>Project B</label>
+            <select value={b} onChange={(e) => setB(e.target.value)}>
+              {capsules.map((item) => <option value={item.id} key={item.id}>{item.projectName}</option>)}
+            </select>
+          </div>
+          <button className="btn btn-primary" disabled={state.kind === "loading" || !a || !b || a === b} style={{ width: "auto", minWidth: 160 }}>
+            {state.kind === "loading" ? <Loader2 className="spin" size={14} /> : <ArrowRight size={14} />}
+            {state.kind === "loading" ? "Comparing..." : "Compare"}
+          </button>
+        </form>
+        {state.kind === "error" && <div className="error-banner" style={{ marginTop: 14 }}>{state.message}</div>}
+      </section>
+
+      {report && (
+        <section className="surface surface-pad section-stack">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>Comparison</div>
+              <h2 style={{ margin: 0, fontSize: 22 }}>{report.capsuleAName} <span style={{ color: "var(--muted)", fontWeight: 400 }}>vs</span> {report.capsuleBName}</h2>
+            </div>
+            <ProofLogo state={proofState} size="xs" caption={{ title: isRealProof(report.storageMode) ? "Stored" : "Local", sub: shortHash(report.storageRoot) }} />
+          </div>
+
+          <div className="section">
+            <h2>Summary</h2>
+            <p>{report.summary}</p>
+          </div>
+
+          <div className="compare-grid">
+            <div className="compare-col">
+              <h3>Clearer record</h3>
+              <p>{report.strongerProof}</p>
+            </div>
+            <div className="compare-col">
+              <h3>Clearer demo</h3>
+              <p>{report.clearerDemo}</p>
+            </div>
+          </div>
+
+          <div className="section">
+            <h2>Public story</h2>
+            <p>{report.strongerPublicVoteCase}</p>
+          </div>
+
+          <div className="compare-grid">
+            <div className="compare-col">
+              <h3>Fix for {report.capsuleAName}</h3>
+              <TaskList items={report.risksForA} />
+              <p style={{ marginTop: 10 }}><b style={{ color: "var(--text)" }}>Next move:</b> {report.nextMoveForA}</p>
+            </div>
+            <div className="compare-col">
+              <h3>Fix for {report.capsuleBName}</h3>
+              <TaskList items={report.risksForB} />
+              <p style={{ marginTop: 10 }}><b style={{ color: "var(--text)" }}>Next move:</b> {report.nextMoveForB}</p>
+            </div>
           </div>
         </section>
       )}

@@ -7,6 +7,7 @@ import { CapsulePage } from "./pages/CapsulePage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { MatchupPage } from "./pages/MatchupPage";
 import { DocsPage } from "./pages/DocsPage";
+import ogLogo from "./assets/og-logo.jpeg";
 import "./styles.css";
 
 function App() {
@@ -17,21 +18,31 @@ function App() {
     localStorage.setItem("zeroscout-theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    document.documentElement.style.setProperty("--brand-img", `url("${ogLogo}")`);
+  }, []);
+
   return (
     <BrowserRouter>
       <div className="app-shell">
         <header className="topbar">
           <NavLink to="/" className="brand">
-            <span className="zg-mark">0G</span>
+            <span className="brand-mark" />
             <span>ZeroScout</span>
           </NavLink>
-          <nav>
-            <NavLink to="/">Create</NavLink>
+          <nav className="top-nav">
+            <NavLink to="/" end>Create</NavLink>
             <NavLink to="/leaderboard">Projects</NavLink>
             <NavLink to="/matchup">Compare</NavLink>
             <NavLink to="/docs">Verify</NavLink>
           </nav>
-          <button className="theme-toggle" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} type="button" title="Toggle theme">
+          <button
+            className="theme-toggle"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            type="button"
+            title="Toggle theme"
+            aria-label="Toggle theme"
+          >
             {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
           </button>
         </header>
