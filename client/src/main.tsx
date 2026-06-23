@@ -39,9 +39,9 @@ function App() {
           </NavLink>
           <nav className="top-nav">
             <NavLink to="/projects">Projects</NavLink>
+            <NavLink to="/" end>Create</NavLink>
             <NavLink to="/compare">Compare</NavLink>
             <NavLink to="/integrate">Integrate</NavLink>
-            <NavLink to="/" end>Create</NavLink>
             <NavLink to="/verify">Verify</NavLink>
           </nav>
           <button

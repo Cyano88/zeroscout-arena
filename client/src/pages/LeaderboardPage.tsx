@@ -1,107 +1,167 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Lock } from "lucide-react";
-import type { CampaignType, CapsuleIndexRecord } from "../../../shared/types";
+import { ArrowLeft, ArrowRight, Lock } from "lucide-react";
+import type { CampaignPreset, CampaignType, CapsuleIndexRecord } from "../../../shared/types";
 import { api } from "../api";
 import { isRealProof, shortHash } from "../utils";
 
-type FilterKey = "all" | "hackathon" | "cohort" | "custom";
+type CategoryId = "hackathon" | "cohort" | "custom";
 
-const filters: { id: FilterKey; label: string; detail: string }[] = [
-  { id: "all", label: "All", detail: "Every public Project Passport" },
-  { id: "hackathon", label: "Hackathon / Ecosystem", detail: "Zero Cup, grants, ecosystem campaigns" },
-  { id: "cohort", label: "University / Cohort", detail: "Grail, schools, tutors, accelerators" },
-  { id: "custom", label: "Solo Builder", detail: "Independent public project proof" }
+const categories: { id: CategoryId; title: string; subtitle: string; mark: "og" | "grail" | "zs" }[] = [
+  { id: "hackathon", title: "Hackathon / Ecosystem", subtitle: "Zero Cup, grants, ecosystem campaigns", mark: "og" },
+  { id: "cohort", title: "University / Cohort", subtitle: "Grail, schools, tutors, accelerators", mark: "grail" },
+  { id: "custom", title: "Solo Builder", subtitle: "Independent public project proof", mark: "zs" }
 ];
 
 export function LeaderboardPage() {
   const [projects, setProjects] = useState<CapsuleIndexRecord[] | null>(null);
-  const [filter, setFilter] = useState<FilterKey>("all");
+  const [campaigns, setCampaigns] = useState<CampaignPreset[]>([]);
+  const [category, setCategory] = useState<CategoryId | null>(null);
+  const [programId, setProgramId] = useState<string | null>(null);
 
   useEffect(() => {
     void api.projects().then(setProjects).catch(() => setProjects([]));
+    void api.campaigns().then(setCampaigns).catch(() => setCampaigns([]));
   }, []);
 
-  const filtered = useMemo(() => {
-    if (!projects) return [];
-    return projects
-      .filter((item) => filter === "all" || bucketFor(item.campaignType) === filter)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [projects, filter]);
+  const programs = useMemo(() => {
+    if (!category) return [];
+    return campaigns.filter((campaign) => bucketFor(campaign.type) === category);
+  }, [campaigns, category]);
+
+  const program = useMemo(() => campaigns.find((item) => item.id === programId) ?? null, [campaigns, programId]);
+  const listedProjects = useMemo(() => {
+    if (!projects || !programId) return [];
+    return projects.filter((project) => project.campaignId === programId);
+  }, [projects, programId]);
 
   return (
     <main className="page">
       <header className="page-heading">
         <span className="eyebrow">Projects</span>
         <h1>Project Passports</h1>
-        <p>Browse public builds from hackathons, cohorts, universities, ecosystems, and solo builders. Unlisted projects stay hidden from this page and Compare.</p>
+        <p>Browse public builds by source. Choose a category, pick an ecosystem or program, then inspect the verified Project Passports listed under it.</p>
       </header>
 
-      <div className="project-filter-stack">
-        {filters.map((item) => (
-          <button key={item.id} type="button" className={filter === item.id ? "on" : ""} onClick={() => setFilter(item.id)}>
-            <span>{item.label}</span>
-            <small>{item.detail}</small>
-          </button>
-        ))}
-      </div>
+      {!category && (
+        <DirectorySection eyebrow="Public sources" title="Choose where the project came from">
+          {categories.map((item) => (
+            <button className="directory-row" key={item.id} type="button" onClick={() => { setCategory(item.id); setProgramId(null); }}>
+              <DirectoryMark kind={item.mark} />
+              <div className="directory-main">
+                <h2>{item.title}</h2>
+                <p>{item.subtitle}</p>
+              </div>
+              <span className="directory-action">View <ArrowRight size={14} /></span>
+            </button>
+          ))}
+        </DirectorySection>
+      )}
 
-      {projects === null ? (
-        <div className="empty">Loading Project Passports...</div>
-      ) : filtered.length === 0 ? (
-        <div className="surface empty">No public projects in this category yet.</div>
-      ) : (
-        <div className="project-card-list">
-          {filtered.map((project) => <ProjectCard project={project} key={project.id} />)}
-        </div>
+      {category && !programId && (
+        <DirectorySection
+          eyebrow={categoryTitle(category)}
+          title="Listed ecosystems and programs"
+          back={() => setCategory(null)}
+        >
+          {programs.map((item) => (
+            <button className="directory-row" key={item.id} type="button" onClick={() => setProgramId(item.id)}>
+              <DirectoryMark kind={markForProgram(item.id, category)} />
+              <div className="directory-main">
+                <h2>{item.name}</h2>
+                <p>{item.description}</p>
+              </div>
+              <span className="directory-action">View <ArrowRight size={14} /></span>
+            </button>
+          ))}
+        </DirectorySection>
+      )}
+
+      {category && program && (
+        <DirectorySection
+          eyebrow={categoryTitle(category)}
+          title={program.name}
+          back={() => setProgramId(null)}
+        >
+          {listedProjects.length === 0 ? (
+            <div className="directory-empty">
+              <p>No public projects listed yet.</p>
+            </div>
+          ) : (
+            listedProjects.map((project) => <ProjectRow project={project} key={project.id} />)
+          )}
+          <div className="directory-cta">
+            <div>
+              <h3>Building with this ecosystem?</h3>
+              <p>Create a Project Passport for this program and decide whether it should be public or unlisted.</p>
+            </div>
+            <Link className="btn btn-primary btn-sm" to={`/?campaign=${program.id}`}>
+              Create yours <ArrowRight size={13} />
+            </Link>
+          </div>
+        </DirectorySection>
       )}
     </main>
   );
 }
 
-function ProjectCard({ project }: { project: CapsuleIndexRecord }) {
-  const category = categoryLabel(project.campaignType);
-  const real = isRealProof(project.storageMode);
+function DirectorySection({ eyebrow, title, back, children }: { eyebrow: string; title: string; back?: () => void; children: React.ReactNode }) {
   return (
-    <Link to={`/projects/${project.id}`} className="project-card-row">
-      <div className={`project-category-mark ${bucketFor(project.campaignType)}`}>
-        {category.initial}
-      </div>
-      <div className="project-card-main">
-        <div className="project-card-kicker">
-          <span>{category.label}</span>
-          <span>{project.campaignName}</span>
-          <span>{project.checkpointLabel}</span>
+    <section className="directory-section">
+      <div className="directory-head">
+        <div>
+          <p>{eyebrow}</p>
+          <h2>{title}</h2>
         </div>
-        <h2>{project.projectName}</h2>
-        <p>{project.tagline}</p>
-      </div>
-      <div className="project-card-side">
-        <div className="signal-mini">
-          <b>{project.scores.total}</b>
-          <span>signal</span>
-        </div>
-        <span className={`status-tag ${real ? "ok" : "warn"}`}><span className="dot" />{real ? "Stored" : "Local"}</span>
-        {project.visibility === "unlisted" ? (
-          <span className="status-tag warn"><Lock size={11} />Unlisted</span>
-        ) : (
-          <span className="hash-mini">{shortHash(project.storageRoot)}</span>
+        {back && (
+          <button className="btn btn-ghost btn-sm" type="button" onClick={back}>
+            <ArrowLeft size={12} /> Back
+          </button>
         )}
       </div>
-      <ArrowRight className="project-card-arrow" size={15} />
+      <div className="directory-stack">{children}</div>
+    </section>
+  );
+}
+
+function DirectoryMark({ kind }: { kind: "og" | "grail" | "zs" }) {
+  return <span className={`directory-mark ${kind}`} aria-hidden="true" />;
+}
+
+function ProjectRow({ project }: { project: CapsuleIndexRecord }) {
+  const real = isRealProof(project.storageMode);
+  return (
+    <Link className="directory-row project" to={`/projects/${project.id}`}>
+      <DirectoryMark kind={markForProgram(project.campaignId, bucketFor(project.campaignType))} />
+      <div className="directory-main">
+        <h2>{project.projectName}</h2>
+        <p>{project.teamName} - {project.checkpointLabel} - {project.scores.total}/100 signal</p>
+      </div>
+      <div className="directory-proof">
+        <span className={`status-tag ${real ? "ok" : "warn"}`}><span className="dot" />{real ? "Stored" : "Local"}</span>
+        {project.visibility === "unlisted" ? <span className="status-tag warn"><Lock size={11} />Unlisted</span> : <span>{shortHash(project.storageRoot)}</span>}
+      </div>
+      <span className="directory-action">View <ArrowRight size={14} /></span>
     </Link>
   );
 }
 
-function bucketFor(type: CampaignType): FilterKey {
+function bucketFor(type: CampaignType): CategoryId {
   if (type === "hackathon" || type === "grant") return "hackathon";
   if (type === "cohort" || type === "accelerator" || type === "demo-day") return "cohort";
   return "custom";
 }
 
-function categoryLabel(type: CampaignType): { label: string; initial: string } {
-  const bucket = bucketFor(type);
-  if (bucket === "hackathon") return { label: "Hackathon / Ecosystem", initial: "HE" };
-  if (bucket === "cohort") return { label: "University / Cohort", initial: "UC" };
-  return { label: "Solo Builder", initial: "SB" };
+function categoryTitle(category: CategoryId): string {
+  if (category === "hackathon") return "Hackathon / Ecosystem";
+  if (category === "cohort") return "University / Cohort";
+  return "Solo Builder";
+}
+
+function markForProgram(id: string, category: CategoryId): "og" | "grail" | "zs" {
+  if (id === "zero-cup") return "og";
+  if (id === "grail-builders-university") return "grail";
+  if (category === "hackathon") return "og";
+  if (category === "cohort") return "grail";
+  return "zs";
 }
