@@ -111,7 +111,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
       ? "Proof page ready"
       : hasPreviousVersion
         ? "Publish checkpoint update"
-        : "Create Project Passport";
+        : "Create Passport";
 
   function chooseProgram(id: string) {
     const campaign = findCampaignPreset(id);

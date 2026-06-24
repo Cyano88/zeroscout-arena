@@ -2,6 +2,8 @@
 
 ## Railway Full-Stack Deploy
 
+Railway is the primary ZeroScout deployment. Express serves both the API and the built React app, which keeps 0G Storage, 0G Compute, video upload review, API keys, and top-up verification on one origin.
+
 1. Create a Railway project.
 2. Connect this repo.
 3. Railway uses `railway.json`. The build command builds the client and server, and Express serves the React app:
@@ -43,6 +45,8 @@ The deploy script prints `ZG_REGISTRY_CONTRACT`. Use the deployment block as `ZG
 
 ## Optional Vercel Frontend
 
+Vercel is frontend-only for this repo. It cannot replace Railway unless the frontend points at the Railway API.
+
 1. Import the repo into Vercel.
 2. Build command:
 
@@ -61,6 +65,8 @@ dist/client
 ```env
 VITE_API_BASE_URL=https://your-railway-api.up.railway.app
 ```
+
+If `VITE_API_BASE_URL` is missing, the Vercel build may deploy but the app will call Vercel for `/api/*`, where the ZeroScout Express API does not exist.
 
 ## Production Check
 
