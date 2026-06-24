@@ -68,18 +68,36 @@ export const api = {
     request<ProjectCapsule>(`/api/capsules/${id}/claim/verify`, { method: "POST" }),
   createVideoReview: (id: string, root?: string | null, tx?: string | null) =>
     request<VideoReview>(`/api/capsules/${id}/video-review${proofQuery(root, tx)}`, { method: "POST" }),
-  uploadVideoReview: async (id: string, file: File, root?: string | null, tx?: string | null) => {
+  uploadVideoReview: async (id: string, file: File, root?: string | null, tx?: string | null, onProgress?: (progress: number) => void) => {
     const form = new FormData();
     form.append("video", file);
-    const response = await fetch(`${API_BASE}/api/capsules/${id}/video-upload-review${proofQuery(root, tx)}`, {
-      method: "POST",
-      body: form
+    return new Promise<VideoReview>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${API_BASE}/api/capsules/${id}/video-upload-review${proofQuery(root, tx)}`);
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          onProgress?.(8);
+          return;
+        }
+        onProgress?.(Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100))));
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.(100);
+          resolve(JSON.parse(xhr.responseText) as VideoReview);
+          return;
+        }
+        let body: { error?: unknown } = {};
+        try {
+          body = JSON.parse(xhr.responseText) as { error?: unknown };
+        } catch {
+          body = {};
+        }
+        reject(new Error(readableError(body.error, xhr.status)));
+      };
+      xhr.onerror = () => reject(new Error("Video upload failed. Check your connection and try again."));
+      xhr.send(form);
     });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(readableError(body.error, response.status));
-    }
-    return response.json() as Promise<VideoReview>;
   },
   matchups: () => request<MatchupReport[]>("/api/matchups"),
   createMatchup: (capsuleAId: string, capsuleBId: string) =>

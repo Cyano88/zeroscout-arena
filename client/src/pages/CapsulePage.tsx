@@ -215,6 +215,7 @@ function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: Projec
   const [state, setState] = useState<"idle" | "reviewing" | "uploading">("idle");
   const [error, setError] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const review = capsule.videoReview;
 
   async function runReview() {
@@ -235,14 +236,16 @@ function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: Projec
       return;
     }
     setError("");
+    setUploadProgress(1);
     setState("uploading");
     try {
-      onReviewed(await api.uploadVideoReview(capsule.id, file, root, tx));
+      onReviewed(await api.uploadVideoReview(capsule.id, file, root, tx, setUploadProgress));
       setFile(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Video upload review failed");
     } finally {
       setState("idle");
+      window.setTimeout(() => setUploadProgress(0), 900);
     }
   }
 
@@ -288,6 +291,17 @@ function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: Projec
               Upload
             </button>
           </div>
+          {state === "uploading" && (
+            <div className="upload-progress" aria-label="Video upload progress">
+              <div className="upload-progress-top">
+                <span>{uploadProgress < 100 ? "Uploading video" : "Processing with 0G"}</span>
+                <b>{uploadProgress}%</b>
+              </div>
+              <div className="upload-progress-track">
+                <span style={{ width: `${uploadProgress}%` }} />
+              </div>
+            </div>
+          )}
         </div>
       )}
       {error && <div className="error-banner" style={{ marginTop: 14 }}>{error}</div>}
