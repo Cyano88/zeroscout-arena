@@ -152,7 +152,7 @@ export function CapsulePage() {
           <Row k="Transaction" value={capsule.storageTxHash ?? "-"} disabled={!capsule.storageTxHash} />
           <Row k="Registry tx" value={capsule.registryTxHash ?? "-"} disabled={!capsule.registryTxHash} />
           <Row k="Ownership" value={capsule.ownership ? "Claimed by repo proof" : "Unclaimed"} disableCopy />
-          <Row k="AI provider" value={capsule.aiProvider} disableCopy />
+          <Row k="Passport AI provider" value={capsule.aiProvider} disableCopy />
           <Row k="Video demo" value={capsule.videoDemoUrl ?? "-"} disabled={!capsule.videoDemoUrl} disableCopy />
         </div>
       </section>
@@ -294,7 +294,7 @@ function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: Projec
           {state === "uploading" && (
             <div className="upload-progress" aria-label="Video upload progress">
               <div className="upload-progress-top">
-                <span>{uploadProgress < 100 ? "Uploading video" : "Processing with 0G"}</span>
+                <span>{uploadProgress < 99 ? "Uploading video" : "Storing on 0G and reviewing"}</span>
                 <b>{uploadProgress}%</b>
               </div>
               <div className="upload-progress-track">
