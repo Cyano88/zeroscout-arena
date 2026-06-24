@@ -28,6 +28,22 @@ interface MatchupResult {
 
 type VideoReviewResult = Pick<VideoReview, "reviewMode" | "aiProvider" | "summary" | "proofFlowObserved" | "demoClarityNotes" | "strongestMoments" | "missingProofMoments" | "recommendedCuts">;
 
+export interface PlatformVideoScoreResult {
+  aiProvider: string;
+  score: number;
+  maxScore: 10;
+  recommendation: "approve" | "review" | "reject";
+  summary: string;
+  rubric: {
+    relevance: number;
+    clarity: number;
+    effort: number;
+    safety: number;
+  };
+  flags: string[];
+  suggestedFeedback: string;
+}
+
 export async function generateScout(input: ProjectCapsuleInput, previous?: ProjectCapsule): Promise<ScoutResult> {
   const prompt = scoutPrompt(input, previous);
   const ai = getAiClient();
@@ -240,6 +256,73 @@ Use "video review signal", not official judging language.`;
     strongestMoments: list(parsed.strongestMoments, ["The uploaded video was submitted for review."]),
     missingProofMoments: list(parsed.missingProofMoments, ["Make the storage root, registry tx, or Compute provider visible in the walkthrough."]),
     recommendedCuts: list(parsed.recommendedCuts, ["Keep the walkthrough under two minutes and lead with the proof outcome."])
+  };
+}
+
+export async function generatePlatformVideoScore(input: {
+  videoUrl: string;
+  platform: string;
+  program: string;
+  projectName: string;
+  prompt?: string;
+}): Promise<PlatformVideoScoreResult> {
+  const ai = getVideoAiClient();
+  if (!ai) {
+    throw new Error("0G Compute Router is not configured for video scoring.");
+  }
+
+  const prompt = `Score this uploaded campaign video for a platform integration.
+
+Platform: ${input.platform}
+Program/campaign: ${input.program}
+Target project/community: ${input.projectName}
+Extra scoring context: ${input.prompt || "none"}
+
+Rubric, total 10 points:
+- relevance, 0-4: video is actually about the target project/community/campaign.
+- clarity, 0-3: viewer can quickly understand the user's point or contribution.
+- effort, 0-2: video shows original effort, not spam or unrelated recycled content.
+- safety, 0-1: video appears safe for public campaign review.
+
+Return strict JSON with keys:
+score number 0-10,
+recommendation one of approve/review/reject,
+summary string,
+rubric { relevance, clarity, effort, safety },
+flags array,
+suggestedFeedback string.
+
+Be strict. If the video is unrelated, score low even if it is polished.`;
+
+  const content = await completeJson(ai, [
+    {
+      role: "system",
+      content: "You are ZeroScout's platform video scoring agent. Return strict JSON only. This is an automated campaign-readiness signal, not an official human decision."
+    },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: prompt },
+        { type: "video_url", video_url: { url: input.videoUrl } }
+      ]
+    }
+  ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[]);
+  const parsed = parseJsonObject(content ?? "{}");
+  const rubric = parsed.rubric && typeof parsed.rubric === "object" ? parsed.rubric as Record<string, unknown> : {};
+  const relevance = clampScore(rubric.relevance, 4);
+  const clarity = clampScore(rubric.clarity, 3);
+  const effort = clampScore(rubric.effort, 2);
+  const safety = clampScore(rubric.safety, 1);
+  const summed = relevance + clarity + effort + safety;
+  return {
+    aiProvider: ai.label,
+    score: clampScore(parsed.score, 10, summed),
+    maxScore: 10,
+    recommendation: normalizeRecommendation(parsed.recommendation),
+    summary: text(parsed.summary, "0G Compute reviewed the uploaded campaign video."),
+    rubric: { relevance, clarity, effort, safety },
+    flags: list(parsed.flags, []),
+    suggestedFeedback: text(parsed.suggestedFeedback, "Make the video clearly about the target project and show original effort.")
   };
 }
 
@@ -616,6 +699,16 @@ function list(value: unknown, fallback: string[]): string[] {
 
 function text(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function clampScore(value: unknown, max: number, fallback = 0): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(0, Math.min(max, Math.round(numeric)));
+}
+
+function normalizeRecommendation(value: unknown): PlatformVideoScoreResult["recommendation"] {
+  return value === "approve" || value === "reject" || value === "review" ? value : "review";
 }
 
 function higher(a: number, b: number, nameA: string, nameB: string, tieLabel: string): string {

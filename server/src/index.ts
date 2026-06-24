@@ -6,7 +6,7 @@ import path from "node:path";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
 import { clearPendingClaim, getCapsule, getPendingClaim, listCapsulesByProjectKey, listMatchups, listPublicCapsules, saveCapsule, saveMatchup, savePendingClaim } from "./repository.js";
-import { checkAiHealth, generateMatchup, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
+import { checkAiHealth, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
 import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
 import { parseGitHubRepo, projectKeyFor } from "./services/project-key.js";
@@ -376,6 +376,70 @@ app.post("/api/capsules/:id/video-upload-review", upload.single("video"), async 
   }
 });
 
+app.post("/api/integrations/video-score", upload.single("video"), async (req, res, next) => {
+  try {
+    assertIntegrationAccess(req);
+    if (!req.file) {
+      res.status(400).json({ error: "Upload an MP4, MOV, or WebM video under 100 MB." });
+      return;
+    }
+
+    const platform = cleanBodyField(req.body.platform, "Grail");
+    const program = cleanBodyField(req.body.program, "campaign video review");
+    const projectName = cleanBodyField(req.body.projectName, "target project");
+    const prompt = cleanBodyField(req.body.prompt, "");
+    const id = nanoid(10);
+    const now = new Date().toISOString();
+    const videoProof = await storeBinaryArtifact("video", id, req.file.buffer);
+    const videoUrl = `${publicBaseUrl(req)}/api/video-assets/${encodeURIComponent(videoProof.storageRoot)}?contentType=${encodeURIComponent(req.file.mimetype)}`;
+    const score = await generatePlatformVideoScore({ videoUrl, platform, program, projectName, prompt });
+    const artifactWithoutProof = {
+      id,
+      artifactType: "zeroscout.platform-video-score",
+      artifactVersion: "1.0.0",
+      platform,
+      program,
+      projectName,
+      prompt,
+      uploadedVideo: {
+        filename: req.file.originalname,
+        contentType: req.file.mimetype,
+        sizeBytes: req.file.size,
+        storageRoot: videoProof.storageRoot,
+        storageUri: videoProof.storageUri,
+        contentHash: videoProof.capsuleHash,
+        storageTxHash: videoProof.storageTxHash
+      },
+      ...score,
+      createdAt: now
+    };
+    const reviewProof = await storeCanonicalArtifact("video-review", id, artifactWithoutProof);
+    res.status(201).json({
+      id,
+      ...score,
+      video: {
+        storageRoot: videoProof.storageRoot,
+        storageUri: videoProof.storageUri,
+        contentHash: videoProof.capsuleHash,
+        storageTxHash: videoProof.storageTxHash,
+        contentType: req.file.mimetype,
+        sizeBytes: req.file.size
+      },
+      review: {
+        storageRoot: reviewProof.storageRoot,
+        storageUri: reviewProof.storageUri,
+        contentHash: reviewProof.capsuleHash,
+        storageTxHash: reviewProof.storageTxHash
+      },
+      network: reviewProof.network,
+      storageMode: reviewProof.storageMode,
+      createdAt: now
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/integrations/capsules", async (req, res, next) => {
   try {
     const capsule = await createProjectCapsule(capsuleInputSchema.parse({ ...req.body, source: "api" }));
@@ -589,6 +653,19 @@ function publicBaseUrl(req: express.Request): string {
   const host = req.get("host");
   if (!host) throw new Error("Could not determine public host for video review.");
   return `${proto}://${host}`;
+}
+
+function cleanBodyField(value: unknown, fallback: string): string {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text ? text.slice(0, 500) : fallback;
+}
+
+function assertIntegrationAccess(req: express.Request): void {
+  if (!config.integrationSecret) return;
+  const expected = `Bearer ${config.integrationSecret}`;
+  if (req.get("authorization") !== expected) {
+    throw new Error("Unauthorized integration request.");
+  }
 }
 
 app.get("/api/matchups", async (_req, res, next) => {
