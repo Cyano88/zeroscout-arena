@@ -127,6 +127,43 @@ POST /api/admin/integration-keys/:id/revoke
 
 Hosted links and iframe widgets do not need secrets. API keys are only for backend integrations that create passports or request video scoring programmatically.
 
+### API Dashboard and Credits
+
+ZeroScout also includes a self-serve API dashboard at:
+
+```txt
+/dashboard
+```
+
+Use this when an external platform wants ZeroScout as a simple 0G integration layer:
+
+- Connect a wallet.
+- Create a capped API key.
+- Send native OG on 0G Chain to the configured treasury address.
+- Paste the transaction hash to verify the top-up.
+- ZeroScout adds credits to that wallet's keys.
+- API calls spend credits before ZeroScout uses 0G Storage or 0G Compute.
+
+Default credit costs:
+
+```txt
+Project Passport API create: 5 credits
+Video scoring API call: 20 credits
+```
+
+Production env:
+
+```txt
+ZEROSCOUT_TREASURY_ADDRESS=0x...
+ZEROSCOUT_CREDITS_PER_OG=100
+```
+
+Integration choice:
+
+- Hosted link: no env, best for sending builders one URL.
+- Embed widget: no env for public forms, best inside university/cohort portals.
+- API key: backend env required, best for native platform flows like Grail video scoring.
+
 ## Campaign Templates
 
 - Zero Cup: hackathon campaign with tournament checkpoints.

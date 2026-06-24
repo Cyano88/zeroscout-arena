@@ -1,4 +1,4 @@
-import { ArrowRight, Copy } from "lucide-react";
+import { ArrowRight, Copy, KeyRound } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const hostedLink = `${window.location.origin}/?campaign=custom`;
@@ -8,8 +8,8 @@ export function IntegratePage() {
     <main className="page">
       <header className="page-heading">
         <span className="eyebrow">Integrate</span>
-        <h1>Launch with one link</h1>
-        <p>Send builders a hosted flow. They create Project Passports, and ZeroScout stores the proof record on 0G.</p>
+        <h1>Choose the simplest integration</h1>
+        <p>Use a hosted flow when builders should submit directly. Use an API key when your platform already has the user experience and wants ZeroScout proof, scoring, and 0G storage behind it.</p>
       </header>
 
       <section className="integrate-primary">
@@ -35,20 +35,23 @@ export function IntegratePage() {
       </section>
 
       <section className="integrate-steps">
-        <Step n="01" title="Share link" body="Send the hosted flow to builders." />
-        <Step n="02" title="Builders submit" body="They add repo, demo, usage, and visibility." />
-        <Step n="03" title="Review proof" body="Use Projects and Compare to inspect what shipped." />
+        <Step n="01" title="Hosted link" body="No env. Send one URL to builders, students, or applicants." />
+        <Step n="02" title="Embed widget" body="No env for public forms. Place ZeroScout inside a portal page." />
+        <Step n="03" title="API key" body="Backend env required. Best for native scoring, private records, and metered usage." />
       </section>
 
       <section className="integrate-next">
         <div>
-          <span>Coming next</span>
-          <h2>Platform options</h2>
+          <span>For platforms</span>
+          <h2>Fund a capped API key</h2>
         </div>
         <div className="integrate-next-list">
-          <NextItem title="Embed widget" body="Place the flow inside an existing portal." />
-          <NextItem title="API" body="Create proof records from platform data." />
+          <NextItem title="Widget" body="Use this for university portals, cohort pages, and hackathon forms." />
+          <NextItem title="API key" body="Use this when your backend uploads videos, creates passports, or needs private program records." />
         </div>
+        <Link className="btn btn-primary btn-sm" to="/dashboard">
+          <KeyRound size={13} /> Open API dashboard
+        </Link>
       </section>
     </main>
   );

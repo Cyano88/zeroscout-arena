@@ -239,10 +239,22 @@ export interface IntegrationKeyRecord {
   id: string;
   name: string;
   partner?: string;
+  ownerWallet?: string;
   keyHash: string;
   keyPreview: string;
+  creditBalance: number;
+  creditsUsed: number;
   createdAt: string;
   lastUsedAt?: string;
   requestCount: number;
   revokedAt?: string;
+}
+
+export interface IntegrationTopUpRecord {
+  id: string;
+  wallet: string;
+  txHash: string;
+  amountOg: string;
+  credits: number;
+  createdAt: string;
 }

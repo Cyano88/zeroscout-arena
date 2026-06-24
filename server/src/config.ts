@@ -36,6 +36,8 @@ export const config = {
   computeTrustMode: process.env.ZG_COMPUTE_TRUST_MODE ?? "verified",
   integrationSecret: process.env.ZEROSCOUT_INTEGRATION_SECRET,
   adminToken: process.env.ZEROSCOUT_ADMIN_TOKEN,
+  treasuryAddress: process.env.ZEROSCOUT_TREASURY_ADDRESS,
+  creditsPerOg: Number(process.env.ZEROSCOUT_CREDITS_PER_OG ?? 100),
   openAiApiKey: process.env.OPENAI_API_KEY,
   openAiBaseUrl: process.env.OPENAI_BASE_URL,
   openAiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",

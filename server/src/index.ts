@@ -4,9 +4,10 @@ import multer from "multer";
 import { nanoid } from "nanoid";
 import path from "node:path";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { ethers } from "ethers";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { clearPendingClaim, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, listCapsulesByProjectKey, listIntegrationKeys, listMatchups, listPublicCapsules, revokeIntegrationKey, saveCapsule, saveIntegrationKey, saveMatchup, savePendingClaim, touchIntegrationKey } from "./repository.js";
+import { addCreditsToWalletKeys, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, hasIntegrationTopUp, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, revokeIntegrationKey, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim } from "./repository.js";
 import { checkAiHealth, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
 import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
@@ -16,6 +17,10 @@ import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
 
 const app = express();
 const maxVideoBytes = 100 * 1024 * 1024;
+const integrationCosts = {
+  capsule: 5,
+  videoScore: 20
+};
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: maxVideoBytes },
@@ -44,6 +49,16 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/config/public", (_req, res) => {
   res.json(publicConfig());
+});
+
+app.get("/api/integrations/pricing", (_req, res) => {
+  res.json({
+    costs: integrationCosts,
+    creditsPerOg: config.creditsPerOg,
+    treasuryAddress: config.treasuryAddress,
+    chainId: config.chainId,
+    network: config.network
+  });
 });
 
 app.get("/api/ai/health", async (_req, res, next) => {
@@ -379,7 +394,7 @@ app.post("/api/capsules/:id/video-upload-review", upload.single("video"), async 
 
 app.post("/api/integrations/video-score", upload.single("video"), async (req, res, next) => {
   try {
-    const integration = await assertIntegrationAccess(req);
+    const integration = await assertIntegrationAccess(req, integrationCosts.videoScore);
     if (!req.file) {
       res.status(400).json({ error: "Upload an MP4, MOV, or WebM video under 100 MB." });
       return;
@@ -446,7 +461,7 @@ app.post("/api/integrations/video-score", upload.single("video"), async (req, re
 
 app.post("/api/integrations/capsules", async (req, res, next) => {
   try {
-    await assertIntegrationAccess(req);
+    await assertIntegrationAccess(req, integrationCosts.capsule);
     const capsule = await createProjectCapsule(capsuleInputSchema.parse({ ...req.body, source: "api" }));
     res.status(201).json({
       id: capsule.id,
@@ -457,6 +472,96 @@ app.post("/api/integrations/capsules", async (req, res, next) => {
       storageTxHash: capsule.storageTxHash,
       readinessSignal: capsule.scores.total
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/dashboard/keys", async (req, res, next) => {
+  try {
+    const wallet = walletParam(req.query.wallet);
+    res.json(await listIntegrationKeysByWallet(wallet));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/dashboard/keys", async (req, res, next) => {
+  try {
+    const wallet = walletParam(req.body?.wallet);
+    const name = cleanBodyField(req.body?.name, "production").slice(0, 80);
+    const partner = cleanBodyField(req.body?.partner, "External platform").slice(0, 80);
+    const id = nanoid(8);
+    const secret = randomBytes(24).toString("base64url");
+    const key = `zs_live_${id}_${secret}`;
+    const record = {
+      id,
+      name,
+      partner,
+      ownerWallet: wallet,
+      keyHash: hashSecret(key),
+      keyPreview: `${key.slice(0, 16)}...${key.slice(-4)}`,
+      creditBalance: 0,
+      creditsUsed: 0,
+      createdAt: new Date().toISOString(),
+      requestCount: 0
+    };
+    await saveIntegrationKey(record);
+    const { keyHash: _keyHash, ...publicRecord } = record;
+    res.status(201).json({ ...publicRecord, key });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/dashboard/topups/verify", async (req, res, next) => {
+  try {
+    const wallet = walletParam(req.body?.wallet);
+    const txHash = cleanBodyField(req.body?.txHash, "").slice(0, 80);
+    if (!ethers.isHexString(txHash, 32)) {
+      res.status(400).json({ error: "Enter a valid 0G Chain transaction hash." });
+      return;
+    }
+    if (!config.treasuryAddress || !ethers.isAddress(config.treasuryAddress)) {
+      throw new Error("Top-ups are not configured. Set ZEROSCOUT_TREASURY_ADDRESS.");
+    }
+    if (await hasIntegrationTopUp(txHash)) {
+      res.status(409).json({ error: "This top-up transaction was already used." });
+      return;
+    }
+
+    const provider = new ethers.JsonRpcProvider(config.rpcUrl, config.chainId);
+    const [tx, receipt] = await Promise.all([provider.getTransaction(txHash), provider.getTransactionReceipt(txHash)]);
+    if (!tx || !receipt || receipt.status !== 1) {
+      res.status(400).json({ error: "Top-up transaction is not confirmed yet." });
+      return;
+    }
+    if (tx.from.toLowerCase() !== wallet.toLowerCase()) {
+      res.status(400).json({ error: "Top-up transaction must come from the connected wallet." });
+      return;
+    }
+    if (!tx.to || tx.to.toLowerCase() !== config.treasuryAddress.toLowerCase()) {
+      res.status(400).json({ error: "Top-up transaction was not sent to the ZeroScout treasury address." });
+      return;
+    }
+    if (tx.value <= 0n) {
+      res.status(400).json({ error: "Top-up transaction must send OG." });
+      return;
+    }
+
+    const amountOg = ethers.formatEther(tx.value);
+    const credits = Math.max(1, Math.floor(Number(amountOg) * config.creditsPerOg));
+    const record = {
+      id: nanoid(10),
+      wallet,
+      txHash,
+      amountOg,
+      credits,
+      createdAt: new Date().toISOString()
+    };
+    await saveIntegrationTopUp(record);
+    const keys = await addCreditsToWalletKeys(wallet, credits);
+    res.json({ ...record, keys });
   } catch (error) {
     next(error);
   }
@@ -490,6 +595,8 @@ app.post("/api/admin/integration-keys", async (req, res, next) => {
       partner,
       keyHash: hashSecret(key),
       keyPreview: `${key.slice(0, 16)}...${key.slice(-4)}`,
+      creditBalance: Number(req.body?.creditBalance ?? 0),
+      creditsUsed: 0,
       createdAt: new Date().toISOString(),
       requestCount: 0
     };
@@ -718,6 +825,12 @@ function cleanBodyField(value: unknown, fallback: string): string {
   return text ? text.slice(0, 500) : fallback;
 }
 
+function walletParam(value: unknown): string {
+  const wallet = cleanBodyField(value, "").slice(0, 80);
+  if (!ethers.isAddress(wallet)) throw new Error("Connect a valid wallet address.");
+  return ethers.getAddress(wallet);
+}
+
 function hashSecret(secret: string): string {
   return createHash("sha256").update(secret).digest("hex");
 }
@@ -742,13 +855,13 @@ function assertAdminAccess(req: express.Request): void {
   }
 }
 
-async function assertIntegrationAccess(req: express.Request): Promise<{ id: string; name: string; partner?: string } | undefined> {
+async function assertIntegrationAccess(req: express.Request, requiredCredits: number): Promise<{ id: string; name: string; partner?: string } | undefined> {
   const token = bearerToken(req);
   if (token) {
     const record = await findActiveIntegrationKeyByHash(hashSecret(token));
     if (record) {
-      await touchIntegrationKey(record.id);
-      return { id: record.id, name: record.name, partner: record.partner };
+      const charged = await consumeIntegrationCredits(record.id, requiredCredits);
+      return { id: charged.id, name: charged.name, partner: charged.partner };
     }
   }
 

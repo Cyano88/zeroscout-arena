@@ -1,4 +1,4 @@
-import type { AiHealthResponse, CampaignPreset, CapsuleIndexRecord, ClaimStartResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput, PublicConfig, VideoReview } from "../../shared/types";
+import type { AiHealthResponse, CampaignPreset, CapsuleIndexRecord, ClaimStartResponse, IntegrationKeyRecord, IntegrationTopUpRecord, MatchupReport, ProjectCapsule, ProjectCapsuleInput, PublicConfig, VideoReview } from "../../shared/types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -101,7 +101,15 @@ export const api = {
   },
   matchups: () => request<MatchupReport[]>("/api/matchups"),
   createMatchup: (capsuleAId: string, capsuleBId: string) =>
-    request<MatchupReport>("/api/matchups", { method: "POST", body: JSON.stringify({ capsuleAId, capsuleBId }) })
+    request<MatchupReport>("/api/matchups", { method: "POST", body: JSON.stringify({ capsuleAId, capsuleBId }) }),
+  integrationPricing: () =>
+    request<{ costs: { capsule: number; videoScore: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string }>("/api/integrations/pricing"),
+  dashboardKeys: (wallet: string) =>
+    request<Omit<IntegrationKeyRecord, "keyHash">[]>(`/api/dashboard/keys?wallet=${encodeURIComponent(wallet)}`),
+  createDashboardKey: (input: { wallet: string; name: string; partner: string }) =>
+    request<Omit<IntegrationKeyRecord, "keyHash"> & { key: string }>("/api/dashboard/keys", { method: "POST", body: JSON.stringify(input) }),
+  verifyTopUp: (input: { wallet: string; txHash: string }) =>
+    request<IntegrationTopUpRecord & { keys: Omit<IntegrationKeyRecord, "keyHash">[] }>("/api/dashboard/topups/verify", { method: "POST", body: JSON.stringify(input) })
 };
 
 function proofQuery(root?: string | null, tx?: string | null): string {

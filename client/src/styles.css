@@ -1262,6 +1262,166 @@ input:focus, textarea:focus, select:focus {
 .status-tag.ok { color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, var(--line)); }
 .status-tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
 
+/* === API Dashboard === */
+.dashboard-page { max-width: 1040px; }
+.compact-heading { max-width: 720px; }
+.dashboard-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px;
+  margin-bottom: 14px;
+}
+.dashboard-hero h2 {
+  margin: 12px 0 6px;
+  font-size: 28px;
+  letter-spacing: 0;
+}
+.dashboard-hero p,
+.muted-copy {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.metric-tile {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 16px;
+}
+.metric-tile span,
+.secret-box span,
+.treasury-box span,
+.key-row span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+.metric-tile strong {
+  display: block;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 22px;
+  color: var(--text);
+}
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.dashboard-panel,
+.key-table,
+.env-box {
+  padding: 18px;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.dashboard-panel label {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.dashboard-panel input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  padding: 12px;
+  font: inherit;
+}
+.secret-box,
+.treasury-box {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 14px;
+}
+.secret-box { margin-top: 14px; }
+.secret-box code,
+.treasury-box code {
+  display: block;
+  margin: 8px 0 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+}
+.treasury-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 0;
+}
+.treasury-box span,
+.treasury-box code { grid-column: 1; }
+.treasury-box .icon-btn { grid-column: 2; grid-row: 1 / span 2; }
+.key-table,
+.env-box { margin-bottom: 14px; }
+.key-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 110px 90px auto;
+  gap: 14px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+}
+.key-row strong,
+.key-row b {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+}
+.pill {
+  border: 1px solid color-mix(in srgb, var(--good) 35%, var(--line));
+  border-radius: 999px;
+  color: var(--good);
+  padding: 6px 8px;
+  font-size: 10px;
+  text-align: center;
+}
+.pill.danger {
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+}
+.env-box pre {
+  white-space: pre-wrap;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.toast-line {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  max-width: 420px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 12px 14px;
+  font-size: 12px;
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+
 /* === Responsive === */
 @media (max-width: 980px) {
   .checkout-grid { grid-template-columns: 1fr; }
@@ -1280,6 +1440,7 @@ input:focus, textarea:focus, select:focus {
   .directory-score { place-items: center; }
   .directory-cta { align-items: flex-start; flex-direction: column; }
   .update-panel { align-items: flex-start; flex-direction: column; }
+  .dashboard-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {
@@ -1293,4 +1454,7 @@ input:focus, textarea:focus, select:focus {
   .campaign-row { grid-template-columns: 1fr auto; }
   .campaign-row .k { grid-column: 1 / -1; }
   .rows-head, .row { padding: 12px 14px; }
+  .dashboard-hero { align-items: stretch; flex-direction: column; }
+  .dashboard-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .key-row { grid-template-columns: 1fr; }
 }
