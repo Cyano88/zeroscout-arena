@@ -100,7 +100,32 @@ GET /api/campaigns
 GET /api/campaigns/:id
 GET /api/campaigns/:id/capsules
 POST /api/integrations/capsules
+POST /api/integrations/video-score
 ```
+
+Server-to-server integrations should use a named partner key:
+
+```http
+Authorization: Bearer zs_live_partner_key
+```
+
+Operators can issue keys with the admin API. Store the returned key immediately; ZeroScout stores only a hash and will not show the full key again.
+
+```bash
+curl -X POST https://zeroscout-arena-production.up.railway.app/api/admin/integration-keys \
+  -H "Authorization: Bearer $ZEROSCOUT_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"grail-production","partner":"Grail"}'
+```
+
+List and revoke keys:
+
+```txt
+GET  /api/admin/integration-keys
+POST /api/admin/integration-keys/:id/revoke
+```
+
+Hosted links and iframe widgets do not need secrets. API keys are only for backend integrations that create passports or request video scoring programmatically.
 
 ## Campaign Templates
 

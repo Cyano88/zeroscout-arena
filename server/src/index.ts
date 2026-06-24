@@ -3,9 +3,10 @@ import cors from "cors";
 import multer from "multer";
 import { nanoid } from "nanoid";
 import path from "node:path";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { clearPendingClaim, getCapsule, getPendingClaim, listCapsulesByProjectKey, listMatchups, listPublicCapsules, saveCapsule, saveMatchup, savePendingClaim } from "./repository.js";
+import { clearPendingClaim, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, listCapsulesByProjectKey, listIntegrationKeys, listMatchups, listPublicCapsules, revokeIntegrationKey, saveCapsule, saveIntegrationKey, saveMatchup, savePendingClaim, touchIntegrationKey } from "./repository.js";
 import { checkAiHealth, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
 import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
@@ -378,7 +379,7 @@ app.post("/api/capsules/:id/video-upload-review", upload.single("video"), async 
 
 app.post("/api/integrations/video-score", upload.single("video"), async (req, res, next) => {
   try {
-    assertIntegrationAccess(req);
+    const integration = await assertIntegrationAccess(req);
     if (!req.file) {
       res.status(400).json({ error: "Upload an MP4, MOV, or WebM video under 100 MB." });
       return;
@@ -397,6 +398,8 @@ app.post("/api/integrations/video-score", upload.single("video"), async (req, re
       id,
       artifactType: "zeroscout.platform-video-score",
       artifactVersion: "1.0.0",
+      integrationId: integration?.id,
+      integrationName: integration?.name,
       platform,
       program,
       projectName,
@@ -433,6 +436,7 @@ app.post("/api/integrations/video-score", upload.single("video"), async (req, re
       },
       network: reviewProof.network,
       storageMode: reviewProof.storageMode,
+      integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined,
       createdAt: now
     });
   } catch (error) {
@@ -442,6 +446,7 @@ app.post("/api/integrations/video-score", upload.single("video"), async (req, re
 
 app.post("/api/integrations/capsules", async (req, res, next) => {
   try {
+    await assertIntegrationAccess(req);
     const capsule = await createProjectCapsule(capsuleInputSchema.parse({ ...req.body, source: "api" }));
     res.status(201).json({
       id: capsule.id,
@@ -452,6 +457,59 @@ app.post("/api/integrations/capsules", async (req, res, next) => {
       storageTxHash: capsule.storageTxHash,
       readinessSignal: capsule.scores.total
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/admin/integration-keys", async (req, res, next) => {
+  try {
+    assertAdminAccess(req);
+    res.json(await listIntegrationKeys());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/integration-keys", async (req, res, next) => {
+  try {
+    assertAdminAccess(req);
+    const name = cleanBodyField(req.body?.name, "").slice(0, 80);
+    const partner = cleanBodyField(req.body?.partner, "").slice(0, 80) || undefined;
+    if (!name) {
+      res.status(400).json({ error: "Key name is required." });
+      return;
+    }
+
+    const id = nanoid(8);
+    const secret = randomBytes(24).toString("base64url");
+    const key = `zs_live_${id}_${secret}`;
+    const record = {
+      id,
+      name,
+      partner,
+      keyHash: hashSecret(key),
+      keyPreview: `${key.slice(0, 16)}...${key.slice(-4)}`,
+      createdAt: new Date().toISOString(),
+      requestCount: 0
+    };
+    await saveIntegrationKey(record);
+    const { keyHash: _keyHash, ...publicRecord } = record;
+    res.status(201).json({ ...publicRecord, key });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/integration-keys/:id/revoke", async (req, res, next) => {
+  try {
+    assertAdminAccess(req);
+    const record = await revokeIntegrationKey(req.params.id);
+    if (!record) {
+      res.status(404).json({ error: "Integration key not found." });
+      return;
+    }
+    res.json(record);
   } catch (error) {
     next(error);
   }
@@ -660,12 +718,53 @@ function cleanBodyField(value: unknown, fallback: string): string {
   return text ? text.slice(0, 500) : fallback;
 }
 
-function assertIntegrationAccess(req: express.Request): void {
-  if (!config.integrationSecret) return;
-  const expected = `Bearer ${config.integrationSecret}`;
-  if (req.get("authorization") !== expected) {
+function hashSecret(secret: string): string {
+  return createHash("sha256").update(secret).digest("hex");
+}
+
+function safeEqual(left: string, right: string): boolean {
+  const leftBytes = Buffer.from(left);
+  const rightBytes = Buffer.from(right);
+  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
+}
+
+function bearerToken(req: express.Request): string {
+  const header = req.get("authorization") ?? "";
+  return header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
+}
+
+function assertAdminAccess(req: express.Request): void {
+  if (!config.adminToken) {
+    throw new Error("Admin API is not configured. Set ZEROSCOUT_ADMIN_TOKEN.");
+  }
+  if (!safeEqual(bearerToken(req), config.adminToken)) {
+    throw new Error("Unauthorized admin request.");
+  }
+}
+
+async function assertIntegrationAccess(req: express.Request): Promise<{ id: string; name: string; partner?: string } | undefined> {
+  const token = bearerToken(req);
+  if (token) {
+    const record = await findActiveIntegrationKeyByHash(hashSecret(token));
+    if (record) {
+      await touchIntegrationKey(record.id);
+      return { id: record.id, name: record.name, partner: record.partner };
+    }
+  }
+
+  if (config.integrationSecret) {
+    if (safeEqual(token, config.integrationSecret)) {
+      return { id: "legacy-env", name: "Legacy env secret" };
+    }
     throw new Error("Unauthorized integration request.");
   }
+
+  const configuredKeys = await listIntegrationKeys();
+  if (configuredKeys.length > 0) {
+    throw new Error("Unauthorized integration request.");
+  }
+
+  return undefined;
 }
 
 app.get("/api/matchups", async (_req, res, next) => {
@@ -735,7 +834,11 @@ app.get("*", (req, res, next) => {
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error);
   const message = error instanceof Error ? error.message : "Unexpected server error";
-  const status = message.includes("0G storage is not configured") ? 503 : 400;
+  const status = message.includes("Unauthorized")
+    ? 401
+    : message.includes("not configured")
+      ? 503
+      : 400;
   res.status(status).json({ error: message });
 });
 

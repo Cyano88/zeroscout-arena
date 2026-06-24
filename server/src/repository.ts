@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
-import type { CapsuleIndexRecord, ClaimStartResponse, MatchupReport, ProjectCapsule } from "../../shared/types.js";
+import type { CapsuleIndexRecord, ClaimStartResponse, IntegrationKeyRecord, MatchupReport, ProjectCapsule } from "../../shared/types.js";
 import { findCampaignPreset } from "../../shared/campaigns.js";
 import { projectKeyFor } from "./services/project-key.js";
 
@@ -10,6 +10,7 @@ interface StoreFile {
   capsuleBodies: Record<string, ProjectCapsule>;
   matchups: MatchupReport[];
   pendingClaims?: Record<string, PendingClaim>;
+  integrationKeys?: IntegrationKeyRecord[];
 }
 
 interface PendingClaim extends ClaimStartResponse {
@@ -23,7 +24,8 @@ const emptyStore: StoreFile = {
   capsules: [],
   capsuleBodies: {},
   matchups: [],
-  pendingClaims: {}
+  pendingClaims: {},
+  integrationKeys: []
 };
 
 async function ensureStore(): Promise<void> {
@@ -145,6 +147,44 @@ export async function clearPendingClaim(capsuleId: string): Promise<void> {
   if (!store.pendingClaims) return;
   delete store.pendingClaims[capsuleId];
   await writeStore(store);
+}
+
+export async function listIntegrationKeys(): Promise<Omit<IntegrationKeyRecord, "keyHash">[]> {
+  const store = await readStore();
+  return (store.integrationKeys ?? [])
+    .map(({ keyHash: _keyHash, ...record }) => record)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function saveIntegrationKey(record: IntegrationKeyRecord): Promise<void> {
+  const store = await readStore();
+  store.integrationKeys = [record, ...(store.integrationKeys ?? []).filter((item) => item.id !== record.id)];
+  await writeStore(store);
+}
+
+export async function findActiveIntegrationKeyByHash(keyHash: string): Promise<IntegrationKeyRecord | undefined> {
+  const store = await readStore();
+  return (store.integrationKeys ?? []).find((item) => item.keyHash === keyHash && !item.revokedAt);
+}
+
+export async function touchIntegrationKey(id: string): Promise<void> {
+  const store = await readStore();
+  const keys = store.integrationKeys ?? [];
+  const target = keys.find((item) => item.id === id);
+  if (!target) return;
+  target.lastUsedAt = new Date().toISOString();
+  target.requestCount = (target.requestCount ?? 0) + 1;
+  await writeStore(store);
+}
+
+export async function revokeIntegrationKey(id: string): Promise<Omit<IntegrationKeyRecord, "keyHash"> | undefined> {
+  const store = await readStore();
+  const target = (store.integrationKeys ?? []).find((item) => item.id === id);
+  if (!target) return undefined;
+  target.revokedAt = target.revokedAt ?? new Date().toISOString();
+  await writeStore(store);
+  const { keyHash: _keyHash, ...publicRecord } = target;
+  return publicRecord;
 }
 
 function withCampaignDefaults(record: CapsuleIndexRecord): CapsuleIndexRecord {

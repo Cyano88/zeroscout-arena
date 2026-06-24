@@ -234,3 +234,15 @@ export interface AiHealthResponse {
   trustMode?: string;
   error?: string;
 }
+
+export interface IntegrationKeyRecord {
+  id: string;
+  name: string;
+  partner?: string;
+  keyHash: string;
+  keyPreview: string;
+  createdAt: string;
+  lastUsedAt?: string;
+  requestCount: number;
+  revokedAt?: string;
+}

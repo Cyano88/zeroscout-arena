@@ -35,6 +35,7 @@ export const config = {
   computeVideoModel: process.env.ZG_COMPUTE_VIDEO_MODEL ?? "qwen3.7-plus",
   computeTrustMode: process.env.ZG_COMPUTE_TRUST_MODE ?? "verified",
   integrationSecret: process.env.ZEROSCOUT_INTEGRATION_SECRET,
+  adminToken: process.env.ZEROSCOUT_ADMIN_TOKEN,
   openAiApiKey: process.env.OPENAI_API_KEY,
   openAiBaseUrl: process.env.OPENAI_BASE_URL,
   openAiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
