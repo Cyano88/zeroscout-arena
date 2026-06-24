@@ -305,19 +305,41 @@ function deterministicScout(input: ProjectCapsuleInput, previous?: ProjectCapsul
 }
 
 function normalizeScores(raw: Partial<ProjectCapsule["scores"]> | undefined, input: ProjectCapsuleInput): ProjectCapsule["scores"] {
-  const og = clamp(raw?.ogNativeDepth ?? scoreText(input.ogUsageClaims, 35), 0, 35);
-  const ai = clamp(raw?.aiNativeUsefulness ?? Math.min(25, Math.round(scoreText(input.description + input.pitchNotes, 35) * 0.72)), 0, 25);
-  const demo = clamp(raw?.demoClarity ?? (input.demoUrl ? 11 : 5), 0, 15);
-  const polish = clamp(raw?.productPolish ?? (input.tagline.length > 12 ? 11 : 8), 0, 15);
-  const community = clamp(raw?.communityShareability ?? (input.pitchNotes ? 8 : 6), 0, 10);
+  const baseline = baselineScores(input);
+  const og = scoreWithFloor(raw?.ogNativeDepth, baseline.ogNativeDepth, 35);
+  const ai = scoreWithFloor(raw?.aiNativeUsefulness, baseline.aiNativeUsefulness, 25);
+  const demo = scoreWithFloor(raw?.demoClarity, baseline.demoClarity, 15);
+  const polish = scoreWithFloor(raw?.productPolish, baseline.productPolish, 15);
+  const community = scoreWithFloor(raw?.communityShareability, baseline.communityShareability, 10);
   return {
     ogNativeDepth: og,
     aiNativeUsefulness: ai,
     demoClarity: demo,
     productPolish: polish,
     communityShareability: community,
-    total: clamp(raw?.total ?? og + ai + demo + polish + community, 0, 100)
+    total: clamp(og + ai + demo + polish + community, 0, 100)
   };
+}
+
+function baselineScores(input: ProjectCapsuleInput): ProjectCapsule["scores"] {
+  const combined = `${input.description} ${input.ogUsageClaims} ${input.pitchNotes ?? ""}`.toLowerCase();
+  const hasStorage = combined.includes("storage");
+  const hasCompute = combined.includes("compute");
+  const hasChain = combined.includes("chain") || combined.includes("registry") || combined.includes("contract");
+  const hasProof = combined.includes("proof") || combined.includes("verify") || combined.includes("hash") || combined.includes("root");
+  const hasUsers = combined.includes("builder") || combined.includes("cohort") || combined.includes("hackathon") || combined.includes("grant") || combined.includes("university");
+  const ogNativeDepth = clamp(14 + Number(hasStorage) * 6 + Number(hasCompute) * 5 + Number(hasChain) * 5 + Number(hasProof) * 3, 0, 35);
+  const aiNativeUsefulness = clamp(12 + Number(hasCompute) * 4 + Number(combined.includes("ai")) * 3 + Number(hasUsers) * 3, 0, 25);
+  const demoClarity = clamp(input.demoUrl ? 11 : 5, 0, 15);
+  const productPolish = clamp(input.stage === "live" ? 12 : input.stage === "MVP" ? 11 : 9, 0, 15);
+  const communityShareability = clamp(input.pitchNotes && input.pitchNotes.length > 40 ? 8 : 6, 0, 10);
+  const total = ogNativeDepth + aiNativeUsefulness + demoClarity + productPolish + communityShareability;
+  return { ogNativeDepth, aiNativeUsefulness, demoClarity, productPolish, communityShareability, total };
+}
+
+function scoreWithFloor(raw: number | undefined, floor: number, max: number): number {
+  if (typeof raw !== "number" || Number.isNaN(raw)) return floor;
+  return clamp(Math.max(raw, floor), 0, max);
 }
 
 function scoreText(value: string | undefined, max: number): number {
