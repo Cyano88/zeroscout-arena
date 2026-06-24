@@ -82,6 +82,10 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
   const fallback = flow.kind === "fallback";
   const errored = flow.kind === "error";
   const hasPreviousVersion = previousOptions.length > 0;
+  const previousCapsule = useMemo(
+    () => capsules.find((item) => item.id === form.previousCapsuleId),
+    [capsules, form.previousCapsuleId]
+  );
 
   const steps = railSteps({ ready, submitting, stored, fallback, errored });
   const logoState: ProofState = stored ? "complete" : submitting ? "active" : errored || fallback ? "error" : "pending";
@@ -162,9 +166,16 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
       {(selectedProgram || compact) && (
       <>
       {!compact && !forcedCampaignId && (
-        <button className="btn btn-ghost btn-sm" type="button" onClick={goBackToPrograms} style={{ display: "inline-flex", marginBottom: 18 }}>
-          <ArrowLeft size={12} /> Back
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={goBackToPrograms}>
+            <ArrowLeft size={12} /> Back
+          </button>
+          {previousCapsule && (
+            <button className="btn btn-ghost btn-sm" type="button" onClick={() => navigate(proofPathFromRecord(previousCapsule))}>
+              Previous proof <ExternalLink size={12} />
+            </button>
+          )}
+        </div>
       )}
       <div className={compact ? "checkout-grid compact" : "checkout-grid"}>
         <section className="surface surface-pad">
@@ -312,6 +323,12 @@ function Confirmation({ capsule, onOpen }: { capsule: ProjectCapsule; onOpen: ()
 }
 
 function proofPath(capsule: ProjectCapsule): string {
+  const params = new URLSearchParams({ root: capsule.storageRoot });
+  if (capsule.storageTxHash) params.set("tx", capsule.storageTxHash);
+  return `/projects/${capsule.id}?${params.toString()}`;
+}
+
+function proofPathFromRecord(capsule: CapsuleIndexRecord): string {
   const params = new URLSearchParams({ root: capsule.storageRoot });
   if (capsule.storageTxHash) params.set("tx", capsule.storageTxHash);
   return `/projects/${capsule.id}?${params.toString()}`;
