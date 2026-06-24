@@ -50,10 +50,12 @@ await contract.waitForDeployment();
 
 const address = await contract.getAddress();
 const tx = contract.deploymentTransaction();
+const receipt = tx ? await provider.getTransactionReceipt(tx.hash) : null;
 
 console.log("ZeroScoutRegistry deployed");
 console.log("address:", address);
 console.log("tx:", tx?.hash ?? "");
+console.log("block:", receipt?.blockNumber ?? "");
 console.log("env:");
 console.log(`ZG_REGISTRY_CONTRACT=${address}`);
-console.log("ZG_REGISTRY_FROM_BLOCK=<deployment block>");
+console.log(`ZG_REGISTRY_FROM_BLOCK=${receipt?.blockNumber ?? ""}`);
