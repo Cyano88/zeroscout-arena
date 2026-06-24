@@ -26,7 +26,7 @@ interface MatchupResult {
   nextMoveForB: string;
 }
 
-type VideoReviewResult = Pick<VideoReview, "aiProvider" | "summary" | "proofFlowObserved" | "demoClarityNotes" | "strongestMoments" | "missingProofMoments" | "recommendedCuts">;
+type VideoReviewResult = Pick<VideoReview, "reviewMode" | "aiProvider" | "summary" | "proofFlowObserved" | "demoClarityNotes" | "strongestMoments" | "missingProofMoments" | "recommendedCuts">;
 
 export async function generateScout(input: ProjectCapsuleInput, previous?: ProjectCapsule): Promise<ScoutResult> {
   const prompt = scoutPrompt(input, previous);
@@ -171,9 +171,18 @@ Use "video review signal", not official judging language. If the video cannot be
     }
   ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
 
-  const content = await completeJson(ai, messages);
-  const parsed = parseJsonObject(content ?? "{}");
+  let parsed: Record<string, unknown>;
+  try {
+    const content = await completeJson(ai, messages);
+    parsed = parseJsonObject(content ?? "{}");
+  } catch (error) {
+    const reason = sanitizeAiError(error);
+    if (!shouldUseWalkthroughFallback(reason)) throw error;
+    return generateWalkthroughLinkReview(capsule, ai, reason);
+  }
+
   return {
+    reviewMode: "video",
     aiProvider: ai.label,
     summary: text(parsed.summary, "The video review could not extract a detailed summary."),
     proofFlowObserved: text(parsed.proofFlowObserved, "The review did not identify a clear proof flow in the video."),
@@ -195,6 +204,123 @@ async function resolveVideoInputUrl(videoUrl: string): Promise<string> {
   const signedUrl = match?.[1]?.replace(/\\u0026/g, "&").replace(/\\\//g, "/");
   if (!signedUrl) throw new Error("Could not resolve a Loom video stream for 0G review.");
   return signedUrl;
+}
+
+async function generateWalkthroughLinkReview(capsule: ProjectCapsule, ai: { client: OpenAI; model: string; label: string }, reason: string): Promise<VideoReviewResult> {
+  const context = await buildWalkthroughContext(capsule.videoDemoUrl ?? "");
+  const prompt = `Create a ZeroScout walkthrough review for this Project Passport.
+
+The submitted video provider link could not be passed as raw multimodal video because the provider URL did not expose the required file metadata to the 0G video endpoint.
+Do not claim frame-level video analysis. Review only the Project Passport context, submitted walkthrough link, and any provider metadata/transcript below.
+
+Project:
+${JSON.stringify(summaryForAi(capsule))}
+
+Walkthrough context:
+${JSON.stringify(context)}
+
+Provider limitation:
+${reason}
+
+Return JSON with keys:
+summary, proofFlowObserved, demoClarityNotes array, strongestMoments array, missingProofMoments array, recommendedCuts array.
+
+Use "walkthrough review signal", not official judging language.`;
+
+  const content = await completeJson(ai, [
+    { role: "system", content: "You are ZeroScout's walkthrough review agent. Return strict JSON only. Be explicit when review is based on link metadata or transcript rather than raw video frames." },
+    { role: "user", content: prompt }
+  ]);
+  const parsed = parseJsonObject(content ?? "{}");
+  return {
+    reviewMode: "walkthrough-link",
+    aiProvider: `${ai.label} walkthrough review`,
+    summary: text(parsed.summary, "0G Compute reviewed the submitted walkthrough context, but raw video ingestion was blocked by the provider URL."),
+    proofFlowObserved: text(parsed.proofFlowObserved, "The review is based on the Project Passport and walkthrough link context, not frame-level video analysis."),
+    demoClarityNotes: list(parsed.demoClarityNotes, ["Use a direct video file with Content-Length for frame-level 0G video review, or keep the Loom/YouTube link as a walkthrough reference."]),
+    strongestMoments: list(parsed.strongestMoments, ["The submitted walkthrough link is attached to the Project Passport."]),
+    missingProofMoments: list(parsed.missingProofMoments, ["Make storage root, registry transaction, and Compute provider visible in the walkthrough."]),
+    recommendedCuts: list(parsed.recommendedCuts, ["Lead with the proof outcome, then show the create/update flow, then show verification."])
+  };
+}
+
+async function buildWalkthroughContext(videoUrl: string): Promise<Record<string, unknown>> {
+  if (!videoUrl) return {};
+  const url = new URL(videoUrl);
+  const host = url.hostname.replace(/^www\./, "").toLowerCase();
+  if (host === "loom.com") {
+    return readLoomContext(videoUrl);
+  }
+  if (host === "youtube.com" || host === "youtu.be") {
+    return readYouTubeContext(videoUrl);
+  }
+  return { url: videoUrl, provider: host };
+}
+
+async function readLoomContext(videoUrl: string): Promise<Record<string, unknown>> {
+  try {
+    const response = await fetch(videoUrl, { headers: { "User-Agent": "ZeroScout-Arena" } });
+    if (!response.ok) return { url: videoUrl, provider: "loom", fetchStatus: response.status };
+    const html = await response.text();
+    return {
+      url: videoUrl,
+      provider: "loom",
+      title: readMeta(html, "og:title") ?? readTitle(html),
+      description: readMeta(html, "og:description"),
+      transcriptSignals: uniqueMatches(html, /"text":"([^"]{8,280})"/g).slice(0, 24)
+    };
+  } catch (error) {
+    return { url: videoUrl, provider: "loom", error: sanitizeAiError(error) };
+  }
+}
+
+async function readYouTubeContext(videoUrl: string): Promise<Record<string, unknown>> {
+  try {
+    const response = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`, { headers: { "User-Agent": "ZeroScout-Arena" } });
+    if (!response.ok) return { url: videoUrl, provider: "youtube", fetchStatus: response.status };
+    const data = await response.json() as Record<string, unknown>;
+    return {
+      url: videoUrl,
+      provider: "youtube",
+      title: data.title,
+      authorName: data.author_name
+    };
+  } catch (error) {
+    return { url: videoUrl, provider: "youtube", error: sanitizeAiError(error) };
+  }
+}
+
+function shouldUseWalkthroughFallback(reason: string): boolean {
+  return /Missing Content-Length|Invalid video file|multimodal url|video/i.test(reason);
+}
+
+function readMeta(html: string, property: string): string | undefined {
+  const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = html.match(new RegExp(`<meta[^>]+property=["']${escaped}["'][^>]+content=["']([^"']+)["']`, "i"))
+    ?? html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${escaped}["']`, "i"));
+  return match?.[1] ? decodeHtml(match[1]) : undefined;
+}
+
+function readTitle(html: string): string | undefined {
+  const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  return match?.[1] ? decodeHtml(match[1]) : undefined;
+}
+
+function uniqueMatches(html: string, pattern: RegExp): string[] {
+  const values = [...html.matchAll(pattern)]
+    .map((match) => decodeHtml(match[1] ?? "").replace(/\\"/g, "\"").trim())
+    .filter((value) => value.length > 0 && !value.includes("__typename"));
+  return [...new Set(values)];
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/\\u0026/g, "&")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#x27;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
 function getAiClient(): { client: OpenAI; model: string; label: string } | undefined {

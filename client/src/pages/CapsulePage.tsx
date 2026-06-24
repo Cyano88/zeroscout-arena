@@ -232,12 +232,13 @@ function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: Projec
 
   return (
     <section className="surface section">
-      <h2>Video review</h2>
-      {capsule.videoDemoUrl && <p>ZeroScout can review the walkthrough with a video-capable 0G Compute model and store the review as a separate 0G artifact.</p>}
+      <h2>Walkthrough review</h2>
+      {capsule.videoDemoUrl && <p>ZeroScout sends supported walkthrough links to 0G Compute. If YouTube or Loom blocks raw video metadata, the review is clearly labeled as a link/transcript review.</p>}
       {review ? (
         <>
           <p>{review.summary}</p>
           <div className="record-rows" style={{ marginTop: 14 }}>
+            <Row k="Review mode" value={review.reviewMode === "video" ? "Video analysis" : "Walkthrough link review"} disableCopy />
             <Row k="AI provider" value={review.aiProvider} disableCopy />
             <Row k="Review root" value={review.storageRoot} />
             <Row k="Review tx" value={review.storageTxHash ?? "-"} disabled={!review.storageTxHash} />
@@ -252,7 +253,7 @@ function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: Projec
       ) : (
         <button className="btn btn-primary btn-sm" type="button" onClick={runReview} disabled={state === "reviewing"} style={{ width: "auto", marginTop: 14 }}>
           {state === "reviewing" ? <Loader2 className="spin" size={13} /> : <PlayCircle size={13} />}
-          Review video with 0G
+          Review walkthrough with 0G
         </button>
       )}
       {error && <div className="error-banner" style={{ marginTop: 14 }}>{error}</div>}
