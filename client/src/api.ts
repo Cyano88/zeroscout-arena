@@ -108,6 +108,8 @@ export const api = {
     request<{ keys: Omit<IntegrationKeyRecord, "keyHash">[]; balance: { creditedOg: string; creditsPurchased: number; topUpCount: number } }>(`/api/dashboard/keys?wallet=${encodeURIComponent(wallet)}`),
   createDashboardKey: (input: { wallet: string; name: string; partner: string }) =>
     request<Omit<IntegrationKeyRecord, "keyHash"> & { key: string }>("/api/dashboard/keys", { method: "POST", body: JSON.stringify(input) }),
+  importDashboardKey: (input: { wallet: string; key: string; name: string; partner: string; message: string; signature: string }) =>
+    request<Omit<IntegrationKeyRecord, "keyHash">>("/api/dashboard/keys/import", { method: "POST", body: JSON.stringify(input) }),
   revokeDashboardKey: (id: string, input: { wallet: string; message: string; signature: string }) =>
     request<Omit<IntegrationKeyRecord, "keyHash">>(`/api/dashboard/keys/${id}/revoke`, { method: "POST", body: JSON.stringify(input) }),
   verifyTopUp: (input: { wallet: string; txHash: string }) =>

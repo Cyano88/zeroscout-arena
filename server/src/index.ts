@@ -7,7 +7,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ethers } from "ethers";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { addCreditsToWalletKeys, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, revokeIntegrationKey, revokeIntegrationKeyForWallet, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim } from "./repository.js";
+import { addCreditsToWalletKeys, claimIntegrationKeyByHash, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, revokeIntegrationKey, revokeIntegrationKeyForWallet, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim } from "./repository.js";
 import { checkAiHealth, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
 import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
@@ -513,6 +513,39 @@ app.post("/api/dashboard/keys", async (req, res, next) => {
     await saveIntegrationKey(record);
     const { keyHash: _keyHash, ...publicRecord } = record;
     res.status(201).json({ ...publicRecord, key });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/dashboard/keys/import", async (req, res, next) => {
+  try {
+    const wallet = walletParam(req.body?.wallet);
+    const key = cleanBodyField(req.body?.key, "").slice(0, 180);
+    const name = cleanBodyField(req.body?.name, "").slice(0, 80);
+    const partner = cleanBodyField(req.body?.partner, "").slice(0, 80);
+    const message = cleanBodyField(req.body?.message, "").slice(0, 300);
+    const signature = cleanBodyField(req.body?.signature, "").slice(0, 300);
+    const expectedMessage = dashboardActionMessage("import-key", wallet, "existing-key");
+    if (!key.startsWith("zs_live_")) {
+      res.status(400).json({ error: "Enter a valid ZeroScout API key." });
+      return;
+    }
+    if (message !== expectedMessage || !signature) {
+      res.status(401).json({ error: "Wallet signature is required to attach this key." });
+      return;
+    }
+    const signer = ethers.verifyMessage(message, signature);
+    if (signer.toLowerCase() !== wallet.toLowerCase()) {
+      res.status(401).json({ error: "Wallet signature does not match the connected wallet." });
+      return;
+    }
+    const record = await claimIntegrationKeyByHash(hashSecret(key), wallet, { name, partner });
+    if (!record) {
+      res.status(404).json({ error: "API key was not found. Create a new key and update your platform env." });
+      return;
+    }
+    res.json(record);
   } catch (error) {
     next(error);
   }

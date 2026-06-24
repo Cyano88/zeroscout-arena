@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { parseEther, toBeHex } from "ethers";
-import { CheckCircle2, Copy, KeyRound, Loader2, LogOut, RefreshCw, Trash2, Wallet, Zap } from "lucide-react";
+import { formatEther, parseEther, toBeHex } from "ethers";
+import { CheckCircle2, Copy, KeyRound, Loader2, LogOut, RefreshCw, Search, Trash2, Wallet, Zap } from "lucide-react";
 import { api } from "../api";
 import type { IntegrationKeyRecord } from "../../../shared/types";
 
@@ -16,6 +16,7 @@ export function DashboardPage() {
   const [keyName, setKeyName] = useState("production");
   const [partner, setPartner] = useState("My platform");
   const [newKey, setNewKey] = useState("");
+  const [existingKey, setExistingKey] = useState("");
   const [rememberedKeys, setRememberedKeys] = useState<Record<string, string>>({});
   const [amountOg, setAmountOg] = useState("1");
   const [txHash, setTxHash] = useState("");
@@ -23,6 +24,7 @@ export function DashboardPage() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState("");
   const [lastSyncedAt, setLastSyncedAt] = useState("");
+  const [walletOgBalance, setWalletOgBalance] = useState("");
 
   const totalCredits = useMemo(() => keys.reduce((sum, key) => sum + (key.creditBalance ?? 0), 0), [keys]);
   const totalUsed = useMemo(() => keys.reduce((sum, key) => sum + (key.creditsUsed ?? 0), 0), [keys]);
@@ -35,6 +37,7 @@ export function DashboardPage() {
   useEffect(() => {
     if (!wallet) return;
     refreshKeys(wallet, { silent: true });
+    refreshWalletBalance(wallet);
     setRememberedKeys(loadRememberedKeys(wallet));
     setPendingTx(localStorage.getItem(pendingTxKey(wallet)) ?? "");
   }, [wallet]);
@@ -43,6 +46,7 @@ export function DashboardPage() {
     if (!wallet) return;
     const timer = window.setInterval(() => {
       refreshKeys(wallet, { silent: true }).catch(() => undefined);
+      refreshWalletBalance(wallet).catch(() => undefined);
     }, 12000);
     return () => window.clearInterval(timer);
   }, [wallet]);
@@ -54,6 +58,14 @@ export function DashboardPage() {
     setBalance(result.balance);
     setLastSyncedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
     if (!options.silent) setStatus("Dashboard refreshed.");
+  }
+
+  async function refreshWalletBalance(nextWallet = wallet) {
+    const ethereum = walletProvider();
+    if (!ethereum || !nextWallet) return;
+    const raw = String(await ethereum.request({ method: "eth_getBalance", params: [nextWallet, "latest"] }));
+    const formatted = Number(formatEther(raw));
+    setWalletOgBalance(formatted >= 1 ? formatted.toFixed(4).replace(/\.?0+$/, "") : formatted.toFixed(6).replace(/\.?0+$/, ""));
   }
 
   async function connectWallet() {
@@ -82,6 +94,7 @@ export function DashboardPage() {
     setNewKey("");
     setRememberedKeys({});
     setLastSyncedAt("");
+    setWalletOgBalance("");
     setStatus("Wallet disconnected.");
   }
 
@@ -98,6 +111,38 @@ export function DashboardPage() {
       setStatus("Key created and saved on this device. Copy it into your backend env.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not create key.");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function importExistingKey() {
+    if (!wallet) return connectWallet();
+    const key = existingKey.trim();
+    if (!key) {
+      setStatus("Paste the full API key you already added to your platform.");
+      return;
+    }
+    const ethereum = walletProvider();
+    if (!ethereum) {
+      setStatus("Open this page in your wallet browser to attach an existing key.");
+      return;
+    }
+    setLoading("import-key");
+    try {
+      const message = dashboardActionMessage("import-key", wallet, "existing-key");
+      const signature = String(await ethereum.request({
+        method: "personal_sign",
+        params: [message, wallet]
+      }));
+      const record = await api.importDashboardKey({ wallet, key, name: keyName, partner, message, signature });
+      rememberKey(wallet, record.id, key);
+      setRememberedKeys((current) => ({ ...current, [record.id]: key }));
+      setExistingKey("");
+      await refreshKeys(wallet, { silent: true });
+      setStatus("Existing key attached to this wallet.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not attach existing key.");
     } finally {
       setLoading("");
     }
@@ -201,6 +246,22 @@ export function DashboardPage() {
     if (!wallet) return connectWallet();
     setLoading("refresh");
     try {
+      await Promise.all([
+        refreshKeys(wallet, { silent: true }),
+        refreshWalletBalance(wallet)
+      ]);
+      setStatus("Dashboard updated.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not refresh dashboard.");
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function findMissingTopUps() {
+    if (!wallet) return connectWallet();
+    setLoading("scan");
+    try {
       if (pendingTx) {
         setStatus("Checking your last submitted transfer...");
         const verified = await pollTopUpVerification(wallet, pendingTx, (message) => setStatus(message));
@@ -211,9 +272,11 @@ export function DashboardPage() {
         setStatus(`Credits funded: ${verified.amountOg} OG added ${verified.credits} credits.`);
         return;
       }
+      setStatus("Scanning recent 0G Chain transfers to the treasury...");
       const result = await api.syncTopUps(wallet);
       setKeys(result.keys);
       setBalance(result.balance);
+      await refreshWalletBalance(wallet);
       setLastSyncedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       if (result.credited.length > 0) {
         const credits = result.credited.reduce((sum, item) => sum + item.credits, 0);
@@ -222,7 +285,7 @@ export function DashboardPage() {
         setStatus(`Credits refreshed. No new treasury transfer found in the last ${result.scannedBlocks} blocks.`);
       }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not refresh credits.");
+      setStatus(error instanceof Error ? error.message : "Could not find a missing transfer.");
     } finally {
       setLoading("");
     }
@@ -258,7 +321,7 @@ export function DashboardPage() {
       <section className="balance-board surface">
         <div className="balance-primary">
           <div className="balance-label-row">
-            <span><i className="live-dot" /> Live credits</span>
+            <span>Live credits</span>
             <button className="btn btn-ghost btn-sm" type="button" onClick={refreshCredits} disabled={loading === "refresh"}>
               {loading === "refresh" ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}
               Sync
@@ -273,8 +336,8 @@ export function DashboardPage() {
         </div>
         <div className="balance-secondary">
           <Metric label="Credited OG" value={balance.creditedOg} />
+          <Metric label="Wallet OG" value={walletOgBalance || "-"} />
           <Metric label="Passport API" value={`${pricing?.costs.capsule ?? 5} cr`} />
-          <Metric label="Video review" value={`${pricing?.costs.videoScore ?? 20} cr`} />
         </div>
       </section>
 
@@ -305,6 +368,18 @@ export function DashboardPage() {
               <p>ZeroScout stores only a hash on the server. Recopy works here because this browser saved the key locally.</p>
             </div>
           )}
+          <details className="recovery-box">
+            <summary>Already using a key?</summary>
+            <p className="muted-copy">Paste it once to attach it to this wallet and make it visible here.</p>
+            <label>
+              Existing API key
+              <input value={existingKey} onChange={(event) => setExistingKey(event.target.value)} placeholder="zs_live_..." />
+            </label>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={importExistingKey} disabled={loading === "import-key" || !existingKey.trim()}>
+              {loading === "import-key" ? <Loader2 size={14} className="spin" /> : <KeyRound size={14} />}
+              Attach key
+            </button>
+          </details>
         </div>
 
         <div className="surface dashboard-panel">
@@ -328,8 +403,12 @@ export function DashboardPage() {
             Fund credits
           </button>
           <details className="recovery-box">
-            <summary>Recover a sent transfer</summary>
-            <p className="muted-copy">Use this only if the wallet closed or the page refreshed after payment.</p>
+            <summary>Payment not showing?</summary>
+            <p className="muted-copy">Use this only if the wallet closed, the page refreshed, or a treasury transfer did not credit automatically.</p>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={findMissingTopUps} disabled={loading === "scan"}>
+              {loading === "scan" ? <Loader2 size={14} className="spin" /> : <Search size={14} />}
+              Find missing transfer
+            </button>
             <label>
               Transaction hash
               <input value={txHash} onChange={(event) => setTxHash(event.target.value)} placeholder="0x..." />

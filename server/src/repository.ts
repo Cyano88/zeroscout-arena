@@ -195,6 +195,21 @@ export async function findActiveIntegrationKeyByHash(keyHash: string): Promise<I
   return (store.integrationKeys ?? []).find((item) => item.keyHash === keyHash && !item.revokedAt);
 }
 
+export async function claimIntegrationKeyByHash(keyHash: string, wallet: string, updates: { name?: string; partner?: string }): Promise<Omit<IntegrationKeyRecord, "keyHash"> | undefined> {
+  const ownerWallet = wallet.toLowerCase();
+  const store = await readStore();
+  const target = (store.integrationKeys ?? []).find((item) => item.keyHash === keyHash && !item.revokedAt);
+  if (!target) return undefined;
+  if (target.ownerWallet && target.ownerWallet.toLowerCase() !== ownerWallet) {
+    throw new Error("This API key is already attached to another wallet.");
+  }
+  target.ownerWallet = ownerWallet;
+  if (updates.name) target.name = updates.name;
+  if (updates.partner) target.partner = updates.partner;
+  await writeStore(store);
+  return publicIntegrationKey(target);
+}
+
 export async function touchIntegrationKey(id: string): Promise<void> {
   const store = await readStore();
   const keys = store.integrationKeys ?? [];
