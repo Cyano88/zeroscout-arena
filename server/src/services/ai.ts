@@ -135,7 +135,11 @@ Return JSON with keys summary, strongerProof, clearerDemo, strongerPublicVoteCas
 function getAiClient(): { client: OpenAI; model: string; label: string } | undefined {
   if (config.computeApiKey) {
     return {
-      client: new OpenAI({ apiKey: config.computeApiKey, baseURL: config.computeBaseUrl }),
+      client: new OpenAI({
+        apiKey: config.computeApiKey,
+        baseURL: config.computeBaseUrl,
+        defaultHeaders: computeHeaders()
+      }),
       model: config.computeModel,
       label: `0G Compute Router (${config.computeModel})`
     };
@@ -150,6 +154,11 @@ function getAiClient(): { client: OpenAI; model: string; label: string } | undef
   }
 
   return undefined;
+}
+
+function computeHeaders(): Record<string, string> | undefined {
+  if (!config.computeTrustMode || config.computeTrustMode === "default") return undefined;
+  return { "X-0G-Provider-Trust-Mode": config.computeTrustMode };
 }
 
 function sanitizeAiError(error: unknown): string {
