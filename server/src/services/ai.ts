@@ -146,6 +146,14 @@ export async function generateVideoReview(capsule: ProjectCapsule): Promise<Vide
     throw new Error("0G Compute Router is not configured for video review.");
   }
 
+  if (isProviderShareLink(capsule.videoDemoUrl)) {
+    return generateWalkthroughLinkReview(
+      capsule,
+      ai,
+      "YouTube and Loom share links are reviewed as provider links. Raw frame-level video analysis requires a direct video file URL that exposes Content-Length."
+    );
+  }
+
   const videoInputUrl = await resolveVideoInputUrl(capsule.videoDemoUrl);
   const prompt = `Review this builder demo video for a ZeroScout Project Passport.
 
@@ -292,6 +300,11 @@ async function readYouTubeContext(videoUrl: string): Promise<Record<string, unkn
 
 function shouldUseWalkthroughFallback(reason: string): boolean {
   return /Missing Content-Length|Invalid video file|multimodal url|video/i.test(reason);
+}
+
+function isProviderShareLink(videoUrl: string): boolean {
+  const host = new URL(videoUrl).hostname.replace(/^www\./, "").toLowerCase();
+  return host === "youtube.com" || host === "youtu.be" || host === "loom.com";
 }
 
 function readMeta(html: string, property: string): string | undefined {
