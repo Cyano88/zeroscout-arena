@@ -111,7 +111,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
       ? "Proof page ready"
       : hasPreviousVersion
         ? "Publish checkpoint update"
-        : "Create Passport";
+        : "Create Project Passport";
 
   function chooseProgram(id: string) {
     const campaign = findCampaignPreset(id);
@@ -256,11 +256,13 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
               </div>
             )}
 
-            <button className="btn btn-primary" disabled={submitting || stored || !ready}>
-              {submitting && <Loader2 className="spin" size={14} />}
-              {!submitting && !stored && <ArrowRight size={14} />}
-              {buttonLabel}
-            </button>
+            <div className="form-submit-row">
+              <button className="btn btn-primary submit-compact" disabled={submitting || stored || !ready}>
+                {submitting && <Loader2 className="spin" size={14} />}
+                {!submitting && !stored && <ArrowRight size={14} />}
+                {buttonLabel}
+              </button>
+            </div>
           </form>
         </section>
 
