@@ -241,7 +241,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
 
         <aside>
           <ProofRail steps={steps} footer={<ProofLogo state={logoState} caption={proofCaption(flow)} />} />
-          {stored && <Confirmation capsule={flow.capsule} onOpen={() => navigate(`/projects/${flow.capsule.id}`)} />}
+          {stored && <Confirmation capsule={flow.capsule} onOpen={() => navigate(proofPath(flow.capsule))} />}
           {fallback && <FallbackNote capsule={flow.capsule} onOpen={() => navigate(`/projects/${flow.capsule.id}`)} />}
         </aside>
       </div>
@@ -277,7 +277,7 @@ function proofCaption(flow: FlowState): { title: string; sub?: string } {
 }
 
 function Confirmation({ capsule, onOpen }: { capsule: ProjectCapsule; onOpen: () => void }) {
-  const shareUrl = `${window.location.origin}/projects/${capsule.id}`;
+  const shareUrl = `${window.location.origin}${proofPath(capsule)}`;
   return (
     <div className="confirmation" style={{ marginTop: 18 }}>
       <div>
@@ -295,6 +295,12 @@ function Confirmation({ capsule, onOpen }: { capsule: ProjectCapsule; onOpen: ()
       </div>
     </div>
   );
+}
+
+function proofPath(capsule: ProjectCapsule): string {
+  const params = new URLSearchParams({ root: capsule.storageRoot });
+  if (capsule.storageTxHash) params.set("tx", capsule.storageTxHash);
+  return `/projects/${capsule.id}?${params.toString()}`;
 }
 
 function FallbackNote({ capsule, onOpen }: { capsule: ProjectCapsule; onOpen: () => void }) {

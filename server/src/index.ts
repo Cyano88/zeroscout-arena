@@ -6,7 +6,7 @@ import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
 import { getCapsule, listMatchups, listPublicCapsules, listPublicCapsulesByCampaign, saveCapsule, saveMatchup } from "./repository.js";
 import { generateMatchup, generateScout } from "./services/ai.js";
-import { storeCanonicalArtifact } from "./services/storage.js";
+import { loadCanonicalArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import type { HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
 import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
 
@@ -76,7 +76,7 @@ app.get("/api/projects", async (_req, res, next) => {
 
 app.get("/api/capsules/:id", async (req, res, next) => {
   try {
-    const capsule = await getCapsule(req.params.id);
+    const capsule = await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx);
     if (!capsule) {
       res.status(404).json({ error: "Capsule not found" });
       return;
@@ -89,7 +89,7 @@ app.get("/api/capsules/:id", async (req, res, next) => {
 
 app.get("/api/capsules/:id.json", async (req, res, next) => {
   try {
-    const capsule = await getCapsule(req.params.id);
+    const capsule = await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx);
     if (!capsule) {
       res.status(404).json({ error: "Capsule not found" });
       return;
@@ -165,6 +165,32 @@ async function createProjectCapsule(parsed: ProjectCapsuleInput): Promise<Projec
   const proof = await storeCanonicalArtifact("capsule", id, artifactWithoutProof);
   const capsule: ProjectCapsule = { ...artifactWithoutProof, ...proof };
   await saveCapsule(capsule);
+  return capsule;
+}
+
+async function recoverCapsuleFromRoot(id: string, rootQuery: unknown, txQuery: unknown): Promise<ProjectCapsule | undefined> {
+  const root = typeof rootQuery === "string" ? rootQuery : "";
+  const tx = typeof txQuery === "string" ? txQuery : undefined;
+  if (!/^0x[a-fA-F0-9]{64}$/.test(root)) return undefined;
+
+  const downloaded = await loadCanonicalArtifact(root);
+  const artifact = downloaded.artifact as Partial<ProjectCapsule> & { id?: string; artifactType?: string };
+  if (artifact.id !== id || artifact.artifactType !== "zeroscout.project-capsule") return undefined;
+
+  const capsule: ProjectCapsule = {
+    ...(artifact as ProjectCapsule),
+    storageRoot: root,
+    storageUri: `0g://${config.network}/${root}`,
+    capsuleHash: downloaded.capsuleHash,
+    storageTxHash: tx,
+    network: `0G ${config.network}`,
+    storageMode: config.network === "mainnet" ? "0g-mainnet" : "0g-testnet"
+  };
+
+  if (capsule.visibility !== "unlisted") {
+    await saveCapsule(capsule);
+  }
+
   return capsule;
 }
 

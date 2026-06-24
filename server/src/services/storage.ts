@@ -40,6 +40,22 @@ export async function storeCanonicalArtifact(kind: "capsule" | "matchup", id: st
   };
 }
 
+export async function loadCanonicalArtifact(rootHash: string): Promise<{ artifact: unknown; canonicalJson: string; capsuleHash: string }> {
+  const { Indexer } = await import("@0gfoundation/0g-storage-ts-sdk");
+  const indexer = new Indexer(config.storageIndexer);
+  const [blob, err] = await indexer.downloadToBlob(rootHash, { proof: false });
+  if (err !== null) {
+    throw new Error(`0G download error: ${err.message}`);
+  }
+
+  const canonicalJson = await blob.text();
+  return {
+    artifact: JSON.parse(canonicalJson) as unknown,
+    canonicalJson,
+    capsuleHash: sha256Hex(canonicalJson)
+  };
+}
+
 async function uploadToZeroG(canonicalJson: string, capsuleHash: string): Promise<StorageResult> {
   const { Indexer, MemData } = await import("@0gfoundation/0g-storage-ts-sdk");
   const provider = new ethers.JsonRpcProvider(config.rpcUrl);

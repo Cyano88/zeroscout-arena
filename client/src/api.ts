@@ -54,10 +54,19 @@ export const api = {
   campaignCapsules: (id: string) => request<CapsuleIndexRecord[]>(`/api/campaigns/${id}/capsules`),
   projects: () => request<CapsuleIndexRecord[]>("/api/projects"),
   capsules: () => request<CapsuleIndexRecord[]>("/api/capsules"),
-  capsule: (id: string) => request<ProjectCapsule>(`/api/capsules/${id}`),
+  capsule: (id: string, root?: string | null, tx?: string | null) =>
+    request<ProjectCapsule>(`/api/capsules/${id}${proofQuery(root, tx)}`),
   createCapsule: (input: ProjectCapsuleInput) =>
     request<ProjectCapsule>("/api/capsules", { method: "POST", body: JSON.stringify(input) }),
   matchups: () => request<MatchupReport[]>("/api/matchups"),
   createMatchup: (capsuleAId: string, capsuleBId: string) =>
     request<MatchupReport>("/api/matchups", { method: "POST", body: JSON.stringify({ capsuleAId, capsuleBId }) })
 };
+
+function proofQuery(root?: string | null, tx?: string | null): string {
+  const params = new URLSearchParams();
+  if (root) params.set("root", root);
+  if (tx) params.set("tx", tx);
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}

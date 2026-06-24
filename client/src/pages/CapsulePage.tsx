@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Copy, Download, ExternalLink, GitBranch, Share2 } from "lucide-react";
 import type { ProjectCapsule } from "../../../shared/types";
 import { api } from "../api";
@@ -8,20 +8,23 @@ import { explorerTxUrl, isRealProof, shortHash } from "../utils";
 
 export function CapsulePage() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const [capsule, setCapsule] = useState<ProjectCapsule | null>(null);
   const [error, setError] = useState("");
+  const root = searchParams.get("root");
+  const tx = searchParams.get("tx");
 
   useEffect(() => {
     if (!id) return;
-    void api.capsule(id).then(setCapsule).catch((err) => setError(err instanceof Error ? err.message : "Project not found"));
-  }, [id]);
+    void api.capsule(id, root, tx).then(setCapsule).catch((err) => setError(err instanceof Error ? err.message : "Project not found"));
+  }, [id, root, tx]);
 
   if (error) return <main className="page-narrow"><div className="error-banner">{error}</div></main>;
   if (!capsule) return <main className="page-narrow"><div className="empty">Loading project profile...</div></main>;
 
   const real = isRealProof(capsule.storageMode);
   const proofState: ProofState = real ? "complete" : "error";
-  const shareUrl = window.location.href;
+  const shareUrl = proofUrl(capsule);
   const txUrl = explorerTxUrl(capsule.network, capsule.storageTxHash);
 
   return (
@@ -120,7 +123,7 @@ export function CapsulePage() {
           <Row k="AI provider" value={capsule.aiProvider} disableCopy />
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-          <a className="btn btn-ghost btn-sm" href={`/api/capsules/${capsule.id}.json`} target="_blank" rel="noreferrer">
+          <a className="btn btn-ghost btn-sm" href={`/api/capsules/${capsule.id}.json?root=${encodeURIComponent(capsule.storageRoot)}${capsule.storageTxHash ? `&tx=${encodeURIComponent(capsule.storageTxHash)}` : ""}`} target="_blank" rel="noreferrer">
             <Download size={13} /> Verify JSON
           </a>
           <button className="btn btn-ghost btn-sm" type="button" onClick={() => navigator.clipboard.writeText(shareUrl)}>
@@ -137,6 +140,13 @@ export function CapsulePage() {
       </section>
     </main>
   );
+}
+
+function proofUrl(capsule: ProjectCapsule): string {
+  const url = new URL(`/projects/${capsule.id}`, window.location.origin);
+  url.searchParams.set("root", capsule.storageRoot);
+  if (capsule.storageTxHash) url.searchParams.set("tx", capsule.storageTxHash);
+  return url.toString();
 }
 
 function Row({ k, value, disabled, disableCopy }: { k: string; value: string; disabled?: boolean; disableCopy?: boolean }) {
