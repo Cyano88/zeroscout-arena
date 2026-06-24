@@ -323,6 +323,11 @@ input:focus, textarea:focus, select:focus {
   color: var(--text-2);
 }
 .btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--muted); }
+.btn-live {
+  border-color: color-mix(in srgb, var(--good) 46%, var(--line));
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 9%, var(--surface));
+}
 .btn-mono { font-family: var(--mono); font-size: 12px; }
 .btn-sm { height: 34px; padding: 0 12px; font-size: 12px; }
 
@@ -550,9 +555,19 @@ input:focus, textarea:focus, select:focus {
 .profile-byline {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
+  gap: 8px;
   font-size: 12.5px;
   color: var(--muted);
+}
+.profile-byline span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
 }
 .profile-byline strong { color: var(--text-2); font-weight: 500; }
 
@@ -727,6 +742,12 @@ input:focus, textarea:focus, select:focus {
   transition: color 0.16s ease, border-color 0.16s ease;
 }
 .record-row .icon-btn:hover { color: var(--text); border-color: var(--muted); }
+.record-row .icon-btn.copied,
+.campaign-row .icon-btn.copied {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 42%, var(--line));
+  background: color-mix(in srgb, var(--good) 8%, var(--surface));
+}
 
 /* === Campaign rows === */
 .campaign-row {
@@ -740,6 +761,18 @@ input:focus, textarea:focus, select:focus {
 .campaign-row:first-of-type { border-top: 0; }
 .campaign-row .k { color: var(--muted); font-size: 12px; letter-spacing: 0.02em; padding-top: 2px; }
 .campaign-row p { margin: 0; color: var(--text-2); font-size: 13.5px; line-height: 1.6; }
+.campaign-row .icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--surface);
+  transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+.campaign-row .icon-btn:hover { color: var(--text); border-color: var(--muted); }
 
 /* === Project rows (leaderboard) === */
 .rows {

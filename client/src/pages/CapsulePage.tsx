@@ -56,13 +56,13 @@ export function CapsulePage() {
           <h1>{capsule.projectName}</h1>
           <p className="profile-promise">{capsule.tagline}</p>
           <div className="profile-byline">
-            <span><strong>{capsule.teamName}</strong> - builder</span>
-            <span><strong>{shortHash(capsule.storageRoot)}</strong> - root</span>
-            {capsule.storageTxHash && <span><strong>{shortHash(capsule.storageTxHash)}</strong> - tx</span>}
+            <span>By <strong>{capsule.teamName}</strong></span>
+            <span>Root <strong>{shortHash(capsule.storageRoot)}</strong></span>
+            {capsule.storageTxHash && <span>Tx <strong>{shortHash(capsule.storageTxHash)}</strong></span>}
           </div>
         </div>
         <div className="profile-proof">
-          <ProofLogo state={proofState} size="sm" caption={{ title: real ? "Proof stored" : "Local fallback", sub: shortHash(capsule.storageRoot) }} />
+          <ProofLogo state={proofState} size="sm" caption={{ title: real ? "0G proof" : "Draft proof", sub: shortHash(capsule.storageRoot) }} />
         </div>
       </section>
 
@@ -161,11 +161,18 @@ export function CapsulePage() {
 }
 
 function ProofActions({ capsule, shareUrl, txUrl, registryTxUrl }: { capsule: ProjectCapsule; shareUrl: string; txUrl?: string | null; registryTxUrl?: string | null }) {
+  const [copied, setCopied] = useState(false);
+  async function copyShareLink() {
+    await navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  }
+
   return (
     <section className="surface section proof-summary">
       <div>
         <h2>Verify</h2>
-        <p>This passport is the project snapshot. Updates create a new version; old 0G roots stay immutable.</p>
+        <p>This is the current project snapshot. Updates create a new version; old 0G roots stay immutable.</p>
       </div>
       <div className="proof-facts">
         <span><b>{shortHash(capsule.storageRoot)}</b> storage root</span>
@@ -176,8 +183,8 @@ function ProofActions({ capsule, shareUrl, txUrl, registryTxUrl }: { capsule: Pr
         <a className="btn btn-ghost btn-sm" href={`/api/capsules/${capsule.id}.json?root=${encodeURIComponent(capsule.storageRoot)}${capsule.storageTxHash ? `&tx=${encodeURIComponent(capsule.storageTxHash)}` : ""}`} target="_blank" rel="noreferrer">
           <Download size={13} /> JSON
         </a>
-        <button className="btn btn-ghost btn-sm" type="button" onClick={() => navigator.clipboard.writeText(shareUrl)}>
-          <Share2 size={13} /> Share
+        <button className={`btn btn-ghost btn-sm ${copied ? "btn-live" : ""}`} type="button" onClick={copyShareLink}>
+          {copied ? <Check size={13} /> : <Share2 size={13} />} {copied ? "Copied" : "Share"}
         </button>
         {txUrl && <a className="btn btn-ghost btn-sm" href={txUrl} target="_blank" rel="noreferrer">Storage tx <ExternalLink size={13} /></a>}
         {registryTxUrl && <a className="btn btn-ghost btn-sm" href={registryTxUrl} target="_blank" rel="noreferrer">Registry tx <ExternalLink size={13} /></a>}
@@ -369,12 +376,19 @@ function Row({ k, value, disabled, disableCopy }: { k: string; value: string; di
 }
 
 function Campaign({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  }
+
   return (
     <div className="campaign-row">
       <span className="k">{label}</span>
       <p>{value}</p>
-      <button className="icon-btn" type="button" title="Copy" onClick={() => navigator.clipboard.writeText(value)}>
-        <Copy size={13} />
+      <button className={`icon-btn ${copied ? "copied" : ""}`} type="button" title={copied ? "Copied" : "Copy"} onClick={copy}>
+        {copied ? <Check size={13} /> : <Copy size={13} />}
       </button>
     </div>
   );
