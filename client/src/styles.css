@@ -1552,6 +1552,64 @@ input:focus, textarea:focus, select:focus {
 .danger-action {
   color: #ef4444;
 }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(8px);
+  z-index: 30;
+}
+.confirm-panel {
+  width: min(420px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+.confirm-panel h2 {
+  margin: 8px 0;
+  color: var(--text);
+  font-size: 22px;
+  letter-spacing: 0;
+}
+.confirm-panel p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.confirm-meta {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 12px;
+}
+.confirm-meta span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.confirm-meta code {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.danger-primary {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+}
 .env-box pre {
   white-space: pre-wrap;
   color: var(--text);

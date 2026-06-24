@@ -25,6 +25,7 @@ export function DashboardPage() {
   const [loading, setLoading] = useState("");
   const [lastSyncedAt, setLastSyncedAt] = useState("");
   const [walletOgBalance, setWalletOgBalance] = useState("");
+  const [revokeCandidate, setRevokeCandidate] = useState<PublicKey | null>(null);
 
   const totalCredits = useMemo(() => keys.reduce((sum, key) => sum + (key.creditBalance ?? 0), 0), [keys]);
   const totalUsed = useMemo(() => keys.reduce((sum, key) => sum + (key.creditsUsed ?? 0), 0), [keys]);
@@ -217,7 +218,7 @@ export function DashboardPage() {
   }
 
   async function revokeKey(key: PublicKey) {
-    if (!wallet || !window.confirm(`Revoke ${key.name}? This stops every platform using this key.`)) return;
+    if (!wallet) return;
     const ethereum = walletProvider();
     if (!ethereum) {
       setStatus("Open this page in your wallet browser to revoke a key.");
@@ -234,6 +235,7 @@ export function DashboardPage() {
       forgetKey(wallet, key.id);
       setRememberedKeys(loadRememberedKeys(wallet));
       await refreshKeys(wallet, { silent: true });
+      setRevokeCandidate(null);
       setStatus(`${key.name} was revoked.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not revoke key.");
@@ -453,7 +455,7 @@ export function DashboardPage() {
                   <span className="local-only">Create a new key if the full value was lost.</span>
                 )}
                 {!key.revokedAt && (
-                  <button className="btn btn-ghost btn-sm danger-action" type="button" onClick={() => revokeKey(key)} disabled={loading === `revoke:${key.id}`}>
+                  <button className="btn btn-ghost btn-sm danger-action" type="button" onClick={() => setRevokeCandidate(key)} disabled={loading === `revoke:${key.id}`}>
                     {loading === `revoke:${key.id}` ? <Loader2 size={13} className="spin" /> : <Trash2 size={13} />}
                     Revoke
                   </button>
@@ -463,6 +465,27 @@ export function DashboardPage() {
           ))
         )}
       </section>
+
+      {revokeCandidate && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setRevokeCandidate(null)}>
+          <section className="confirm-panel" role="dialog" aria-modal="true" aria-labelledby="revoke-title" onClick={(event) => event.stopPropagation()}>
+            <span className="eyebrow">Revoke key</span>
+            <h2 id="revoke-title">Revoke {revokeCandidate.name}?</h2>
+            <p>Platforms using this key will stop calling ZeroScout immediately. You can create a new key anytime.</p>
+            <div className="confirm-meta">
+              <span>{revokeCandidate.partner ?? "External platform"}</span>
+              <code>{revokeCandidate.keyPreview}</code>
+            </div>
+            <div className="confirm-actions">
+              <button className="btn btn-ghost" type="button" onClick={() => setRevokeCandidate(null)}>Cancel</button>
+              <button className="btn btn-primary danger-primary" type="button" onClick={() => revokeKey(revokeCandidate)} disabled={loading === `revoke:${revokeCandidate.id}`}>
+                {loading === `revoke:${revokeCandidate.id}` ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />}
+                Revoke key
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       <section className="surface env-box">
         <span className="eyebrow">Use the key</span>
