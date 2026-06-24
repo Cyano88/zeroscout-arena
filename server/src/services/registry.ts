@@ -11,9 +11,10 @@ const registryAbi = [
   "function registerPassport(string id, bytes32 root, bytes32 capsuleHash, bytes32 storageTxHash, string campaignId, bool isPublic) external",
   "function registerClaim(string id, bytes32 projectKey, bytes32 claimRoot, bytes32 claimHash, bytes32 claimStorageTxHash, string method, string claimedBy) external"
 ];
+const registryInterface = new ethers.Interface(registryAbi);
 
 export function registryConfigured(): boolean {
-  return Boolean(config.registryContract);
+  return registryReadContracts().length > 0;
 }
 
 export async function registerPassportOnChain(capsule: ProjectCapsule): Promise<string | undefined> {
@@ -54,18 +55,23 @@ export async function registerClaimOnChain(capsule: ProjectCapsule): Promise<str
 }
 
 export async function listRegistryCapsules(): Promise<CapsuleIndexRecord[]> {
-  if (!config.registryContract) return [];
+  const contracts = registryReadContracts();
+  if (contracts.length === 0) return [];
 
   const provider = new ethers.JsonRpcProvider(config.rpcUrl, config.chainId);
-  const contract = new ethers.Contract(config.registryContract, registryAbi, provider);
-  const filter = contract.filters.PassportRegistered();
   const latest = await provider.getBlockNumber();
   const fromBlock = Math.max(0, config.registryFromBlock);
-  const logs = await queryLogsInBatches(contract, filter, fromBlock, latest);
+  const logs = (
+    await Promise.all(contracts.map(async (address) => {
+      const contract = new ethers.Contract(address, registryAbi, provider);
+      const filter = contract.filters.PassportRegistered();
+      return queryLogsInBatches(contract, filter, fromBlock, latest);
+    }))
+  ).flat();
   const newestById = new Map<string, { root: string; tx: string; isPublic: boolean }>();
 
   for (const log of logs) {
-    const parsed = contract.interface.parseLog(log);
+    const parsed = registryInterface.parseLog(log);
     if (!parsed) continue;
     newestById.set(parsed.args.id, {
       root: parsed.args.root,
@@ -140,6 +146,11 @@ async function loadRegistryRecord(id: string, root: string, tx: string): Promise
 
 function toBytes32(value?: string): string {
   return value && /^0x[a-fA-F0-9]{64}$/.test(value) ? value : ethers.ZeroHash;
+}
+
+function registryReadContracts(): string[] {
+  const addresses = [config.registryContract, ...config.legacyRegistryContracts].filter((item): item is string => Boolean(item));
+  return [...new Set(addresses.map((item) => ethers.getAddress(item)))];
 }
 
 function projectKeyBytes(projectKey: string): string {
