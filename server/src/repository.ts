@@ -13,11 +13,26 @@ interface StoreFile {
   pendingClaims?: Record<string, PendingClaim>;
   integrationKeys?: IntegrationKeyRecord[];
   integrationTopUps?: IntegrationTopUpRecord[];
+  videoScoreSessions?: Record<string, VideoScoreSession>;
 }
 
 interface PendingClaim extends ClaimStartResponse {
   capsuleId: string;
   createdAt: string;
+}
+
+export interface VideoScoreSession {
+  token: string;
+  integrationId?: string;
+  integrationName?: string;
+  integrationPartner?: string;
+  platform: string;
+  program: string;
+  projectName: string;
+  prompt: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt?: string;
 }
 
 const storePath = path.join(process.cwd(), config.dataDir, "index.json");
@@ -34,7 +49,8 @@ const emptyStore: StoreFile = {
   matchups: [],
   pendingClaims: {},
   integrationKeys: [],
-  integrationTopUps: []
+  integrationTopUps: [],
+  videoScoreSessions: {}
 };
 
 async function ensureStore(): Promise<void> {
@@ -89,7 +105,8 @@ function normalizeStore(store: StoreFile): StoreFile {
     matchups: store.matchups ?? [],
     pendingClaims: store.pendingClaims ?? {},
     integrationKeys: store.integrationKeys ?? [],
-    integrationTopUps: store.integrationTopUps ?? []
+    integrationTopUps: store.integrationTopUps ?? [],
+    videoScoreSessions: store.videoScoreSessions ?? {}
   };
 }
 
@@ -192,6 +209,26 @@ export async function clearPendingClaim(capsuleId: string): Promise<void> {
   const store = await readStore();
   if (!store.pendingClaims) return;
   delete store.pendingClaims[capsuleId];
+  await writeStore(store);
+}
+
+export async function saveVideoScoreSession(session: VideoScoreSession): Promise<void> {
+  const store = await readStore();
+  store.videoScoreSessions = store.videoScoreSessions ?? {};
+  store.videoScoreSessions[session.token] = session;
+  await writeStore(store);
+}
+
+export async function getVideoScoreSession(token: string): Promise<VideoScoreSession | undefined> {
+  const store = await readStore();
+  return store.videoScoreSessions?.[token];
+}
+
+export async function markVideoScoreSessionUsed(token: string): Promise<void> {
+  const store = await readStore();
+  const session = store.videoScoreSessions?.[token];
+  if (!session) return;
+  session.usedAt = new Date().toISOString();
   await writeStore(store);
 }
 

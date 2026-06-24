@@ -7,7 +7,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ethers } from "ethers";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { addCreditsToWalletKeys, claimIntegrationKeyByHash, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, revokeIntegrationKey, revokeIntegrationKeyForWallet, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim } from "./repository.js";
+import { addCreditsToWalletKeys, claimIntegrationKeyByHash, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, getVideoScoreSession, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, markVideoScoreSessionUsed, revokeIntegrationKey, revokeIntegrationKeyForWallet, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim, saveVideoScoreSession } from "./repository.js";
 import { checkAiHealth, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
 import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
@@ -406,77 +406,85 @@ app.post("/api/integrations/video-score", upload.single("video"), async (req, re
       return;
     }
 
-    const platform = cleanBodyField(req.body.platform, "Grail");
-    const program = cleanBodyField(req.body.program, "campaign video review");
-    const projectName = cleanBodyField(req.body.projectName, "target project");
-    const prompt = cleanBodyField(req.body.prompt, "");
-    const id = nanoid(10);
-    const now = new Date().toISOString();
-    let videoProof;
-    try {
-      videoProof = await storeBinaryArtifact("video", id, req.file.buffer);
-    } catch (error) {
-      res.status(errorStatus(error)).json({ error: stageError("0G video storage", error) });
-      return;
-    }
-    const videoUrl = `${publicBaseUrl(req)}/api/video-assets/${encodeURIComponent(videoProof.storageRoot)}?contentType=${encodeURIComponent(req.file.mimetype)}`;
-    let score;
-    try {
-      score = await generatePlatformVideoScore({ videoUrl, platform, program, projectName, prompt });
-    } catch (error) {
-      res.status(errorStatus(error)).json({ error: stageError("0G Compute video review", error) });
-      return;
-    }
-    const artifactWithoutProof = {
-      id,
-      artifactType: "zeroscout.platform-video-score",
-      artifactVersion: "1.0.0",
+    await respondWithPlatformVideoScore(req, res, integration, {
+      platform: cleanBodyField(req.body.platform, "Grail"),
+      program: cleanBodyField(req.body.program, "campaign video review"),
+      projectName: cleanBodyField(req.body.projectName, "target project"),
+      prompt: cleanBodyField(req.body.prompt, "")
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/integrations/video-score/session", async (req, res, next) => {
+  try {
+    const integration = await assertIntegrationIdentity(req);
+    const token = randomBytes(24).toString("base64url");
+    const now = Date.now();
+    const expiresAt = new Date(now + 15 * 60 * 1000).toISOString();
+    await saveVideoScoreSession({
+      token,
       integrationId: integration?.id,
       integrationName: integration?.name,
-      platform,
-      program,
-      projectName,
-      prompt,
-      uploadedVideo: {
-        filename: req.file.originalname,
-        contentType: req.file.mimetype,
-        sizeBytes: req.file.size,
-        storageRoot: videoProof.storageRoot,
-        storageUri: videoProof.storageUri,
-        contentHash: videoProof.capsuleHash,
-        storageTxHash: videoProof.storageTxHash
-      },
-      ...score,
-      createdAt: now
-    };
-    let reviewProof;
-    try {
-      reviewProof = await storeCanonicalArtifact("video-review", id, artifactWithoutProof);
-    } catch (error) {
-      res.status(errorStatus(error)).json({ error: stageError("0G review proof storage", error) });
+      integrationPartner: integration?.partner,
+      platform: cleanBodyField(req.body.platform, "Grail"),
+      program: cleanBodyField(req.body.program, "campaign video review"),
+      projectName: cleanBodyField(req.body.projectName, "target project"),
+      prompt: cleanBodyField(req.body.prompt, ""),
+      createdAt: new Date(now).toISOString(),
+      expiresAt
+    });
+    res.status(201).json({
+      uploadUrl: `${publicBaseUrl(req)}/api/integrations/video-score/session/${encodeURIComponent(token)}`,
+      expiresAt,
+      maxVideoBytes
+    });
+  } catch (error) {
+    res.status(errorStatus(error)).json({ error: stageError("API key", error) });
+  }
+});
+
+app.post("/api/integrations/video-score/session/:token", upload.single("video"), async (req, res, next) => {
+  try {
+    const token = String(req.params.token ?? "");
+    const session = await getVideoScoreSession(token);
+    if (!session) {
+      res.status(404).json({ error: "Video upload session was not found. Start a new review." });
       return;
     }
-    res.status(201).json({
-      id,
-      ...score,
-      video: {
-        storageRoot: videoProof.storageRoot,
-        storageUri: videoProof.storageUri,
-        contentHash: videoProof.capsuleHash,
-        storageTxHash: videoProof.storageTxHash,
-        contentType: req.file.mimetype,
-        sizeBytes: req.file.size
-      },
-      review: {
-        storageRoot: reviewProof.storageRoot,
-        storageUri: reviewProof.storageUri,
-        contentHash: reviewProof.capsuleHash,
-        storageTxHash: reviewProof.storageTxHash
-      },
-      network: reviewProof.network,
-      storageMode: reviewProof.storageMode,
-      integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined,
-      createdAt: now
+    if (session.usedAt) {
+      res.status(409).json({ error: "Video upload session was already used. Start a new review." });
+      return;
+    }
+    if (new Date(session.expiresAt).getTime() < Date.now()) {
+      res.status(410).json({ error: "Video upload session expired. Start a new review." });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ error: "Upload an MP4, MOV, or WebM video under 100 MB." });
+      return;
+    }
+
+    let integration = session.integrationId
+      ? { id: session.integrationId, name: session.integrationName ?? "Integration key", partner: session.integrationPartner }
+      : undefined;
+    if (session.integrationId && session.integrationId !== "legacy-env") {
+      try {
+        const charged = await consumeIntegrationCredits(session.integrationId, integrationCosts.videoScore);
+        integration = { id: charged.id, name: charged.name, partner: charged.partner };
+      } catch (error) {
+        res.status(errorStatus(error)).json({ error: stageError("API key", error) });
+        return;
+      }
+    }
+
+    await markVideoScoreSessionUsed(token);
+    await respondWithPlatformVideoScore(req, res, integration, {
+      platform: session.platform,
+      program: session.program,
+      projectName: session.projectName,
+      prompt: session.prompt
     });
   } catch (error) {
     next(error);
@@ -1028,6 +1036,90 @@ function stageError(stage: string, error: unknown): string {
   return `${stage} failed: ${errorMessage(error)}`;
 }
 
+async function respondWithPlatformVideoScore(
+  req: express.Request,
+  res: express.Response,
+  integration: { id: string; name: string; partner?: string } | undefined,
+  input: { platform: string; program: string; projectName: string; prompt: string }
+): Promise<void> {
+  if (!req.file) {
+    res.status(400).json({ error: "Upload an MP4, MOV, or WebM video under 100 MB." });
+    return;
+  }
+
+  const id = nanoid(10);
+  const now = new Date().toISOString();
+  let videoProof;
+  try {
+    videoProof = await storeBinaryArtifact("video", id, req.file.buffer);
+  } catch (error) {
+    res.status(errorStatus(error)).json({ error: stageError("0G video storage", error) });
+    return;
+  }
+
+  const videoUrl = `${publicBaseUrl(req)}/api/video-assets/${encodeURIComponent(videoProof.storageRoot)}?contentType=${encodeURIComponent(req.file.mimetype)}`;
+  let score;
+  try {
+    score = await generatePlatformVideoScore({ videoUrl, ...input });
+  } catch (error) {
+    res.status(errorStatus(error)).json({ error: stageError("0G Compute video review", error) });
+    return;
+  }
+
+  const artifactWithoutProof = {
+    id,
+    artifactType: "zeroscout.platform-video-score",
+    artifactVersion: "1.0.0",
+    integrationId: integration?.id,
+    integrationName: integration?.name,
+    platform: input.platform,
+    program: input.program,
+    projectName: input.projectName,
+    prompt: input.prompt,
+    uploadedVideo: {
+      filename: req.file.originalname,
+      contentType: req.file.mimetype,
+      sizeBytes: req.file.size,
+      storageRoot: videoProof.storageRoot,
+      storageUri: videoProof.storageUri,
+      contentHash: videoProof.capsuleHash,
+      storageTxHash: videoProof.storageTxHash
+    },
+    ...score,
+    createdAt: now
+  };
+  let reviewProof;
+  try {
+    reviewProof = await storeCanonicalArtifact("video-review", id, artifactWithoutProof);
+  } catch (error) {
+    res.status(errorStatus(error)).json({ error: stageError("0G review proof storage", error) });
+    return;
+  }
+
+  res.status(201).json({
+    id,
+    ...score,
+    video: {
+      storageRoot: videoProof.storageRoot,
+      storageUri: videoProof.storageUri,
+      contentHash: videoProof.capsuleHash,
+      storageTxHash: videoProof.storageTxHash,
+      contentType: req.file.mimetype,
+      sizeBytes: req.file.size
+    },
+    review: {
+      storageRoot: reviewProof.storageRoot,
+      storageUri: reviewProof.storageUri,
+      contentHash: reviewProof.capsuleHash,
+      storageTxHash: reviewProof.storageTxHash
+    },
+    network: reviewProof.network,
+    storageMode: reviewProof.storageMode,
+    integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined,
+    createdAt: now
+  });
+}
+
 async function assertIntegrationAccess(req: express.Request, requiredCredits: number): Promise<{ id: string; name: string; partner?: string } | undefined> {
   const token = bearerToken(req);
   if (token) {
@@ -1035,6 +1127,30 @@ async function assertIntegrationAccess(req: express.Request, requiredCredits: nu
     if (record) {
       const charged = await consumeIntegrationCredits(record.id, requiredCredits);
       return { id: charged.id, name: charged.name, partner: charged.partner };
+    }
+  }
+
+  if (config.integrationSecret) {
+    if (safeEqual(token, config.integrationSecret)) {
+      return { id: "legacy-env", name: "Legacy env secret" };
+    }
+    throw new Error("Unauthorized integration request.");
+  }
+
+  const configuredKeys = await listIntegrationKeys();
+  if (configuredKeys.length > 0) {
+    throw new Error("Unauthorized integration request.");
+  }
+
+  return undefined;
+}
+
+async function assertIntegrationIdentity(req: express.Request): Promise<{ id: string; name: string; partner?: string } | undefined> {
+  const token = bearerToken(req);
+  if (token) {
+    const record = await findActiveIntegrationKeyByHash(hashSecret(token));
+    if (record) {
+      return { id: record.id, name: record.name, partner: record.partner };
     }
   }
 
