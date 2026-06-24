@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import { config } from "../config.js";
-import type { CapsuleIndexRecord, ProjectCapsule } from "../../../shared/types.js";
+import type { CapsuleIndexRecord, ProjectCapsule, ProjectOwnershipClaim } from "../../../shared/types.js";
 import { loadCanonicalArtifact } from "./storage.js";
 import { findCampaignPreset } from "../../../shared/campaigns.js";
 import { projectKeyFor } from "./project-key.js";
@@ -52,6 +52,39 @@ export async function registerClaimOnChain(capsule: ProjectCapsule): Promise<str
   );
   const receipt = await tx.wait();
   return receipt?.hash ?? tx.hash;
+}
+
+export async function getRegistryClaim(id: string): Promise<ProjectOwnershipClaim | undefined> {
+  const contracts = registryReadContracts();
+  if (contracts.length === 0) return undefined;
+
+  const provider = new ethers.JsonRpcProvider(config.rpcUrl, config.chainId);
+  const latest = await provider.getBlockNumber();
+  const fromBlock = Math.max(0, config.registryFromBlock);
+  const logs = (
+    await Promise.all(contracts.map(async (address) => {
+      const contract = new ethers.Contract(address, registryAbi, provider);
+      const filter = contract.filters.ProjectClaimed(id);
+      return queryLogsInBatches(contract, filter, fromBlock, latest);
+    }))
+  ).flat();
+
+  const latestLog = logs.sort((a, b) => b.blockNumber - a.blockNumber || b.index - a.index)[0];
+  if (!latestLog) return undefined;
+
+  const parsed = registryInterface.parseLog(latestLog);
+  if (!parsed) return undefined;
+
+  return {
+    status: "claimed",
+    method: parsed.args.method,
+    claimedBy: parsed.args.claimedBy,
+    claimRoot: parsed.args.claimRoot,
+    claimHash: parsed.args.claimHash,
+    claimTxHash: parsed.args.claimStorageTxHash === ethers.ZeroHash ? undefined : parsed.args.claimStorageTxHash,
+    claimRegistryTxHash: latestLog.transactionHash,
+    verifiedAt: new Date(Number(parsed.args.claimedAt) * 1000).toISOString()
+  };
 }
 
 export async function listRegistryCapsules(): Promise<CapsuleIndexRecord[]> {
@@ -106,11 +139,12 @@ async function loadRegistryRecord(id: string, root: string, tx: string): Promise
   if (artifact.id !== id || artifact.artifactType !== "zeroscout.project-capsule" || artifact.visibility === "unlisted") return undefined;
 
   const campaign = findCampaignPreset(artifact.campaignId);
+  const ownership = artifact.ownership ?? await getRegistryClaim(id);
   return {
     id,
     projectKey: artifact.projectKey ?? projectKeyFor(artifact.campaignId, artifact.repoUrl ?? root),
     versionNumber: artifact.versionNumber ?? 1,
-    ownership: artifact.ownership,
+    ownership,
     projectName: artifact.projectName ?? "Untitled project",
     teamName: artifact.teamName ?? "Unknown builder",
     tagline: artifact.tagline ?? "",

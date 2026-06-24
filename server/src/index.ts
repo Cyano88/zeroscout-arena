@@ -7,7 +7,7 @@ import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
 import { clearPendingClaim, getCapsule, getPendingClaim, listCapsulesByProjectKey, listMatchups, listPublicCapsules, saveCapsule, saveMatchup, savePendingClaim } from "./repository.js";
 import { checkAiHealth, generateMatchup, generateScout } from "./services/ai.js";
 import { loadCanonicalArtifact, storeCanonicalArtifact } from "./services/storage.js";
-import { listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
+import { getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
 import { parseGitHubRepo, projectKeyFor } from "./services/project-key.js";
 import type { CapsuleIndexRecord, ClaimStartResponse, HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
 import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
@@ -88,7 +88,7 @@ app.get("/api/projects", async (_req, res, next) => {
 
 app.get("/api/capsules/:id", async (req, res, next) => {
   try {
-    const capsule = await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx);
+    const capsule = await hydrateCapsuleOwnership(await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx));
     if (!capsule) {
       res.status(404).json({ error: "Capsule not found" });
       return;
@@ -101,7 +101,7 @@ app.get("/api/capsules/:id", async (req, res, next) => {
 
 app.get("/api/capsules/:id.json", async (req, res, next) => {
   try {
-    const capsule = await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx);
+    const capsule = await hydrateCapsuleOwnership(await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx));
     if (!capsule) {
       res.status(404).json({ error: "Capsule not found" });
       return;
@@ -114,12 +114,14 @@ app.get("/api/capsules/:id.json", async (req, res, next) => {
 
 app.get("/api/capsules/:id/versions", async (req, res, next) => {
   try {
-    const capsule = await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx);
+    const capsule = await hydrateCapsuleOwnership(await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx));
     if (!capsule) {
       res.status(404).json({ error: "Capsule not found" });
       return;
     }
-    const versions = await listCapsulesByProjectKey(capsule.projectKey);
+    const projectName = capsule.projectName.trim().toLowerCase();
+    const versions = (await listCapsulesByProjectKey(capsule.projectKey))
+      .filter((item) => item.id === capsule.id || item.projectName.trim().toLowerCase() === projectName);
     res.json(versions.sort((a, b) => (b.versionNumber ?? 1) - (a.versionNumber ?? 1) || b.createdAt.localeCompare(a.createdAt)));
   } catch (error) {
     next(error);
@@ -358,6 +360,22 @@ async function recoverCapsuleFromRoot(id: string, rootQuery: unknown, txQuery: u
   }
 
   return capsule;
+}
+
+async function hydrateCapsuleOwnership(capsule: ProjectCapsule | undefined): Promise<ProjectCapsule | undefined> {
+  if (!capsule || capsule.ownership?.status === "claimed") return capsule;
+  const ownership = await getRegistryClaim(capsule.id);
+  if (!ownership) return capsule;
+
+  const updated: ProjectCapsule = {
+    ...capsule,
+    ownership,
+    updatedAt: ownership.verifiedAt > capsule.updatedAt ? ownership.verifiedAt : capsule.updatedAt
+  };
+  if (updated.visibility !== "unlisted") {
+    await saveCapsule(updated);
+  }
+  return updated;
 }
 
 function claimFileContent(capsule: ProjectCapsule, claimCode: string): string {
