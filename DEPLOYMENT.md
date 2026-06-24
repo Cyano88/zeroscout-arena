@@ -58,5 +58,6 @@ VITE_API_BASE_URL=https://your-railway-api.up.railway.app
 - `/api/config/public` says storage mode is `0G mainnet`.
 - Creating a Project Passport fails if 0G upload fails.
 - Public Project Passport page shows stored proof, not local fallback.
-- `/campaigns/grail-builders-university` loads integration links.
-- `/embed/grail-builders-university` loads the embeddable campaign widget.
+- `/projects` lists only public Project Passports.
+- `/integrate` shows the hosted-link onboarding path.
+- `/embed/grail-builders-university` loads the optional embedded widget.

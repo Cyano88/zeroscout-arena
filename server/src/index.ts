@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import path from "node:path";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { getCapsule, listCapsules, listCapsulesByCampaign, listMatchups, listPublicCapsules, listPublicCapsulesByCampaign, saveCapsule, saveMatchup } from "./repository.js";
+import { getCapsule, listMatchups, listPublicCapsules, listPublicCapsulesByCampaign, saveCapsule, saveMatchup } from "./repository.js";
 import { generateMatchup, generateScout } from "./services/ai.js";
 import { storeCanonicalArtifact } from "./services/storage.js";
 import type { HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
@@ -60,7 +60,7 @@ app.get("/api/campaigns/:id/capsules", async (req, res, next) => {
 
 app.get("/api/capsules", async (_req, res, next) => {
   try {
-    res.json(await listCapsules());
+    res.json(await listPublicCapsules());
   } catch (error) {
     next(error);
   }
@@ -187,6 +187,10 @@ app.post("/api/matchups", async (req, res, next) => {
     const [a, b] = await Promise.all([getCapsule(input.capsuleAId), getCapsule(input.capsuleBId)]);
     if (!a || !b) {
       res.status(404).json({ error: "One or both capsules were not found." });
+      return;
+    }
+    if (a.visibility === "unlisted" || b.visibility === "unlisted") {
+      res.status(403).json({ error: "Only public Project Passports can be compared." });
       return;
     }
 

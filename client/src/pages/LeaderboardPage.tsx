@@ -40,7 +40,7 @@ export function LeaderboardPage() {
       <header className="page-heading">
         <span className="eyebrow">Projects</span>
         <h1>Project Passports</h1>
-        <p>Browse public builds by source. Choose a category, pick an ecosystem or program, then inspect the verified Project Passports listed under it.</p>
+        <p>Browse public builds by source.</p>
       </header>
 
       {!category && (
@@ -135,8 +135,9 @@ function ProjectRow({ project }: { project: CapsuleIndexRecord }) {
       <DirectoryMark kind={markForProgram(project.campaignId, bucketFor(project.campaignType))} />
       <div className="directory-main">
         <h2>{project.projectName}</h2>
-        <p>{project.teamName} - {project.checkpointLabel} - {project.scores.total}/100 signal</p>
+        <p>{project.teamName} - {project.checkpointLabel}</p>
       </div>
+      <span className="directory-score">{project.scores.total}</span>
       <div className="directory-proof">
         <span className={`status-tag ${real ? "ok" : "warn"}`}><span className="dot" />{real ? "Stored" : "Local"}</span>
         {project.visibility === "unlisted" ? <span className="status-tag warn"><Lock size={11} />Unlisted</span> : <span>{shortHash(project.storageRoot)}</span>}

@@ -2,59 +2,52 @@ import { ArrowRight, Copy } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const hostedLink = `${window.location.origin}/?campaign=custom`;
-const embedSnippet = `<iframe src="${window.location.origin}/embed/custom" width="100%" height="760" style="border:0"></iframe>`;
-const apiEndpoint = `${window.location.origin}/api/integrations/capsules`;
 
 export function IntegratePage() {
   return (
     <main className="page">
       <header className="page-heading">
         <span className="eyebrow">Integrate</span>
-        <h1>Add Project Passports to your builder program</h1>
-        <p>ZeroScout gives any organization a hosted proof flow, embeddable widget, and API path for collecting AI-reviewed builder progress stored on 0G.</p>
+        <h1>Launch with one link</h1>
+        <p>Send builders a hosted flow. They create Project Passports, and ZeroScout stores the proof record on 0G.</p>
       </header>
 
-      <section className="integrate-flow">
-        <Step n="01" title="Pick your program" body="Hackathon, ecosystem grant, cohort, university, accelerator, demo day, or solo builder track." />
-        <Step n="02" title="Share a proof link" body="Send builders a campaign link that opens a clean Project Passport form with your program context." />
-        <Step n="03" title="Collect verified progress" body="Builders submit repo, demo, notes, and 0G usage. ZeroScout stores the canonical proof capsule on 0G." />
-        <Step n="04" title="Review and compare" body="Use campaign dashboards, Project Passport pages, and compare mode to see who shipped and what needs help." />
+      <section className="integrate-primary">
+        <div>
+          <span className="status-tag"><span className="dot" />Live today</span>
+          <h2>Hosted link</h2>
+          <p>Start without engineering work. Share this URL with builders and review public Project Passports as they arrive.</p>
+        </div>
+        <div className="integrate-link-box">
+          <code>{hostedLink}</code>
+          <button className="icon-btn" type="button" onClick={() => navigator.clipboard.writeText(hostedLink)} title="Copy">
+            <Copy size={13} />
+          </button>
+        </div>
+        <div className="integrate-actions">
+          <Link className="btn btn-primary btn-sm" to="/?campaign=custom">
+            Open link <ArrowRight size={13} />
+          </Link>
+          <Link className="btn btn-ghost btn-sm" to="/projects">
+            Projects
+          </Link>
+        </div>
       </section>
 
-      <section className="integrate-grid">
-        <IntegrationCard
-          title="Hosted link"
-          label="Fastest start"
-          body="Use this when you want to launch today. Send one URL to builders and collect Project Passports immediately."
-          value={hostedLink}
-          cta="Open create flow"
-          to="/?campaign=custom"
-        />
-        <IntegrationCard
-          title="Embed widget"
-          label="Portal ready"
-          body="Use this inside a university portal, hackathon page, grant form, or cohort dashboard."
-          value={embedSnippet}
-          cta="Preview widget"
-          to="/embed/custom"
-        />
-        <IntegrationCard
-          title="API"
-          label="Platform path"
-          body="Use this when your platform already has builder data and wants to create 0G-backed proof records programmatically."
-          value={apiEndpoint}
-          cta="Read proof docs"
-          to="/verify"
-        />
+      <section className="integrate-steps">
+        <Step n="01" title="Share link" body="Send the hosted flow to builders." />
+        <Step n="02" title="Builders submit" body="They add repo, demo, usage, and visibility." />
+        <Step n="03" title="Review proof" body="Use Projects and Compare to inspect what shipped." />
       </section>
 
-      <section className="surface surface-pad" style={{ marginTop: 28 }}>
-        <h2 className="section-title">Who this is for</h2>
-        <div className="usecase-grid">
-          <UseCase title="Hackathons / ecosystems" body="Collect proof pages from projects applying for grants, tracks, or tournament rounds." />
-          <UseCase title="Universities / cohorts" body="Make every student submit weekly proof checkpoints mentors can review quickly." />
-          <UseCase title="Accelerators / demo days" body="Create public project profiles that sponsors, partners, and investors can inspect." />
-          <UseCase title="Solo builders" body="Give independent builders a proof trail they can reuse for grants, launches, and traction updates." />
+      <section className="integrate-next">
+        <div>
+          <span>Coming next</span>
+          <h2>Platform options</h2>
+        </div>
+        <div className="integrate-next-list">
+          <NextItem title="Embed widget" body="Place the flow inside an existing portal." />
+          <NextItem title="API" body="Create proof records from platform data." />
         </div>
       </section>
     </main>
@@ -63,34 +56,17 @@ export function IntegratePage() {
 
 function Step({ n, title, body }: { n: string; title: string; body: string }) {
   return (
-    <div className="integrate-step">
+    <div className="integrate-step-line">
       <span>{n}</span>
-      <h2>{title}</h2>
-      <p>{body}</p>
+      <div>
+        <h2>{title}</h2>
+        <p>{body}</p>
+      </div>
     </div>
   );
 }
 
-function IntegrationCard({ title, label, body, value, cta, to }: { title: string; label: string; body: string; value: string; cta: string; to: string }) {
-  return (
-    <article className="surface surface-pad integration-card">
-      <span className="status-tag"><span className="dot" />{label}</span>
-      <h2>{title}</h2>
-      <p>{body}</p>
-      <div className="integration-copy">
-        <code>{value}</code>
-        <button className="icon-btn" type="button" onClick={() => navigator.clipboard.writeText(value)} title="Copy">
-          <Copy size={13} />
-        </button>
-      </div>
-      <Link className="btn btn-primary btn-sm" to={to}>
-        {cta} <ArrowRight size={13} />
-      </Link>
-    </article>
-  );
-}
-
-function UseCase({ title, body }: { title: string; body: string }) {
+function NextItem({ title, body }: { title: string; body: string }) {
   return (
     <div>
       <h3>{title}</h3>

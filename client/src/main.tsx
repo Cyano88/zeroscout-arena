@@ -7,7 +7,6 @@ import { CapsulePage } from "./pages/CapsulePage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { MatchupPage } from "./pages/MatchupPage";
 import { DocsPage } from "./pages/DocsPage";
-import { CampaignDetailPage, CampaignsPage } from "./pages/CampaignsPage";
 import { EmbedPage } from "./pages/EmbedPage";
 import { IntegratePage } from "./pages/IntegratePage";
 import ogLogo from "./assets/og-logo.jpeg";
@@ -58,13 +57,13 @@ function App() {
           <Route path="/" element={<ArenaPage />} />
           <Route path="/projects/:id" element={<CapsulePage />} />
           <Route path="/projects" element={<LeaderboardPage />} />
-          <Route path="/campaigns" element={<CampaignsPage />} />
-          <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
           <Route path="/compare" element={<MatchupPage />} />
           <Route path="/integrate" element={<IntegratePage />} />
           <Route path="/verify" element={<DocsPage />} />
           <Route path="/embed/:campaignId" element={<EmbedPage />} />
           <Route path="/capsules/:id" element={<CapsulePage />} />
+          <Route path="/campaigns" element={<Navigate to="/projects" replace />} />
+          <Route path="/campaigns/:id" element={<Navigate to="/projects" replace />} />
           <Route path="/leaderboard" element={<Navigate to="/projects" replace />} />
           <Route path="/matchup" element={<Navigate to="/compare" replace />} />
           <Route path="/docs" element={<Navigate to="/verify" replace />} />

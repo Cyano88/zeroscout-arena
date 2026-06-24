@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowRight, Copy, ExternalLink, Loader2 } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft, ArrowRight, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { rounds, stages, type CampaignPreset, type CapsuleIndexRecord, type ProjectCapsuleInput, type ProjectCapsule } from "../../../shared/types";
 import { campaignPresets, findCampaignPreset } from "../../../shared/campaigns";
 import { api } from "../api";
@@ -36,6 +36,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
   const [campaigns, setCampaigns] = useState<CampaignPreset[]>(campaignPresets);
   const [searchParams] = useSearchParams();
   const initialCampaign = findCampaignPreset(forcedCampaignId ?? searchParams.get("campaign") ?? "zero-cup");
+  const hasPresetCampaign = Boolean(forcedCampaignId ?? searchParams.get("campaign"));
   const [form, setForm] = useState<ProjectCapsuleInput>({
     ...emptyForm,
     campaignId: initialCampaign.id,
@@ -52,6 +53,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
     visibility: searchParams.get("visibility") === "unlisted" ? "unlisted" : "public",
     source: forcedCampaignId ? "widget" : searchParams.toString() ? "deeplink" : "hosted"
   });
+  const [selectedProgram, setSelectedProgram] = useState<string | null>(hasPresetCampaign ? initialCampaign.id : null);
   const [flow, setFlow] = useState<FlowState>({ kind: "idle" });
   const navigate = useNavigate();
 
@@ -96,37 +98,73 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
       ? "Proof page ready"
       : "Create proof page";
 
+  function chooseProgram(id: string) {
+    const campaign = findCampaignPreset(id);
+    setForm({
+      ...form,
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      campaignType: campaign.type,
+      checkpointLabel: campaign.checkpointLabel,
+      round: rounds.includes(campaign.checkpointLabel as ProjectCapsuleInput["round"]) ? campaign.checkpointLabel as ProjectCapsuleInput["round"] : form.round
+    });
+    setSelectedProgram(campaign.id);
+    setFlow({ kind: "idle" });
+  }
+
+  function goBackToPrograms() {
+    setSelectedProgram(null);
+    setFlow({ kind: "idle" });
+  }
+
   return (
     <main className="page">
       <header className="page-heading">
         <span className="eyebrow">Create</span>
         <h1>Create a verified project profile</h1>
-        <p>Start from a hackathon, cohort, ecosystem, or solo path. ZeroScout drafts the intelligence, stores the canonical record on 0G, and gives you a Project Passport.</p>
+        <p>Choose a path, add your repo and demo, then publish a 0G-backed Project Passport.</p>
       </header>
 
+      {!selectedProgram && !compact && (
+        <section className="directory-section">
+          <div className="directory-head">
+            <div>
+              <p>Program</p>
+              <h2>Choose where this project belongs</h2>
+            </div>
+          </div>
+          <div className="directory-stack">
+            {campaigns.map((campaign) => (
+              <button className="directory-row" key={campaign.id} type="button" onClick={() => chooseProgram(campaign.id)}>
+                <span className={`directory-mark ${markForProgram(campaign.id)}`} aria-hidden="true" />
+                <div className="directory-main">
+                  <h2>{campaign.name}</h2>
+                  <p>{programDescription(campaign)}</p>
+                </div>
+                <span className="directory-action">Create <ArrowRight size={14} /></span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(selectedProgram || compact) && (
+      <>
+      {!compact && !forcedCampaignId && (
+        <button className="btn btn-ghost btn-sm" type="button" onClick={goBackToPrograms} style={{ display: "inline-flex", marginBottom: 18 }}>
+          <ArrowLeft size={12} /> Back
+        </button>
+      )}
       <div className={compact ? "checkout-grid compact" : "checkout-grid"}>
         <section className="surface surface-pad">
           <form className="checkout-form" onSubmit={submit}>
-            {!forcedCampaignId && (
-              <div className="field">
+            <div className="selected-program-strip">
+              <span className={`directory-mark ${markForProgram(activeCampaign.id)}`} aria-hidden="true" />
+              <div>
                 <label>Program</label>
-                <Segmented
-                  value={form.campaignId ?? activeCampaign.id}
-                  options={campaigns.map((campaign) => campaign.id)}
-                  labels={Object.fromEntries(campaigns.map((campaign) => [campaign.id, campaign.name]))}
-                  onChange={(id) => {
-                    const campaign = findCampaignPreset(id);
-                    setForm({
-                      ...form,
-                      campaignId: campaign.id,
-                      campaignName: campaign.name,
-                      campaignType: campaign.type,
-                      checkpointLabel: campaign.checkpointLabel
-                    });
-                  }}
-                />
+                <strong>{activeCampaign.name}</strong>
               </div>
-            )}
+            </div>
 
             <div className="field-row two">
               <Field label="Project name" value={form.projectName} onChange={(v) => setForm({ ...form, projectName: v })} placeholder="ZeroScout Arena" required />
@@ -208,37 +246,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
         </aside>
       </div>
 
-      {!compact && capsules.length > 0 && (
-        <section style={{ marginTop: 64 }}>
-          <header className="page-heading" style={{ marginBottom: 16 }}>
-            <h1 style={{ fontSize: 20 }}>Recent profiles</h1>
-            <p>The latest verified project profiles.</p>
-          </header>
-          <ul className="list" style={{ display: "grid", gap: 0 }}>
-            {capsules.slice(0, 5).map((capsule) => (
-              <li key={capsule.id} style={{ display: "block", padding: 0 }}>
-                <Link to={`/projects/${capsule.id}`} className="row" style={{ borderRadius: 10, marginTop: 8, border: "1px solid var(--line)", background: "var(--surface)" }}>
-                  <div className="name">
-                    <strong>{capsule.projectName}</strong>
-                    <span>{capsule.tagline}</span>
-                  </div>
-                  <div className="builder">{capsule.teamName}</div>
-                  <div className="round">{capsule.checkpointLabel ?? capsule.round}</div>
-                  <div className="signal">
-                    <div className="bar"><i style={{ width: `${capsule.scores.total}%` }} /></div>
-                    <em style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--muted)", fontStyle: "normal" }}>{capsule.scores.total}</em>
-                  </div>
-                  <div>
-                    <span className={`status-tag ${isRealProof(capsule.storageMode) ? "ok" : "warn"}`}><span className="dot" />{isRealProof(capsule.storageMode) ? "Stored" : "Local"}</span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <div style={{ marginTop: 16 }}>
-            <Link to="/projects" className="btn btn-ghost btn-sm" style={{ display: "inline-flex" }}>View all projects <ArrowRight size={13} /></Link>
-          </div>
-        </section>
+      </>
       )}
     </main>
   );
@@ -327,4 +335,16 @@ function Segmented({ value, options, labels, onChange }: { value: string; option
       ))}
     </div>
   );
+}
+
+function markForProgram(id: string): "og" | "grail" | "zs" {
+  if (id === "zero-cup") return "og";
+  if (id === "grail-builders-university") return "grail";
+  return "zs";
+}
+
+function programDescription(campaign: CampaignPreset): string {
+  if (campaign.id === "zero-cup") return "Hackathons, grants, and ecosystem competitions.";
+  if (campaign.id === "grail-builders-university") return "Universities, cohorts, tutors, and accelerators.";
+  return "Independent builders creating public or unlisted proof.";
 }

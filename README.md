@@ -11,7 +11,8 @@ Zero Cup is the launch campaign. Grail Builders University is the first real-wor
 - Builders create public Project Passports.
 - AI generates a scout brief, readiness signal, risks, next steps, and share copy.
 - 0G stores the canonical proof capsule.
-- Organizations get campaign links, campaign dashboards, and embed/API paths.
+- Organizations start with a hosted builder link.
+- Builders can publish publicly or keep a passport unlisted.
 - Agents can consume structured project JSON from the proof record.
 
 ## Why It Is AI-Native
@@ -54,16 +55,16 @@ ZG_CHAIN_ID=16661
 /projects          Browse public Project Passports across every source
 /projects/:id      Public Project Passport
 /compare           Compare any two Project Passports
-/integrate         Organization onboarding and integration paths
+/integrate         Organization onboarding
 /verify            How proof works
 /embed/:campaignId Embeddable campaign widget
 ```
 
-Legacy routes `/leaderboard`, `/matchup`, and `/docs` redirect to the new routes.
+Legacy routes `/leaderboard`, `/matchup`, `/docs`, and `/campaigns` redirect to the current public routes.
 
 ## Plug-And-Play Integration
 
-Organizations can start at:
+Organizations start at:
 
 ```txt
 /integrate
@@ -81,13 +82,15 @@ Prefilled link:
 /?campaign=zero-cup&project=ZeroScout&repo=https://github.com/Cyano88/zeroscout-arena
 ```
 
-Embed:
+The public product is optimized around the hosted link. The embed route and integration API exist for later platform integrations, but the visible onboarding flow does not require engineering work.
+
+Embed route:
 
 ```html
 <iframe src="https://zeroscout-arena-production.up.railway.app/embed/grail-builders-university" width="100%" height="760" style="border:0"></iframe>
 ```
 
-Campaign API:
+Integration API:
 
 ```txt
 GET /api/campaigns
@@ -100,7 +103,7 @@ POST /api/integrations/capsules
 
 - Zero Cup: hackathon campaign with tournament checkpoints.
 - Grail Builders University: cohort campaign with application, weekly, and demo-day checkpoints.
-- Custom Builder Program: flexible template for grants, accelerators, demo days, and internal programs.
+- Solo Builder Program: flexible template for independent builders, grants, launches, and private progress trails.
 
 ## Stack
 
@@ -145,6 +148,8 @@ Local fallback is clearly labeled and must not be used as a 0G proof claim.
 7. Open `/projects` to show public projects grouped by hackathon/ecosystem, university/cohort, and solo builder paths.
 8. Open `/integrate` to show how a new organization starts from zero.
 9. Open `/compare` to compare any two public Project Passports.
+
+Unlisted passports are not shown in Projects, source lists, or Compare. They remain accessible by direct URL.
 
 ## Zero Cup Rules Alignment
 
