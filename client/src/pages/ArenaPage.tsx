@@ -167,11 +167,11 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
             </div>
 
             <div className="field-row two">
-              <Field label="Project name" value={form.projectName} onChange={(v) => setForm({ ...form, projectName: v })} placeholder="ZeroScout Arena" required />
-              <Field label="Builder or team" value={form.teamName} onChange={(v) => setForm({ ...form, teamName: v })} placeholder="Your team" required />
+              <Field label="Project name" value={form.projectName} onChange={(v) => setForm({ ...form, projectName: v })} placeholder="ZeroScout Arena" required maxLength={90} />
+              <Field label="Builder or team" value={form.teamName} onChange={(v) => setForm({ ...form, teamName: v })} placeholder="Your team" required maxLength={90} />
             </div>
 
-            <Field label="One-line promise" value={form.tagline} onChange={(v) => setForm({ ...form, tagline: v })} placeholder="What should someone understand in one sentence?" required />
+            <Field label="One-line promise" value={form.tagline} onChange={(v) => setForm({ ...form, tagline: v })} placeholder="Say the outcome in one clear sentence." required maxLength={140} />
 
             <div className="field-row two">
               <Field label="Repo URL" type="url" value={form.repoUrl} onChange={(v) => setForm({ ...form, repoUrl: v })} placeholder="https://github.com/..." required />
@@ -219,10 +219,10 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
               </div>
             )}
 
-            <Textarea label="What does the product do?" value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder="Explain it plainly: who uses it and what they get." required />
-            <Textarea label="What does 0G power?" value={form.ogUsageClaims} onChange={(v) => setForm({ ...form, ogUsageClaims: v })} placeholder="Storage, compute, chain, retrieval, agent memory..." required />
-            <Textarea label="What should people remember?" value={form.pitchNotes ?? ""} onChange={(v) => setForm({ ...form, pitchNotes: v })} placeholder="The line you want mentors, users, sponsors, or voters to repeat." />
-            <Textarea label="What help do you need?" value={form.helpNeeded ?? ""} onChange={(v) => setForm({ ...form, helpNeeded: v })} placeholder={activeCampaign.helpOptions.join(", ")} />
+            <Textarea label="What does the product do?" value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder="Who is it for, and what do they get?" required maxLength={4000} />
+            <Textarea label="What does 0G power?" value={form.ogUsageClaims} onChange={(v) => setForm({ ...form, ogUsageClaims: v })} placeholder="Example: stores the public proof record, runs AI analysis, or verifies progress." required maxLength={3000} />
+            <Textarea label="What should people remember?" value={form.pitchNotes ?? ""} onChange={(v) => setForm({ ...form, pitchNotes: v })} placeholder="Write the sentence you want users, mentors, or voters to repeat." maxLength={3000} />
+            <Textarea label="What do you need next?" value={form.helpNeeded ?? ""} onChange={(v) => setForm({ ...form, helpNeeded: v })} placeholder="Example: pilots, users, funding, mentors, design partners." maxLength={120} />
 
             {errored && <div className="error-banner">{flow.message}</div>}
             {fallback && (
@@ -309,20 +309,29 @@ function FallbackNote({ capsule, onOpen }: { capsule: ProjectCapsule; onOpen: ()
   );
 }
 
-function Field({ label, value, onChange, type = "text", required = false, placeholder = "" }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean; placeholder?: string }) {
+function Field({ label, value, onChange, type = "text", required = false, placeholder = "", maxLength }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean; placeholder?: string; maxLength?: number }) {
   return (
     <div className="field">
-      <label>{label}</label>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} placeholder={placeholder} />
+      <FieldHead label={label} value={value} maxLength={maxLength} />
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} placeholder={placeholder} maxLength={maxLength} />
     </div>
   );
 }
 
-function Textarea({ label, value, onChange, required = false, placeholder = "" }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; placeholder?: string }) {
+function Textarea({ label, value, onChange, required = false, placeholder = "", maxLength }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; placeholder?: string; maxLength?: number }) {
   return (
     <div className="field">
+      <FieldHead label={label} value={value} maxLength={maxLength} />
+      <textarea value={value} onChange={(e) => onChange(e.target.value)} required={required} rows={3} placeholder={placeholder} maxLength={maxLength} />
+    </div>
+  );
+}
+
+function FieldHead({ label, value, maxLength }: { label: string; value: string; maxLength?: number }) {
+  return (
+    <div className="field-head">
       <label>{label}</label>
-      <textarea value={value} onChange={(e) => onChange(e.target.value)} required={required} rows={3} placeholder={placeholder} />
+      {maxLength && <span>{value.length}/{maxLength}</span>}
     </div>
   );
 }

@@ -9,9 +9,42 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed: ${response.status}`);
+    throw new Error(readableError(body.error, response.status));
   }
   return response.json() as Promise<T>;
+}
+
+function readableError(error: unknown, status: number): string {
+  if (typeof error !== "string") return `Request failed: ${status}`;
+
+  try {
+    const parsed = JSON.parse(error) as unknown;
+    if (Array.isArray(parsed)) {
+      const first = parsed[0] as { path?: string[]; maximum?: number; minimum?: number; code?: string } | undefined;
+      const field = first?.path?.[0] ? fieldLabel(first.path[0]) : "This field";
+      if (first?.code === "too_big" && first.maximum) return `${field} is too long. Keep it under ${first.maximum} characters.`;
+      if (first?.code === "too_small" && first.minimum) return `${field} needs a little more detail. Use at least ${first.minimum} characters.`;
+    }
+  } catch {
+    // Keep the original server message when it is not a serialized validation payload.
+  }
+
+  return error;
+}
+
+function fieldLabel(field: string): string {
+  const labels: Record<string, string> = {
+    projectName: "Project name",
+    teamName: "Builder or team",
+    tagline: "One-line promise",
+    description: "Product description",
+    ogUsageClaims: "0G usage",
+    pitchNotes: "Memory line",
+    helpNeeded: "What you need next",
+    repoUrl: "Repo URL",
+    demoUrl: "Demo URL"
+  };
+  return labels[field] ?? "This field";
 }
 
 export const api = {
