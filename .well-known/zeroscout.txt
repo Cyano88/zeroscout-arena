@@ -1,0 +1,4 @@
+zeroscout-claim: zs_x9H5XCWKCkUd
+project-id: zCmsGYafp0
+project-key: 6daed6264db523b198434725
+repo: https://github.com/Cyano88/zeroscout-arena
