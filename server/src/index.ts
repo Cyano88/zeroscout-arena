@@ -7,7 +7,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ethers } from "ethers";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { addCreditsToWalletKeys, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, revokeIntegrationKey, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim } from "./repository.js";
+import { addCreditsToWalletKeys, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, revokeIntegrationKey, revokeIntegrationKeyForWallet, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim } from "./repository.js";
 import { checkAiHealth, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
 import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
@@ -517,6 +517,41 @@ app.post("/api/dashboard/keys", async (req, res, next) => {
     next(error);
   }
 });
+
+app.post("/api/dashboard/keys/:id/revoke", async (req, res, next) => {
+  try {
+    const wallet = walletParam(req.body?.wallet);
+    const message = cleanBodyField(req.body?.message, "").slice(0, 300);
+    const signature = cleanBodyField(req.body?.signature, "").slice(0, 300);
+    const expectedMessage = dashboardActionMessage("revoke-key", wallet, req.params.id);
+    if (message !== expectedMessage || !signature) {
+      res.status(401).json({ error: "Wallet signature is required to revoke this key." });
+      return;
+    }
+    const signer = ethers.verifyMessage(message, signature);
+    if (signer.toLowerCase() !== wallet.toLowerCase()) {
+      res.status(401).json({ error: "Wallet signature does not match the connected wallet." });
+      return;
+    }
+    const record = await revokeIntegrationKeyForWallet(req.params.id, wallet);
+    if (!record) {
+      res.status(404).json({ error: "Key not found for the connected wallet." });
+      return;
+    }
+    res.json(record);
+  } catch (error) {
+    next(error);
+  }
+});
+
+function dashboardActionMessage(action: string, wallet: string, targetId: string) {
+  return [
+    "ZeroScout API dashboard",
+    `Action: ${action}`,
+    `Wallet: ${wallet.toLowerCase()}`,
+    `Target: ${targetId}`
+  ].join("\n");
+}
 
 app.post("/api/dashboard/topups/verify", async (req, res, next) => {
   try {

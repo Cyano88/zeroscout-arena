@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { parseEther, toBeHex } from "ethers";
-import { CheckCircle2, Copy, KeyRound, Loader2, LogOut, Wallet, Zap } from "lucide-react";
+import { CheckCircle2, Copy, KeyRound, Loader2, LogOut, RefreshCw, Trash2, Wallet, Zap } from "lucide-react";
 import { api } from "../api";
 import type { IntegrationKeyRecord } from "../../../shared/types";
 
@@ -16,14 +16,17 @@ export function DashboardPage() {
   const [keyName, setKeyName] = useState("production");
   const [partner, setPartner] = useState("My platform");
   const [newKey, setNewKey] = useState("");
+  const [rememberedKeys, setRememberedKeys] = useState<Record<string, string>>({});
   const [amountOg, setAmountOg] = useState("1");
   const [txHash, setTxHash] = useState("");
   const [pendingTx, setPendingTx] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState("");
+  const [lastSyncedAt, setLastSyncedAt] = useState("");
 
   const totalCredits = useMemo(() => keys.reduce((sum, key) => sum + (key.creditBalance ?? 0), 0), [keys]);
   const totalUsed = useMemo(() => keys.reduce((sum, key) => sum + (key.creditsUsed ?? 0), 0), [keys]);
+  const usagePercent = balance.creditsPurchased > 0 ? Math.min(100, Math.round((totalUsed / balance.creditsPurchased) * 100)) : 0;
 
   useEffect(() => {
     api.integrationPricing().then(setPricing).catch((error) => setStatus(error.message));
@@ -31,15 +34,26 @@ export function DashboardPage() {
 
   useEffect(() => {
     if (!wallet) return;
-    refreshKeys(wallet);
+    refreshKeys(wallet, { silent: true });
+    setRememberedKeys(loadRememberedKeys(wallet));
     setPendingTx(localStorage.getItem(pendingTxKey(wallet)) ?? "");
   }, [wallet]);
 
-  async function refreshKeys(nextWallet = wallet) {
+  useEffect(() => {
+    if (!wallet) return;
+    const timer = window.setInterval(() => {
+      refreshKeys(wallet, { silent: true }).catch(() => undefined);
+    }, 12000);
+    return () => window.clearInterval(timer);
+  }, [wallet]);
+
+  async function refreshKeys(nextWallet = wallet, options: { silent?: boolean } = {}) {
     if (!nextWallet) return;
     const result = await api.dashboardKeys(nextWallet);
     setKeys(result.keys);
     setBalance(result.balance);
+    setLastSyncedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    if (!options.silent) setStatus("Dashboard refreshed.");
   }
 
   async function connectWallet() {
@@ -66,6 +80,8 @@ export function DashboardPage() {
     setBalance({ creditedOg: "0", creditsPurchased: 0, topUpCount: 0 });
     setPendingTx("");
     setNewKey("");
+    setRememberedKeys({});
+    setLastSyncedAt("");
     setStatus("Wallet disconnected.");
   }
 
@@ -76,8 +92,10 @@ export function DashboardPage() {
     try {
       const created = await api.createDashboardKey({ wallet, name: keyName, partner });
       setNewKey(created.key);
+      rememberKey(wallet, created.id, created.key);
+      setRememberedKeys((current) => ({ ...current, [created.id]: created.key }));
       await refreshKeys(wallet);
-      setStatus("Key created. Store it now; ZeroScout will not show the full key again.");
+      setStatus("Key created and saved on this device. Copy it into your backend env.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not create key.");
     } finally {
@@ -153,6 +171,32 @@ export function DashboardPage() {
     setStatus("Copied.");
   }
 
+  async function revokeKey(key: PublicKey) {
+    if (!wallet || !window.confirm(`Revoke ${key.name}? This stops every platform using this key.`)) return;
+    const ethereum = walletProvider();
+    if (!ethereum) {
+      setStatus("Open this page in your wallet browser to revoke a key.");
+      return;
+    }
+    setLoading(`revoke:${key.id}`);
+    try {
+      const message = dashboardActionMessage("revoke-key", wallet, key.id);
+      const signature = String(await ethereum.request({
+        method: "personal_sign",
+        params: [message, wallet]
+      }));
+      await api.revokeDashboardKey(key.id, { wallet, message, signature });
+      forgetKey(wallet, key.id);
+      setRememberedKeys(loadRememberedKeys(wallet));
+      await refreshKeys(wallet, { silent: true });
+      setStatus(`${key.name} was revoked.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not revoke key.");
+    } finally {
+      setLoading("");
+    }
+  }
+
   async function refreshCredits() {
     if (!wallet) return connectWallet();
     setLoading("refresh");
@@ -170,6 +214,7 @@ export function DashboardPage() {
       const result = await api.syncTopUps(wallet);
       setKeys(result.keys);
       setBalance(result.balance);
+      setLastSyncedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       if (result.credited.length > 0) {
         const credits = result.credited.reduce((sum, item) => sum + item.credits, 0);
         setStatus(`Found ${result.credited.length} confirmed top-up and added ${credits} credits.`);
@@ -188,14 +233,14 @@ export function DashboardPage() {
       <header className="page-heading compact-heading">
         <span className="eyebrow">API Dashboard</span>
         <h1>Fund a key, call 0G through ZeroScout</h1>
-        <p>Create a capped server key for Project Passports and video scoring. ZeroScout handles the 0G Storage and 0G Compute calls behind your platform.</p>
+        <p>Create one capped server key for Project Passports and video scoring. Your app keeps its own user experience while ZeroScout handles 0G Storage and 0G Compute.</p>
       </header>
 
       <section className="dashboard-hero surface">
         <div>
           <span className="status-tag"><Zap size={12} /> Credit gateway</span>
           <h2>{wallet ? short(wallet) : "Connect wallet"}</h2>
-          <p>Your wallet owns the keys. Credits limit usage, so a platform can call ZeroScout without exposing your account or running unlimited 0G work.</p>
+          <p>Your wallet owns the keys. Credits cap usage, and every platform call spends from the key balance.</p>
         </div>
         <div className="wallet-actions">
           <button className="btn btn-primary" type="button" onClick={connectWallet} disabled={loading === "wallet"}>
@@ -213,18 +258,21 @@ export function DashboardPage() {
       <section className="balance-board surface">
         <div className="balance-primary">
           <div className="balance-label-row">
-            <span>Available credits</span>
+            <span><i className="live-dot" /> Live credits</span>
             <button className="btn btn-ghost btn-sm" type="button" onClick={refreshCredits} disabled={loading === "refresh"}>
-              {loading === "refresh" ? <Loader2 size={13} className="spin" /> : <CheckCircle2 size={13} />}
-              Refresh
+              {loading === "refresh" ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}
+              Sync
             </button>
           </div>
           <strong>{totalCredits}</strong>
-          <p>{balance.creditedOg} OG credited across {balance.topUpCount} confirmed top-up{balance.topUpCount === 1 ? "" : "s"}.</p>
+          <p>{totalUsed} used from {balance.creditsPurchased} purchased credits. {lastSyncedAt ? `Last sync ${lastSyncedAt}.` : ""}</p>
+          <div className="credit-meter" aria-label={`${usagePercent}% of purchased credits used`}>
+            <span style={{ width: `${usagePercent}%` }} />
+          </div>
           {pendingTx && <p className="pending-note">One submitted transfer is waiting for confirmation.</p>}
         </div>
         <div className="balance-secondary">
-          <Metric label="Credits used" value={String(totalUsed)} />
+          <Metric label="Credited OG" value={balance.creditedOg} />
           <Metric label="Passport API" value={`${pricing?.costs.capsule ?? 5} cr`} />
           <Metric label="Video review" value={`${pricing?.costs.videoScore ?? 20} cr`} />
         </div>
@@ -251,9 +299,10 @@ export function DashboardPage() {
 
           {newKey && (
             <div className="secret-box">
-              <span>Shown once</span>
+              <span>Saved on this device</span>
               <code>{newKey}</code>
               <button className="btn btn-ghost btn-sm" type="button" onClick={() => copy(newKey)}>Copy key</button>
+              <p>ZeroScout stores only a hash on the server. Recopy works here because this browser saved the key locally.</p>
             </div>
           )}
         </div>
@@ -278,10 +327,6 @@ export function DashboardPage() {
             {loading === "fund" ? <Loader2 size={14} className="spin" /> : <Wallet size={14} />}
             Fund credits
           </button>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={refreshCredits} disabled={loading === "refresh"}>
-            {loading === "refresh" ? <Loader2 size={14} className="spin" /> : <CheckCircle2 size={14} />}
-            Refresh credits
-          </button>
           <details className="recovery-box">
             <summary>Recover a sent transfer</summary>
             <p className="muted-copy">Use this only if the wallet closed or the page refreshed after payment.</p>
@@ -300,7 +345,7 @@ export function DashboardPage() {
       <section className="surface key-table">
         <div className="panel-head">
           <span className="eyebrow">Keys</span>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={refreshCredits}>Refresh credits</button>
+          <span className="table-note">{keys.length} total</span>
         </div>
         {keys.length === 0 ? (
           <p className="muted-copy">No keys yet. Create a key, fund it with credits, then use it from your backend.</p>
@@ -320,6 +365,21 @@ export function DashboardPage() {
                 <span>requests</span>
               </div>
               <span className={key.revokedAt ? "pill danger" : "pill"}>{key.revokedAt ? "Revoked" : "Active"}</span>
+              <div className="key-actions">
+                {rememberedKeys[key.id] ? (
+                  <button className="btn btn-ghost btn-sm" type="button" onClick={() => copy(rememberedKeys[key.id])}>
+                    <Copy size={13} /> Copy
+                  </button>
+                ) : (
+                  <span className="local-only">Create a new key if the full value was lost.</span>
+                )}
+                {!key.revokedAt && (
+                  <button className="btn btn-ghost btn-sm danger-action" type="button" onClick={() => revokeKey(key)} disabled={loading === `revoke:${key.id}`}>
+                    {loading === `revoke:${key.id}` ? <Loader2 size={13} className="spin" /> : <Trash2 size={13} />}
+                    Revoke
+                  </button>
+                )}
+              </div>
             </div>
           ))
         )}
@@ -329,25 +389,30 @@ export function DashboardPage() {
         <span className="eyebrow">Use the key</span>
         <div className="integration-guide">
           <div>
-            <h2>1. Put this on your backend</h2>
+            <h2>1. Store these on your backend</h2>
             <pre>{`ZEROSCOUT_API_URL=${API_ORIGIN}
 ZEROSCOUT_INTEGRATION_SECRET=zs_live_key_from_this_dashboard`}</pre>
+            <p>Use the full key you copied above. Do not use the preview shown in the key list.</p>
           </div>
           <div>
-            <h2>2. Send the key only from your server</h2>
-            <p>Never place the key in browser JavaScript, public env vars, or an iframe URL. Your backend sends it as a bearer token.</p>
+            <h2>2. Call ZeroScout from your server</h2>
+            <p>The key must stay private. Never put it in browser JavaScript, a public Vercel variable, an iframe URL, or a mobile app bundle.</p>
             <pre>{`Authorization: Bearer $ZEROSCOUT_INTEGRATION_SECRET`}</pre>
           </div>
           <div>
-            <h2>3. Pick the endpoint you need</h2>
-            <p><b>Video scoring</b> is for platforms like Grail that already have their own user flow and want ZeroScout to store/review an uploaded video.</p>
+            <h2>3. Choose one endpoint</h2>
+            <p><b>Video scoring</b> is for platforms that already collect videos and need 0G-backed AI review.</p>
             <pre>{`POST /api/integrations/video-score
 multipart: video, platform, program, projectName, prompt
 cost: ${pricing?.costs.videoScore ?? 20} credits`}</pre>
-            <p><b>Passport creation</b> is for platforms that already collect builder data and want ZeroScout to create a 0G-backed Project Passport.</p>
+            <p><b>Passport creation</b> is for platforms that already collect project details and want a stored Project Passport.</p>
             <pre>{`POST /api/integrations/capsules
 json: projectName, teamName, repoUrl, demoUrl, description, ogUsageClaims...
 cost: ${pricing?.costs.capsule ?? 5} credits`}</pre>
+          </div>
+          <div>
+            <h2>4. Read the response</h2>
+            <p>Successful calls return the generated analysis plus 0G proof fields such as root, content hash, storage transaction, and the credits left on the key when available. If credits run out, top up here and the same key can continue working.</p>
           </div>
         </div>
       </section>
@@ -372,6 +437,39 @@ function short(value: string) {
 
 function pendingTxKey(wallet: string) {
   return `zeroscout-pending-topup-${wallet.toLowerCase()}`;
+}
+
+function dashboardActionMessage(action: string, wallet: string, targetId: string) {
+  return [
+    "ZeroScout API dashboard",
+    `Action: ${action}`,
+    `Wallet: ${wallet.toLowerCase()}`,
+    `Target: ${targetId}`
+  ].join("\n");
+}
+
+function rememberedKeysKey(wallet: string) {
+  return `zeroscout-dashboard-keys-${wallet.toLowerCase()}`;
+}
+
+function loadRememberedKeys(wallet: string): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(rememberedKeysKey(wallet));
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function rememberKey(wallet: string, id: string, key: string) {
+  const next = { ...loadRememberedKeys(wallet), [id]: key };
+  localStorage.setItem(rememberedKeysKey(wallet), JSON.stringify(next));
+}
+
+function forgetKey(wallet: string, id: string) {
+  const next = loadRememberedKeys(wallet);
+  delete next[id];
+  localStorage.setItem(rememberedKeysKey(wallet), JSON.stringify(next));
 }
 
 function addDecimal(left: string, right: string) {

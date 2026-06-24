@@ -277,6 +277,16 @@ export async function revokeIntegrationKey(id: string): Promise<Omit<Integration
   return publicIntegrationKey(target);
 }
 
+export async function revokeIntegrationKeyForWallet(id: string, wallet: string): Promise<Omit<IntegrationKeyRecord, "keyHash"> | undefined> {
+  const ownerWallet = wallet.toLowerCase();
+  const store = await readStore();
+  const target = (store.integrationKeys ?? []).find((item) => item.id === id && item.ownerWallet?.toLowerCase() === ownerWallet);
+  if (!target) return undefined;
+  target.revokedAt = target.revokedAt ?? new Date().toISOString();
+  await writeStore(store);
+  return publicIntegrationKey(target);
+}
+
 function publicIntegrationKey(record: IntegrationKeyRecord): Omit<IntegrationKeyRecord, "keyHash"> {
   const { keyHash: _keyHash, ...publicRecord } = record;
   return {
