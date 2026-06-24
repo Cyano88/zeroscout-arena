@@ -7,7 +7,7 @@ export const capsuleInputSchema = z.object({
   tagline: z.string().min(4).max(140),
   repoUrl: z.string().url(),
   demoUrl: z.string().url(),
-  videoDemoUrl: z.string().url().optional(),
+  videoDemoUrl: z.string().url().refine(isSupportedVideoUrl, "Video walkthrough URL must be a YouTube or Loom link.").optional(),
   creatorWallet: z.string().optional(),
   round: z.enum(rounds),
   description: z.string().min(20).max(4000),
@@ -34,3 +34,12 @@ export const matchupInputSchema = z.object({
   capsuleAId: z.string().min(3),
   capsuleBId: z.string().min(3)
 });
+
+function isSupportedVideoUrl(value: string): boolean {
+  try {
+    const host = new URL(value).hostname.replace(/^www\./, "").toLowerCase();
+    return host === "youtube.com" || host === "youtu.be" || host === "loom.com";
+  } catch {
+    return false;
+  }
+}

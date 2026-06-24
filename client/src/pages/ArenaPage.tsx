@@ -200,7 +200,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
               <Field label="Live demo URL" type="url" value={form.demoUrl} onChange={(v) => setForm({ ...form, demoUrl: v })} placeholder="https://..." required />
             </div>
 
-            <Field label="Video walkthrough URL" type="url" value={form.videoDemoUrl ?? ""} onChange={(v) => setForm({ ...form, videoDemoUrl: v || undefined })} placeholder="YouTube, Loom, Drive, or hosted MP4 link" />
+            <Field label="Video walkthrough URL" type="url" value={form.videoDemoUrl ?? ""} onChange={(v) => setForm({ ...form, videoDemoUrl: v || undefined })} placeholder="YouTube or Loom link" />
 
             <div className="field">
               <label>Checkpoint</label>
