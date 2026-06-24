@@ -64,12 +64,14 @@ export async function getRegistryClaim(id: string): Promise<ProjectOwnershipClai
   const logs = (
     await Promise.all(contracts.map(async (address) => {
       const contract = new ethers.Contract(address, registryAbi, provider);
-      const filter = contract.filters.ProjectClaimed(id);
+      const filter = contract.filters.ProjectClaimed();
       return queryLogsInBatches(contract, filter, fromBlock, latest);
     }))
   ).flat();
 
-  const latestLog = logs.sort((a, b) => b.blockNumber - a.blockNumber || b.index - a.index)[0];
+  const latestLog = logs
+    .filter((log) => registryInterface.parseLog(log)?.args.id === id)
+    .sort((a, b) => b.blockNumber - a.blockNumber || b.index - a.index)[0];
   if (!latestLog) return undefined;
 
   const parsed = registryInterface.parseLog(latestLog);
