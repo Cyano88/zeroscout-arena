@@ -37,7 +37,7 @@ The AI output is stored inside the 0G-backed Project Passport.
 - Project comparison reports are uploaded to 0G Storage.
 - Public passport roots can be registered on 0G Chain through `ZeroScoutRegistry`, giving the app a rebuildable public index from chain events.
 - The app records storage root, content hash, network, timestamp, and transaction hash when available.
-- The local JSON index is only a cache for discovery and routing.
+- Production metadata uses Railway Postgres when `DATABASE_URL` is set. Local development falls back to `server/data/index.json`.
 - 0G Compute Router is preferred for AI generation when `ZG_COMPUTE_API_KEY` is configured.
 
 Mainnet defaults:
@@ -154,9 +154,12 @@ Video scoring API call: 20 credits
 Production env:
 
 ```txt
+DATABASE_URL=postgresql://...
 ZEROSCOUT_TREASURY_ADDRESS=0x...
 ZEROSCOUT_CREDITS_PER_OG=100
 ```
+
+`DATABASE_URL` is required for durable API keys, credits, top-ups, usage, and indexed Project Passports on Railway. The server still stores only hashed API keys; full secrets are shown once and can be rotated if lost.
 
 Integration choice:
 

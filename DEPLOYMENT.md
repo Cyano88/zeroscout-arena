@@ -6,18 +6,20 @@ Railway is the primary ZeroScout deployment. Express serves both the API and the
 
 1. Create a Railway project.
 2. Connect this repo.
-3. Railway uses `railway.json`. The build command builds the client and server, and Express serves the React app:
+3. Add a Railway Postgres database to the same project. Railway injects `DATABASE_URL`; ZeroScout uses it for durable API keys, credits, top-ups, usage, and Project Passport indexes.
+4. Railway uses `railway.json`. The build command builds the client and server, and Express serves the React app:
 
 ```bash
 npm install && npm run build
 npm run start
 ```
 
-4. Add environment variables:
+5. Add environment variables:
 
 ```env
 PORT=8787
 CORS_ORIGIN=*
+DATABASE_URL=${{Postgres.DATABASE_URL}}
 ZG_NETWORK=mainnet
 ZG_RPC_URL=https://evmrpc.0g.ai
 ZG_STORAGE_INDEXER=https://indexer-storage-turbo.0g.ai
@@ -33,7 +35,7 @@ ZG_COMPUTE_MODEL=zai-org/GLM-5-FP8
 DEV_STORAGE_FALLBACK=false
 ```
 
-Never expose `ZG_PRIVATE_KEY` or AI keys in the frontend.
+Never expose `ZG_PRIVATE_KEY`, `ZG_COMPUTE_API_KEY`, `DATABASE_URL`, or generated `zs_live...` API keys in the frontend.
 
 Deploy the registry contract once before setting registry env vars:
 

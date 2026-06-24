@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import pg from "pg";
 import { config } from "./config.js";
 import type { CapsuleIndexRecord, ClaimStartResponse, IntegrationKeyRecord, IntegrationTopUpRecord, MatchupReport, ProjectCapsule } from "../../shared/types.js";
 import { findCampaignPreset } from "../../shared/campaigns.js";
@@ -20,6 +21,12 @@ interface PendingClaim extends ClaimStartResponse {
 }
 
 const storePath = path.join(process.cwd(), config.dataDir, "index.json");
+const pgPool = config.databaseUrl
+  ? new pg.Pool({
+    connectionString: config.databaseUrl,
+    ssl: config.databaseUrl.includes("railway.internal") ? false : { rejectUnauthorized: false }
+  })
+  : undefined;
 
 const emptyStore: StoreFile = {
   capsules: [],
@@ -31,6 +38,20 @@ const emptyStore: StoreFile = {
 };
 
 async function ensureStore(): Promise<void> {
+  if (pgPool) {
+    await pgPool.query(`
+      create table if not exists app_store (
+        id text primary key,
+        data jsonb not null,
+        updated_at timestamptz not null default now()
+      )
+    `);
+    await pgPool.query(
+      "insert into app_store (id, data) values ($1, $2::jsonb) on conflict (id) do nothing",
+      ["main", JSON.stringify(emptyStore)]
+    );
+    return;
+  }
   await mkdir(path.dirname(storePath), { recursive: true });
   try {
     await readFile(storePath, "utf8");
@@ -41,12 +62,35 @@ async function ensureStore(): Promise<void> {
 
 async function readStore(): Promise<StoreFile> {
   await ensureStore();
+  if (pgPool) {
+    const result = await pgPool.query<{ data: StoreFile }>("select data from app_store where id = $1", ["main"]);
+    return normalizeStore(result.rows[0]?.data ?? emptyStore);
+  }
   const raw = await readFile(storePath, "utf8");
-  return JSON.parse(raw) as StoreFile;
+  return normalizeStore(JSON.parse(raw) as StoreFile);
 }
 
 async function writeStore(store: StoreFile): Promise<void> {
+  if (pgPool) {
+    await ensureStore();
+    await pgPool.query(
+      "update app_store set data = $2::jsonb, updated_at = now() where id = $1",
+      ["main", JSON.stringify(normalizeStore(store))]
+    );
+    return;
+  }
   await writeFile(storePath, JSON.stringify(store, null, 2));
+}
+
+function normalizeStore(store: StoreFile): StoreFile {
+  return {
+    capsules: store.capsules ?? [],
+    capsuleBodies: store.capsuleBodies ?? {},
+    matchups: store.matchups ?? [],
+    pendingClaims: store.pendingClaims ?? {},
+    integrationKeys: store.integrationKeys ?? [],
+    integrationTopUps: store.integrationTopUps ?? []
+  };
 }
 
 export async function listCapsules(): Promise<CapsuleIndexRecord[]> {

@@ -39,6 +39,7 @@ export const config = {
   treasuryAddress: process.env.ZEROSCOUT_TREASURY_ADDRESS,
   creditsPerOg: Number(process.env.ZEROSCOUT_CREDITS_PER_OG ?? 100),
   topUpScanBlocks: Number(process.env.ZEROSCOUT_TOPUP_SCAN_BLOCKS ?? 1500),
+  databaseUrl: process.env.DATABASE_URL,
   openAiApiKey: process.env.OPENAI_API_KEY,
   openAiBaseUrl: process.env.OPENAI_BASE_URL,
   openAiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
