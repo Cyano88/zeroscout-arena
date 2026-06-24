@@ -34,15 +34,8 @@ export function EmbedPage() {
       {tab === "compare" && <MatchupPage campaignId={campaignId} compact />}
       {tab === "verify" && <DocsPage compact programName={campaign?.name ?? "this program"} />}
       <footer className="embed-footer">
-        <div>
-          <span>Powered by</span>
-          <strong>ZeroScout</strong>
-        </div>
-        <nav aria-label="Program actions">
-          <button type="button" onClick={() => setTab("verify")}>Verify</button>
-          <button type="button" onClick={() => setTab("compare")}>Compare</button>
-          <button type="button" onClick={() => setTab("create")}>Create</button>
-        </nav>
+        <span>Powered by</span>
+        <strong>ZeroScout</strong>
       </footer>
     </main>
   );

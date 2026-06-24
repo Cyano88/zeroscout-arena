@@ -81,17 +81,8 @@ function App() {
 function SiteFooter() {
   return (
     <footer className="site-footer">
-      <div>
-        <span>Powered by</span>
-        <strong>0G Labs</strong>
-      </div>
-      <nav aria-label="Footer navigation">
-        <NavLink to="/verify">Verify</NavLink>
-        <NavLink to="/dashboard">API</NavLink>
-        <NavLink to="/integrate">Integrate</NavLink>
-        <NavLink to="/compare">Compare</NavLink>
-        <NavLink to="/projects">Projects</NavLink>
-      </nav>
+      <span>Powered by</span>
+      <strong>0G Labs</strong>
     </footer>
   );
 }
