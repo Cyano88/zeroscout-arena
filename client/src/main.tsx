@@ -17,6 +17,7 @@ import "./styles.css";
 
 function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("zeroscout-theme") ?? "dark");
+  const isEmbed = window.location.pathname.startsWith("/embed/");
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -32,7 +33,7 @@ function App() {
   return (
     <BrowserRouter>
       <div className="app-shell">
-        <header className="topbar">
+        {!isEmbed && <header className="topbar">
           <NavLink to="/" className="brand">
             <span className="brand-mark" aria-hidden="true" />
             <span>ZeroScout</span>
@@ -54,7 +55,7 @@ function App() {
           >
             {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
           </button>
-        </header>
+        </header>}
         <Routes>
           <Route path="/" element={<ArenaPage />} />
           <Route path="/projects/:id" element={<CapsulePage />} />

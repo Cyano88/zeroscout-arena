@@ -11,7 +11,7 @@ type State =
   | { kind: "ready"; report: MatchupReport }
   | { kind: "error"; message: string };
 
-export function MatchupPage() {
+export function MatchupPage({ campaignId, compact = false }: { campaignId?: string; compact?: boolean } = {}) {
   const [capsules, setCapsules] = useState<CapsuleIndexRecord[]>([]);
   const [a, setA] = useState("");
   const [b, setB] = useState("");
@@ -19,11 +19,12 @@ export function MatchupPage() {
 
   useEffect(() => {
     void api.projects().then((items) => {
-      setCapsules(items);
-      setA(items[0]?.id ?? "");
-      setB(items[1]?.id ?? "");
+      const scoped = campaignId ? items.filter((item) => item.campaignId === campaignId) : items;
+      setCapsules(scoped);
+      setA(scoped[0]?.id ?? "");
+      setB(scoped[1]?.id ?? "");
     }).catch(() => undefined);
-  }, []);
+  }, [campaignId]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -43,11 +44,11 @@ export function MatchupPage() {
     : state.kind === "loading" ? "active" : "pending";
 
   return (
-    <main className="page-narrow section-stack">
+    <main className={compact ? "embed-page section-stack" : "page-narrow section-stack"}>
       <header className="page-heading">
         <span className="eyebrow">Compare</span>
-        <h1>Compare two Project Passports</h1>
-        <p>Pick live projects already on ZeroScout. If a project is missing, create a quick Project Passport first, then compare proof clarity, demo strength, public story, and next move.</p>
+        <h1>{campaignId ? "Compare projects in this program" : "Compare two Project Passports"}</h1>
+        <p>{campaignId ? "Pick two public passports from this program and get a neutral read on proof clarity, demo strength, public story, and next move." : "Pick live projects already on ZeroScout. If a project is missing, create a quick Project Passport first, then compare proof clarity, demo strength, public story, and next move."}</p>
       </header>
 
       <section className="surface surface-pad">
@@ -70,6 +71,7 @@ export function MatchupPage() {
             {state.kind === "loading" ? "Comparing..." : "Compare"}
           </button>
         </form>
+        {capsules.length < 2 && <p className="muted-copy" style={{ marginTop: 14 }}>Create at least two public Project Passports in this program to compare them.</p>}
         {state.kind === "error" && <div className="error-banner" style={{ marginTop: 14 }}>{state.message}</div>}
       </section>
 

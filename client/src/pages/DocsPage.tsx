@@ -1,18 +1,18 @@
-export function DocsPage() {
+export function DocsPage({ compact = false, programName }: { compact?: boolean; programName?: string } = {}) {
   return (
-    <main className="page-narrow">
+    <main className={compact ? "embed-page" : "page-narrow"}>
       <header className="page-heading">
         <span className="eyebrow">Verify</span>
-        <h1>How proof works</h1>
-        <p>ZeroScout turns a project into a verifiable Project Passport. The full record lives on 0G. The app only keeps a small index so pages load quickly.</p>
+        <h1>{programName ? "Verify builder progress" : "How proof works"}</h1>
+        <p>{programName ? `Use this inside ${programName} to check what a builder shipped, where the proof record lives, and whether the demo matches the claim.` : "ZeroScout turns a project into a verifiable Project Passport. The full record lives on 0G. The app only keeps a small index so pages load quickly."}</p>
       </header>
 
       <section className="surface surface-pad docs">
         <h2>What ZeroScout does</h2>
         <p>It takes a builder's repo, demo, and checkpoint notes and creates a public Project Passport. The page includes an AI Scout Signal, readiness signal, next steps, and ready-to-share copy.</p>
 
-        <h2>How programs plug in</h2>
-        <p>Organizations can use a hosted link today. Widget and API options are planned for platforms that need deeper integration later.</p>
+        <h2>How programs use it</h2>
+        <p>Builders publish checkpoint records. Mentors, sponsors, grant teams, and reviewers can inspect the public page instead of chasing scattered links.</p>
 
         <h2>How intelligence is generated</h2>
         <p>The backend asks 0G Compute Router to draft the brief, signal, risks, and share copy. If the router is unavailable, a clearly labelled fallback provider is used and recorded in the artifact.</p>

@@ -991,15 +991,44 @@ input:focus, textarea:focus, select:focus {
   background: var(--surface);
 }
 .embed-head span {
+  display: block;
   color: var(--muted);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
 }
 .embed-head b { font-size: 13px; }
-.embed-shell .page {
+.embed-shell .page,
+.embed-page {
   padding-top: 28px;
   padding-bottom: 32px;
+}
+.embed-page {
+  max-width: 920px;
+  margin: 0 auto;
+  padding-inline: 18px;
+}
+.embed-tabs {
+  display: inline-flex;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px;
+  background: var(--bg);
+}
+.embed-tabs button {
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.embed-tabs button.active {
+  background: var(--text);
+  color: var(--bg);
 }
 
 /* === Integrations page === */
