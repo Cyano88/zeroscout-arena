@@ -76,7 +76,7 @@ export function DashboardPage() {
     setStatus("");
     setLoading("topup");
     try {
-      const result = await api.verifyTopUp({ wallet, txHash });
+      const result = await pollTopUpVerification(wallet, txHash, (message) => setStatus(message));
       setKeys(result.keys);
       setTxHash("");
       setStatus(`Top-up confirmed: ${result.amountOg} OG added ${result.credits} credits.`);
@@ -115,8 +115,11 @@ export function DashboardPage() {
           value: toBeHex(parseEther(amountOg || "0"))
         }]
       });
-      const result = await api.verifyTopUp({ wallet, txHash: String(hash) });
+      setTxHash(String(hash));
+      setStatus("Transaction sent. Waiting for 0G Chain confirmation...");
+      const result = await pollTopUpVerification(wallet, String(hash), (message) => setStatus(message));
       setKeys(result.keys);
+      setTxHash("");
       setStatus(`Credits funded: ${result.amountOg} OG added ${result.credits} credits.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Credit funding failed.");
@@ -207,6 +210,7 @@ export function DashboardPage() {
           </button>
           <details className="recovery-box">
             <summary>Already sent OG?</summary>
+            <p className="muted-copy">Use this only if the wallet closed, the page refreshed, or confirmation took longer than expected.</p>
             <label>
               Transaction hash
               <input value={txHash} onChange={(event) => setTxHash(event.target.value)} placeholder="0x..." />
@@ -294,4 +298,23 @@ function short(value: string) {
 
 function walletProvider() {
   return (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+}
+
+async function pollTopUpVerification(wallet: string, txHash: string, onStatus: (message: string) => void) {
+  let lastError = "";
+  for (let attempt = 1; attempt <= 18; attempt += 1) {
+    try {
+      return await api.verifyTopUp({ wallet, txHash });
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Could not verify top-up.";
+      if (!lastError.toLowerCase().includes("not confirmed")) throw error;
+      onStatus(`Transaction submitted. Waiting for confirmation... ${attempt}/18`);
+      await delay(5000);
+    }
+  }
+  throw new Error(`${lastError} Try again from "Already sent OG?" in a minute.`);
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
