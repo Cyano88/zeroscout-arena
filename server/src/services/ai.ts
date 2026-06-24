@@ -32,23 +32,16 @@ export async function generateScout(input: ProjectCapsuleInput, previous?: Proje
 
   if (ai) {
     try {
-      const response = await ai.client.chat.completions.create({
-        model: ai.model,
-        temperature: 0.35,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are ZeroScout, a neutral AI scouting agent for the 0G Zero Cup. Return strict JSON only. Use 'AI Scout Signal' language, never official judging language."
-          },
-          { role: "user", content: prompt }
-        ]
-      });
-
-      const content = response.choices[0]?.message?.content;
+      const content = await completeJson(ai, [
+        {
+          role: "system",
+          content:
+            "You are ZeroScout, a neutral AI scouting agent for the 0G Zero Cup. Return strict JSON only. Use 'AI Scout Signal' language, never official judging language."
+        },
+        { role: "user", content: prompt }
+      ]);
       if (content) {
-        return normalizeScout(JSON.parse(content), ai.label, input, previous);
+        return normalizeScout(parseJsonObject(content), ai.label, input, previous);
       }
     } catch (error) {
       console.warn("AI provider failed, using deterministic scout fallback:", error);
@@ -69,18 +62,12 @@ Return JSON with keys summary, strongerProof, clearerDemo, strongerPublicVoteCas
 
   if (ai) {
     try {
-      const response = await ai.client.chat.completions.create({
-        model: ai.model,
-        temperature: 0.35,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: "Return strict JSON only. This is an AI scouting signal, not official judging." },
-          { role: "user", content: prompt }
-        ]
-      });
-      const content = response.choices[0]?.message?.content;
+      const content = await completeJson(ai, [
+        { role: "system", content: "Return strict JSON only. This is an AI scouting signal, not official judging." },
+        { role: "user", content: prompt }
+      ]);
       if (content) {
-          const parsed = JSON.parse(content) as Partial<MatchupResult>;
+          const parsed = parseJsonObject(content) as Partial<MatchupResult>;
         return {
           aiProvider: ai.label,
           summary: text(parsed.summary, `${a.projectName} and ${b.projectName} show different strengths for their next campaign checkpoint.`),
@@ -129,6 +116,47 @@ function getAiClient(): { client: OpenAI; model: string; label: string } | undef
   }
 
   return undefined;
+}
+
+async function completeJson(ai: { client: OpenAI; model: string }, messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): Promise<string | undefined> {
+  try {
+    const response = await ai.client.chat.completions.create({
+      model: ai.model,
+      temperature: 0.35,
+      response_format: { type: "json_object" },
+      messages
+    });
+    return response.choices[0]?.message?.content ?? undefined;
+  } catch (firstError) {
+    const response = await ai.client.chat.completions.create({
+      model: ai.model,
+      temperature: 0.35,
+      messages: [
+        ...messages,
+        {
+          role: "user",
+          content: "Important: return only valid JSON. Do not wrap it in Markdown."
+        }
+      ]
+    });
+    const content = response.choices[0]?.message?.content ?? undefined;
+    if (!content) throw firstError;
+    return content;
+  }
+}
+
+function parseJsonObject(content: string): Record<string, unknown> {
+  const trimmed = content.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+  try {
+    return JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(trimmed.slice(start, end + 1)) as Record<string, unknown>;
+    }
+    throw new Error("AI provider returned non-JSON content");
+  }
 }
 
 function scoutPrompt(input: ProjectCapsuleInput, previous?: ProjectCapsule): string {
