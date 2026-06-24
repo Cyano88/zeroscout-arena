@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import type { CapsuleIndexRecord, ProjectCapsule } from "../../../shared/types.js";
 import { loadCanonicalArtifact } from "./storage.js";
 import { findCampaignPreset } from "../../../shared/campaigns.js";
+import { projectKeyFor } from "./project-key.js";
 
 const registryAbi = [
   "event PassportRegistered(string id, bytes32 indexed root, bytes32 capsuleHash, bytes32 storageTxHash, string campaignId, bool isPublic, uint256 createdAt)",
@@ -80,6 +81,8 @@ async function loadRegistryRecord(id: string, root: string, tx: string): Promise
   const campaign = findCampaignPreset(artifact.campaignId);
   return {
     id,
+    projectKey: artifact.projectKey ?? projectKeyFor(artifact.campaignId, artifact.repoUrl ?? root),
+    ownership: artifact.ownership,
     projectName: artifact.projectName ?? "Untitled project",
     teamName: artifact.teamName ?? "Unknown builder",
     tagline: artifact.tagline ?? "",

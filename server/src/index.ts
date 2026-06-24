@@ -4,11 +4,12 @@ import { nanoid } from "nanoid";
 import path from "node:path";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { getCapsule, listMatchups, listPublicCapsules, saveCapsule, saveMatchup } from "./repository.js";
+import { clearPendingClaim, getCapsule, getPendingClaim, listMatchups, listPublicCapsules, saveCapsule, saveMatchup, savePendingClaim } from "./repository.js";
 import { generateMatchup, generateScout } from "./services/ai.js";
 import { loadCanonicalArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { listRegistryCapsules, registerPassportOnChain } from "./services/registry.js";
-import type { HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
+import { parseGitHubRepo, projectKeyFor } from "./services/project-key.js";
+import type { ClaimStartResponse, HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
 import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
 
 const app = express();
@@ -121,6 +122,105 @@ app.post("/api/projects", async (req, res, next) => {
   }
 });
 
+app.post("/api/capsules/:id/claim/start", async (req, res, next) => {
+  try {
+    const capsule = await getCapsule(req.params.id);
+    if (!capsule) {
+      res.status(404).json({ error: "Project Passport not found." });
+      return;
+    }
+    if (capsule.ownership?.status === "claimed") {
+      res.status(409).json({ error: "This project is already claimed." });
+      return;
+    }
+
+    const repo = parseGitHubRepo(capsule.repoUrl);
+    if (!repo) {
+      res.status(400).json({ error: "Repo file proof currently supports GitHub repository URLs only." });
+      return;
+    }
+
+    const claimCode = `zs_${nanoid(12)}`;
+    const expectedContent = claimFileContent(capsule, claimCode);
+    const response: ClaimStartResponse = {
+      claimCode,
+      expectedPath: ".well-known/zeroscout.txt",
+      expectedContent,
+      rawUrls: rawClaimUrls(repo.owner, repo.repo)
+    };
+
+    await savePendingClaim({
+      ...response,
+      capsuleId: capsule.id,
+      createdAt: new Date().toISOString()
+    });
+
+    res.json(response);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/capsules/:id/claim/verify", async (req, res, next) => {
+  try {
+    const capsule = await getCapsule(req.params.id);
+    if (!capsule) {
+      res.status(404).json({ error: "Project Passport not found." });
+      return;
+    }
+    if (capsule.ownership?.status === "claimed") {
+      res.status(409).json({ error: "This project is already claimed." });
+      return;
+    }
+
+    const pending = await getPendingClaim(capsule.id);
+    if (!pending) {
+      res.status(400).json({ error: "Start a claim first so ZeroScout can generate a fresh verification file." });
+      return;
+    }
+
+    const verifiedUrl = await findVerifiedClaimFile(pending.rawUrls, pending.expectedContent);
+    if (!verifiedUrl) {
+      res.status(400).json({ error: "Verification file not found yet. Add .well-known/zeroscout.txt to the repo, then try again." });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const claimArtifact = {
+      artifactType: "zeroscout.ownership-claim",
+      artifactVersion: "1.0.0",
+      projectId: capsule.id,
+      projectKey: capsule.projectKey,
+      projectName: capsule.projectName,
+      repoUrl: capsule.repoUrl,
+      method: "repo-file",
+      verifiedUrl,
+      claimCode: pending.claimCode,
+      verifiedAt: now
+    };
+    const proof = await storeCanonicalArtifact("claim", capsule.id, claimArtifact);
+    const updated: ProjectCapsule = {
+      ...capsule,
+      ownership: {
+        status: "claimed",
+        method: "repo-file",
+        claimedBy: verifiedUrl,
+        claimRoot: proof.storageRoot,
+        claimHash: proof.capsuleHash,
+        claimTxHash: proof.storageTxHash,
+        verifiedAt: now
+      },
+      updatedAt: now
+    };
+
+    await saveCapsule(updated);
+    await clearPendingClaim(capsule.id);
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/integrations/capsules", async (req, res, next) => {
   try {
     const capsule = await createProjectCapsule(capsuleInputSchema.parse({ ...req.body, source: "api" }));
@@ -157,6 +257,7 @@ async function createProjectCapsule(parsed: ProjectCapsuleInput): Promise<Projec
   const scout = await generateScout(input, previous);
   const artifactWithoutProof = {
     id,
+    projectKey: projectKeyFor(campaign.id, input.repoUrl),
     ...input,
     ...scout,
     createdAt: now,
@@ -195,6 +296,7 @@ async function recoverCapsuleFromRoot(id: string, rootQuery: unknown, txQuery: u
 
   const capsule: ProjectCapsule = {
     ...(artifact as ProjectCapsule),
+    projectKey: artifact.projectKey ?? projectKeyFor(artifact.campaignId, artifact.repoUrl ?? root),
     storageRoot: root,
     storageUri: `0g://${config.network}/${root}`,
     capsuleHash: downloaded.capsuleHash,
@@ -208,6 +310,34 @@ async function recoverCapsuleFromRoot(id: string, rootQuery: unknown, txQuery: u
   }
 
   return capsule;
+}
+
+function claimFileContent(capsule: ProjectCapsule, claimCode: string): string {
+  return [
+    `zeroscout-claim: ${claimCode}`,
+    `project-id: ${capsule.id}`,
+    `project-key: ${capsule.projectKey}`,
+    `repo: ${capsule.repoUrl}`
+  ].join("\n");
+}
+
+function rawClaimUrls(owner: string, repo: string): string[] {
+  return ["main", "master"].map((branch) => `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/.well-known/zeroscout.txt`);
+}
+
+async function findVerifiedClaimFile(urls: string[], expectedContent: string): Promise<string | undefined> {
+  const expected = normalizeClaimContent(expectedContent);
+  for (const url of urls) {
+    const response = await fetch(url, { headers: { "User-Agent": "ZeroScout-Arena" } }).catch(() => undefined);
+    if (!response?.ok) continue;
+    const text = await response.text();
+    if (normalizeClaimContent(text) === expected) return url;
+  }
+  return undefined;
+}
+
+function normalizeClaimContent(value: string): string {
+  return value.replace(/\r\n/g, "\n").trim();
 }
 
 app.get("/api/matchups", async (_req, res, next) => {

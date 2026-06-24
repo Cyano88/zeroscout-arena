@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Copy, Download, ExternalLink, GitBranch, Share2 } from "lucide-react";
-import type { ProjectCapsule } from "../../../shared/types";
+import { ArrowLeft, Check, Copy, Download, ExternalLink, GitBranch, Loader2, Share2 } from "lucide-react";
+import type { ClaimStartResponse, ProjectCapsule } from "../../../shared/types";
 import { api } from "../api";
 import { CopyButton, ProofLogo, ScoreStrip, TaskList, type ProofState } from "../components";
 import { explorerTxUrl, isRealProof, shortHash } from "../utils";
@@ -70,6 +70,8 @@ export function CapsulePage() {
         <ScoreStrip scores={capsule.scores} />
       </section>
 
+      <ClaimSection capsule={capsule} onClaimed={setCapsule} />
+
       <section className="surface section">
         <h2>What it does</h2>
         <p>{capsule.technicalSummary}</p>
@@ -122,6 +124,7 @@ export function CapsulePage() {
           <Row k="Content hash" value={capsule.capsuleHash} />
           <Row k="Transaction" value={capsule.storageTxHash ?? "-"} disabled={!capsule.storageTxHash} />
           <Row k="Registry tx" value={capsule.registryTxHash ?? "-"} disabled={!capsule.registryTxHash} />
+          <Row k="Ownership" value={capsule.ownership ? "Claimed by repo proof" : "Unclaimed"} disableCopy />
           <Row k="AI provider" value={capsule.aiProvider} disableCopy />
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
@@ -146,6 +149,80 @@ export function CapsulePage() {
         </div>
       </section>
     </main>
+  );
+}
+
+function ClaimSection({ capsule, onClaimed }: { capsule: ProjectCapsule; onClaimed: (capsule: ProjectCapsule) => void }) {
+  const [claim, setClaim] = useState<ClaimStartResponse | null>(null);
+  const [state, setState] = useState<"idle" | "starting" | "verifying">("idle");
+  const [error, setError] = useState("");
+
+  async function startClaim() {
+    setError("");
+    setState("starting");
+    try {
+      setClaim(await api.startClaim(capsule.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Claim setup failed");
+    } finally {
+      setState("idle");
+    }
+  }
+
+  async function verifyClaim() {
+    setError("");
+    setState("verifying");
+    try {
+      onClaimed(await api.verifyClaim(capsule.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Claim verification failed");
+    } finally {
+      setState("idle");
+    }
+  }
+
+  if (capsule.ownership) {
+    return (
+      <section className="surface section">
+        <h2>Ownership</h2>
+        <p>This project is claimed by repo proof. The claim proof is stored on 0G.</p>
+        <div className="record-rows" style={{ marginTop: 14 }}>
+          <Row k="Method" value="Repo file proof" disableCopy />
+          <Row k="Claim root" value={capsule.ownership.claimRoot} />
+          <Row k="Verified" value={new Date(capsule.ownership.verifiedAt).toLocaleString()} disableCopy />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="surface section">
+      <h2>Claim project</h2>
+      <p>Prove this repo is yours to publish official updates. Add one verification file to the repo. No script. No install.</p>
+      {!claim ? (
+        <button className="btn btn-primary btn-sm" type="button" onClick={startClaim} disabled={state === "starting"} style={{ width: "auto", marginTop: 14 }}>
+          {state === "starting" ? <Loader2 className="spin" size={13} /> : <Check size={13} />}
+          Claim project
+        </button>
+      ) : (
+        <div className="record-rows" style={{ marginTop: 14 }}>
+          <Row k="File path" value={claim.expectedPath} disableCopy />
+          <div className="record-row">
+            <span className="k">File content</span>
+            <span className="v" title={claim.expectedContent}>{claim.expectedContent.replace(/\n/g, " / ")}</span>
+            <CopyButton value={claim.expectedContent} />
+          </div>
+          <Row k="Checks" value={claim.rawUrls.join(" | ")} disableCopy />
+        </div>
+      )}
+      {claim && (
+        <button className="btn btn-primary btn-sm" type="button" onClick={verifyClaim} disabled={state === "verifying"} style={{ width: "auto", marginTop: 14 }}>
+          {state === "verifying" ? <Loader2 className="spin" size={13} /> : <Check size={13} />}
+          Verify repo file
+        </button>
+      )}
+      {error && <div className="error-banner" style={{ marginTop: 14 }}>{error}</div>}
+    </section>
   );
 }
 

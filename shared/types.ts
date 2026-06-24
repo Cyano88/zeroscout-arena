@@ -50,6 +50,23 @@ export interface SurvivalDelta {
   topPriorities: string[];
 }
 
+export interface ProjectOwnershipClaim {
+  status: "claimed";
+  method: "repo-file";
+  claimedBy: string;
+  claimRoot: string;
+  claimHash: string;
+  claimTxHash?: string;
+  verifiedAt: string;
+}
+
+export interface ClaimStartResponse {
+  claimCode: string;
+  expectedPath: string;
+  expectedContent: string;
+  rawUrls: string[];
+}
+
 export interface ProjectCapsuleInput {
   projectName: string;
   teamName: string;
@@ -80,6 +97,8 @@ export interface ProjectCapsuleInput {
 
 export interface ProjectCapsule extends ProjectCapsuleInput {
   id: string;
+  projectKey: string;
+  ownership?: ProjectOwnershipClaim;
   aiProvider: string;
   scoutBrief: string;
   technicalSummary: string;
@@ -102,6 +121,8 @@ export interface ProjectCapsule extends ProjectCapsuleInput {
 
 export interface CapsuleIndexRecord {
   id: string;
+  projectKey: string;
+  ownership?: ProjectOwnershipClaim;
   projectName: string;
   teamName: string;
   tagline: string;

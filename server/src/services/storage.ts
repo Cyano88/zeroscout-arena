@@ -14,7 +14,7 @@ export interface StorageResult {
   storageMode: "0g-mainnet" | "0g-testnet" | "local-dev-fallback";
 }
 
-export async function storeCanonicalArtifact(kind: "capsule" | "matchup", id: string, artifact: unknown): Promise<StorageResult> {
+export async function storeCanonicalArtifact(kind: "capsule" | "matchup" | "claim", id: string, artifact: unknown): Promise<StorageResult> {
   const canonicalJson = JSON.stringify(artifact, null, 2);
   const capsuleHash = sha256Hex(canonicalJson);
 

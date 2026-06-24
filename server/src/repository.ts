@@ -1,13 +1,20 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { config } from "./config.js";
-import type { CapsuleIndexRecord, MatchupReport, ProjectCapsule } from "../../shared/types.js";
+import type { CapsuleIndexRecord, ClaimStartResponse, MatchupReport, ProjectCapsule } from "../../shared/types.js";
 import { findCampaignPreset } from "../../shared/campaigns.js";
+import { projectKeyFor } from "./services/project-key.js";
 
 interface StoreFile {
   capsules: CapsuleIndexRecord[];
   capsuleBodies: Record<string, ProjectCapsule>;
   matchups: MatchupReport[];
+  pendingClaims?: Record<string, PendingClaim>;
+}
+
+interface PendingClaim extends ClaimStartResponse {
+  capsuleId: string;
+  createdAt: string;
 }
 
 const storePath = path.join(process.cwd(), config.dataDir, "index.json");
@@ -15,7 +22,8 @@ const storePath = path.join(process.cwd(), config.dataDir, "index.json");
 const emptyStore: StoreFile = {
   capsules: [],
   capsuleBodies: {},
-  matchups: []
+  matchups: [],
+  pendingClaims: {}
 };
 
 async function ensureStore(): Promise<void> {
@@ -69,6 +77,8 @@ export async function saveCapsule(capsule: ProjectCapsule): Promise<void> {
   const campaign = findCampaignPreset(normalized.campaignId);
   const record: CapsuleIndexRecord = {
     id: normalized.id,
+    projectKey: normalized.projectKey,
+    ownership: normalized.ownership,
     projectName: normalized.projectName,
     teamName: normalized.teamName,
     tagline: normalized.tagline,
@@ -85,6 +95,7 @@ export async function saveCapsule(capsule: ProjectCapsule): Promise<void> {
     storageUri: normalized.storageUri,
     capsuleHash: normalized.capsuleHash,
     storageTxHash: normalized.storageTxHash,
+    registryTxHash: normalized.registryTxHash,
     network: normalized.network,
     storageMode: normalized.storageMode,
     aiProvider: normalized.aiProvider,
@@ -108,10 +119,30 @@ export async function listMatchups(): Promise<MatchupReport[]> {
   return store.matchups.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+export async function savePendingClaim(claim: PendingClaim): Promise<void> {
+  const store = await readStore();
+  store.pendingClaims = store.pendingClaims ?? {};
+  store.pendingClaims[claim.capsuleId] = claim;
+  await writeStore(store);
+}
+
+export async function getPendingClaim(capsuleId: string): Promise<PendingClaim | undefined> {
+  const store = await readStore();
+  return store.pendingClaims?.[capsuleId];
+}
+
+export async function clearPendingClaim(capsuleId: string): Promise<void> {
+  const store = await readStore();
+  if (!store.pendingClaims) return;
+  delete store.pendingClaims[capsuleId];
+  await writeStore(store);
+}
+
 function withCampaignDefaults(record: CapsuleIndexRecord): CapsuleIndexRecord {
   const campaign = findCampaignPreset(record.campaignId);
   return {
     ...record,
+    projectKey: record.projectKey ?? projectKeyFor(record.campaignId, record.storageUri),
     campaignId: record.campaignId ?? campaign.id,
     campaignName: record.campaignName ?? campaign.name,
     campaignType: record.campaignType ?? campaign.type,
@@ -123,6 +154,7 @@ function withCapsuleCampaignDefaults(capsule: ProjectCapsule): ProjectCapsule {
   const campaign = findCampaignPreset(capsule.campaignId);
   return {
     ...capsule,
+    projectKey: capsule.projectKey ?? projectKeyFor(capsule.campaignId, capsule.repoUrl),
     campaignId: capsule.campaignId ?? campaign.id,
     campaignName: capsule.campaignName ?? campaign.name,
     campaignType: capsule.campaignType ?? campaign.type,

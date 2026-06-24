@@ -1,4 +1,4 @@
-import type { CampaignPreset, CapsuleIndexRecord, MatchupReport, ProjectCapsule, ProjectCapsuleInput, PublicConfig } from "../../shared/types";
+import type { CampaignPreset, CapsuleIndexRecord, ClaimStartResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput, PublicConfig } from "../../shared/types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -58,6 +58,10 @@ export const api = {
     request<ProjectCapsule>(`/api/capsules/${id}${proofQuery(root, tx)}`),
   createCapsule: (input: ProjectCapsuleInput) =>
     request<ProjectCapsule>("/api/capsules", { method: "POST", body: JSON.stringify(input) }),
+  startClaim: (id: string) =>
+    request<ClaimStartResponse>(`/api/capsules/${id}/claim/start`, { method: "POST" }),
+  verifyClaim: (id: string) =>
+    request<ProjectCapsule>(`/api/capsules/${id}/claim/verify`, { method: "POST" }),
   matchups: () => request<MatchupReport[]>("/api/matchups"),
   createMatchup: (capsuleAId: string, capsuleBId: string) =>
     request<MatchupReport>("/api/matchups", { method: "POST", body: JSON.stringify({ capsuleAId, capsuleBId }) })
