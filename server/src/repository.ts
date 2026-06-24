@@ -169,7 +169,24 @@ export async function listIntegrationKeysByWallet(wallet: string): Promise<Omit<
 
 export async function saveIntegrationKey(record: IntegrationKeyRecord): Promise<void> {
   const store = await readStore();
-  store.integrationKeys = [record, ...(store.integrationKeys ?? []).filter((item) => item.id !== record.id)];
+  const ownerWallet = record.ownerWallet?.toLowerCase();
+  const pendingCredits = ownerWallet
+    ? (store.integrationTopUps ?? [])
+      .filter((item) => item.wallet.toLowerCase() === ownerWallet)
+      .reduce((sum, item) => sum + Math.max(0, item.credits - (item.appliedCredits ?? 0)), 0)
+    : 0;
+  const normalized = { ...record, creditBalance: (record.creditBalance ?? 0) + pendingCredits };
+  if (ownerWallet && pendingCredits > 0) {
+    let remaining = pendingCredits;
+    for (const topUp of store.integrationTopUps ?? []) {
+      if (topUp.wallet.toLowerCase() !== ownerWallet || remaining <= 0) continue;
+      const unapplied = Math.max(0, topUp.credits - (topUp.appliedCredits ?? 0));
+      const applied = Math.min(unapplied, remaining);
+      topUp.appliedCredits = (topUp.appliedCredits ?? 0) + applied;
+      remaining -= applied;
+    }
+  }
+  store.integrationKeys = [normalized, ...(store.integrationKeys ?? []).filter((item) => item.id !== record.id)];
   await writeStore(store);
 }
 
@@ -209,6 +226,14 @@ export async function addCreditsToWalletKeys(wallet: string, credits: number): P
   const owned = (store.integrationKeys ?? []).filter((item) => item.ownerWallet?.toLowerCase() === ownerWallet && !item.revokedAt);
   for (const key of owned) {
     key.creditBalance = (key.creditBalance ?? 0) + credits;
+  }
+  let remaining = credits;
+  for (const topUp of store.integrationTopUps ?? []) {
+    if (topUp.wallet.toLowerCase() !== ownerWallet || remaining <= 0) continue;
+    const unapplied = Math.max(0, topUp.credits - (topUp.appliedCredits ?? 0));
+    const applied = Math.min(unapplied, remaining);
+    topUp.appliedCredits = (topUp.appliedCredits ?? 0) + applied;
+    remaining -= applied;
   }
   await writeStore(store);
   return owned.map(publicIntegrationKey);

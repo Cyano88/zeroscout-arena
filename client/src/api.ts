@@ -109,7 +109,9 @@ export const api = {
   createDashboardKey: (input: { wallet: string; name: string; partner: string }) =>
     request<Omit<IntegrationKeyRecord, "keyHash"> & { key: string }>("/api/dashboard/keys", { method: "POST", body: JSON.stringify(input) }),
   verifyTopUp: (input: { wallet: string; txHash: string }) =>
-    request<IntegrationTopUpRecord & { keys: Omit<IntegrationKeyRecord, "keyHash">[] }>("/api/dashboard/topups/verify", { method: "POST", body: JSON.stringify(input) })
+    request<IntegrationTopUpRecord & { keys: Omit<IntegrationKeyRecord, "keyHash">[] }>("/api/dashboard/topups/verify", { method: "POST", body: JSON.stringify(input) }),
+  syncTopUps: (wallet: string) =>
+    request<{ credited: IntegrationTopUpRecord[]; keys: Omit<IntegrationKeyRecord, "keyHash">[]; balance: { creditedOg: string; creditsPurchased: number; topUpCount: number }; scannedBlocks: number }>("/api/dashboard/topups/sync", { method: "POST", body: JSON.stringify({ wallet }) })
 };
 
 function proofQuery(root?: string | null, tx?: string | null): string {

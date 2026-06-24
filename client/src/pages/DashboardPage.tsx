@@ -38,7 +38,6 @@ export function DashboardPage() {
     const result = await api.dashboardKeys(nextWallet);
     setKeys(result.keys);
     setBalance(result.balance);
-    setStatus("Credits refreshed.");
   }
 
   async function connectWallet() {
@@ -143,7 +142,15 @@ export function DashboardPage() {
     if (!wallet) return connectWallet();
     setLoading("refresh");
     try {
-      await refreshKeys(wallet);
+      const result = await api.syncTopUps(wallet);
+      setKeys(result.keys);
+      setBalance(result.balance);
+      if (result.credited.length > 0) {
+        const credits = result.credited.reduce((sum, item) => sum + item.credits, 0);
+        setStatus(`Found ${result.credited.length} confirmed top-up and added ${credits} credits.`);
+      } else {
+        setStatus(`Credits refreshed. No new treasury transfer found in the last ${result.scannedBlocks} blocks.`);
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not refresh credits.");
     } finally {
@@ -171,13 +178,17 @@ export function DashboardPage() {
         </button>
       </section>
 
-      <section className="dashboard-stats">
-        <Metric label="Available credits" value={String(totalCredits)} />
-        <Metric label="Credits used" value={String(totalUsed)} />
-        <Metric label="Credited OG" value={balance.creditedOg} />
-        <Metric label="Top-ups" value={String(balance.topUpCount)} />
-        <Metric label="Passport API" value={`${pricing?.costs.capsule ?? 5} cr`} />
-        <Metric label="Video review" value={`${pricing?.costs.videoScore ?? 20} cr`} />
+      <section className="balance-board surface">
+        <div className="balance-primary">
+          <span>Available credits</span>
+          <strong>{totalCredits}</strong>
+          <p>{balance.creditedOg} OG credited across {balance.topUpCount} top-up{balance.topUpCount === 1 ? "" : "s"}.</p>
+        </div>
+        <div className="balance-secondary">
+          <Metric label="Credits used" value={String(totalUsed)} />
+          <Metric label="Passport API" value={`${pricing?.costs.capsule ?? 5} cr`} />
+          <Metric label="Video review" value={`${pricing?.costs.videoScore ?? 20} cr`} />
+        </div>
       </section>
 
       <section className="dashboard-grid">

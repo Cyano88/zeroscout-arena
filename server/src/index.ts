@@ -571,6 +571,54 @@ app.post("/api/dashboard/topups/verify", async (req, res, next) => {
   }
 });
 
+app.post("/api/dashboard/topups/sync", async (req, res, next) => {
+  try {
+    const wallet = walletParam(req.body?.wallet);
+    if (!config.treasuryAddress || !ethers.isAddress(config.treasuryAddress)) {
+      throw new Error("Top-ups are not configured. Set ZEROSCOUT_TREASURY_ADDRESS.");
+    }
+
+    const provider = new ethers.JsonRpcProvider(config.rpcUrl, config.chainId);
+    const latest = await provider.getBlockNumber();
+    const start = Math.max(0, latest - Math.max(1, Math.min(config.topUpScanBlocks, 1000)));
+    const credited = [];
+
+    for (let blockNumber = latest; blockNumber >= start; blockNumber -= 1) {
+      const block = await provider.getBlock(blockNumber, true) as unknown as { prefetchedTransactions?: Array<{ hash: string; from: string; to?: string | null; value: bigint }> };
+      for (const tx of block?.prefetchedTransactions ?? []) {
+        if (tx.from.toLowerCase() !== wallet.toLowerCase()) continue;
+        if (!tx.to || tx.to.toLowerCase() !== config.treasuryAddress.toLowerCase()) continue;
+        if (tx.value <= 0n || await hasIntegrationTopUp(tx.hash)) continue;
+
+        const amountOg = ethers.formatEther(tx.value);
+        const credits = Math.max(1, Math.floor(Number(amountOg) * config.creditsPerOg));
+        const record = {
+          id: nanoid(10),
+          wallet,
+          txHash: tx.hash,
+          amountOg,
+          credits,
+          createdAt: new Date().toISOString()
+        };
+        await saveIntegrationTopUp(record);
+        credited.push(record);
+      }
+    }
+
+    if (credited.length > 0) {
+      await addCreditsToWalletKeys(wallet, credited.reduce((sum, item) => sum + item.credits, 0));
+    }
+
+    const [keys, balance] = await Promise.all([
+      listIntegrationKeysByWallet(wallet),
+      integrationTopUpSummary(wallet)
+    ]);
+    res.json({ credited, keys, balance, scannedBlocks: latest - start + 1 });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/admin/integration-keys", async (req, res, next) => {
   try {
     assertAdminAccess(req);

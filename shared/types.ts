@@ -256,5 +256,6 @@ export interface IntegrationTopUpRecord {
   txHash: string;
   amountOg: string;
   credits: number;
+  appliedCredits?: number;
   createdAt: string;
 }
