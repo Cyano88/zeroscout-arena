@@ -640,6 +640,41 @@ input:focus, textarea:focus, select:focus {
 .section-stack { display: grid; gap: 20px; }
 .section-stack > .surface { padding: 26px 28px; }
 
+.proof-summary {
+  display: grid;
+  gap: 18px;
+}
+.proof-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.proof-facts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  background: var(--surface-2);
+}
+.proof-facts b { color: var(--text-2); font-family: var(--mono); font-weight: 500; }
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.update-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+.update-panel p { max-width: 560px; }
+
 /* Plain task list */
 .list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .list li {
@@ -1172,6 +1207,7 @@ input:focus, textarea:focus, select:focus {
   .directory-action, .directory-proof, .directory-score { grid-column: 2 / -1; justify-content: flex-start; }
   .directory-score { place-items: center; }
   .directory-cta { align-items: flex-start; flex-direction: column; }
+  .update-panel { align-items: flex-start; flex-direction: column; }
 }
 
 @media (max-width: 640px) {

@@ -74,6 +74,10 @@ export function CapsulePage() {
         <ScoreStrip scores={capsule.scores} />
       </section>
 
+      <ProofActions capsule={capsule} shareUrl={shareUrl} txUrl={txUrl} registryTxUrl={registryTxUrl} />
+
+      <UpdateProjectSection capsule={capsule} />
+
       <ClaimSection capsule={capsule} onClaimed={setCapsule} />
 
       <VideoReviewSection capsule={capsule} root={root} tx={tx} onReviewed={(videoReview) => setCapsule({ ...capsule, videoReview })} />
@@ -138,7 +142,7 @@ export function CapsulePage() {
       </section>
 
       <section className="surface section">
-        <h2>Record</h2>
+        <h2>Full record</h2>
         <div className="record-rows">
           <Row k="Campaign" value={capsule.campaignName ?? "ZeroScout"} disableCopy />
           <Row k="Checkpoint" value={capsule.checkpointLabel ?? capsule.round} disableCopy />
@@ -151,33 +155,56 @@ export function CapsulePage() {
           <Row k="AI provider" value={capsule.aiProvider} disableCopy />
           <Row k="Video demo" value={capsule.videoDemoUrl ?? "-"} disabled={!capsule.videoDemoUrl} disableCopy />
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-          <a className="btn btn-ghost btn-sm" href={`/api/capsules/${capsule.id}.json?root=${encodeURIComponent(capsule.storageRoot)}${capsule.storageTxHash ? `&tx=${encodeURIComponent(capsule.storageTxHash)}` : ""}`} target="_blank" rel="noreferrer">
-            <Download size={13} /> Verify JSON
-          </a>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => navigator.clipboard.writeText(shareUrl)}>
-            <Share2 size={13} /> Copy share link
-          </button>
-          {txUrl && (
-            <a className="btn btn-ghost btn-sm" href={txUrl} target="_blank" rel="noreferrer">
-              Open tx <ExternalLink size={13} />
-            </a>
-          )}
-          {registryTxUrl && (
-            <a className="btn btn-ghost btn-sm" href={registryTxUrl} target="_blank" rel="noreferrer">
-              Registry tx <ExternalLink size={13} />
-            </a>
-          )}
-          <a className="btn btn-ghost btn-sm" href={capsule.repoUrl} target="_blank" rel="noreferrer">Repo <ExternalLink size={13} /></a>
-          <a className="btn btn-ghost btn-sm" href={capsule.demoUrl} target="_blank" rel="noreferrer">Live demo <ExternalLink size={13} /></a>
-          {capsule.videoDemoUrl && <a className="btn btn-ghost btn-sm" href={capsule.videoDemoUrl} target="_blank" rel="noreferrer">Video demo <ExternalLink size={13} /></a>}
-        </div>
       </section>
     </main>
   );
 }
 
-function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: ProjectCapsule; root?: string | null; tx?: string | null; onReviewed: (review: NonNullable<ProjectCapsule["videoReview"]>) => void }) {
+function ProofActions({ capsule, shareUrl, txUrl, registryTxUrl }: { capsule: ProjectCapsule; shareUrl: string; txUrl?: string | null; registryTxUrl?: string | null }) {
+  return (
+    <section className="surface section proof-summary">
+      <div>
+        <h2>Verify</h2>
+        <p>This passport is the project snapshot. Updates create a new version; old 0G roots stay immutable.</p>
+      </div>
+      <div className="proof-facts">
+        <span><b>{shortHash(capsule.storageRoot)}</b> storage root</span>
+        {capsule.registryTxHash && <span><b>{shortHash(capsule.registryTxHash)}</b> registry tx</span>}
+        <span><b>{capsule.ownership ? "Claimed" : "Unclaimed"}</b> ownership</span>
+      </div>
+      <div className="action-row">
+        <a className="btn btn-ghost btn-sm" href={`/api/capsules/${capsule.id}.json?root=${encodeURIComponent(capsule.storageRoot)}${capsule.storageTxHash ? `&tx=${encodeURIComponent(capsule.storageTxHash)}` : ""}`} target="_blank" rel="noreferrer">
+          <Download size={13} /> JSON
+        </a>
+        <button className="btn btn-ghost btn-sm" type="button" onClick={() => navigator.clipboard.writeText(shareUrl)}>
+          <Share2 size={13} /> Share
+        </button>
+        {txUrl && <a className="btn btn-ghost btn-sm" href={txUrl} target="_blank" rel="noreferrer">Storage tx <ExternalLink size={13} /></a>}
+        {registryTxUrl && <a className="btn btn-ghost btn-sm" href={registryTxUrl} target="_blank" rel="noreferrer">Registry tx <ExternalLink size={13} /></a>}
+        <a className="btn btn-ghost btn-sm" href={capsule.repoUrl} target="_blank" rel="noreferrer">Repo <ExternalLink size={13} /></a>
+        <a className="btn btn-ghost btn-sm" href={capsule.demoUrl} target="_blank" rel="noreferrer">Live demo <ExternalLink size={13} /></a>
+        {capsule.videoDemoUrl && <a className="btn btn-ghost btn-sm" href={capsule.videoDemoUrl} target="_blank" rel="noreferrer">Video <ExternalLink size={13} /></a>}
+      </div>
+    </section>
+  );
+}
+
+function UpdateProjectSection({ capsule }: { capsule: ProjectCapsule }) {
+  const updateUrl = updateProjectUrl(capsule);
+  return (
+    <section className="surface section update-panel">
+      <div>
+        <h2>Update project</h2>
+        <p>Shipped something new? Publish an updated passport for the same repo. ZeroScout links it as version history instead of listing a duplicate project.</p>
+      </div>
+      <Link className="btn btn-primary btn-sm" to={updateUrl}>
+        Modify passport <ArrowRight size={13} />
+      </Link>
+    </section>
+  );
+}
+
+function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: ProjectCapsule; root: string | null; tx: string | null; onReviewed: (review: NonNullable<ProjectCapsule["videoReview"]>) => void }) {
   const [state, setState] = useState<"idle" | "reviewing">("idle");
   const [error, setError] = useState("");
   const review = capsule.videoReview;
@@ -312,6 +339,23 @@ function proofUrl(capsule: ProjectCapsule): string {
   url.searchParams.set("root", capsule.storageRoot);
   if (capsule.storageTxHash) url.searchParams.set("tx", capsule.storageTxHash);
   return url.toString();
+}
+
+function updateProjectUrl(capsule: ProjectCapsule): string {
+  const params = new URLSearchParams({
+    campaign: capsule.campaignId ?? "zero-cup",
+    previous: capsule.id,
+    project: capsule.projectName,
+    builder: capsule.teamName,
+    repo: capsule.repoUrl,
+    demo: capsule.demoUrl,
+    tagline: capsule.tagline,
+    checkpoint: capsule.checkpointLabel ?? capsule.round,
+    visibility: capsule.visibility ?? "public"
+  });
+  if (capsule.videoDemoUrl) params.set("video", capsule.videoDemoUrl);
+  if (capsule.helpNeeded) params.set("help", capsule.helpNeeded);
+  return `/?${params.toString()}`;
 }
 
 function Row({ k, value, disabled, disableCopy }: { k: string; value: string; disabled?: boolean; disableCopy?: boolean }) {

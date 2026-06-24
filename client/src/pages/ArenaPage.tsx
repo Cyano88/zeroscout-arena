@@ -49,6 +49,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
     demoUrl: searchParams.get("demo") ?? "",
     videoDemoUrl: searchParams.get("video") ?? undefined,
     tagline: searchParams.get("tagline") ?? "",
+    previousCapsuleId: searchParams.get("previous") ?? undefined,
     builderWallet: searchParams.get("wallet") ?? undefined,
     helpNeeded: searchParams.get("help") ?? undefined,
     visibility: searchParams.get("visibility") === "unlisted" ? "unlisted" : "public",
@@ -132,7 +133,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
       <header className="page-heading">
         <span className="eyebrow">Create</span>
         <h1>Create a verified project profile</h1>
-        <p>Choose a program, add your real project repo and demo, then publish a 0G-backed Project Passport.</p>
+        <p>Create a new proof record or update an existing project without duplicating it.</p>
       </header>
 
       {!selectedProgram && !compact && (
