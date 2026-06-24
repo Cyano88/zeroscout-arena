@@ -5,6 +5,10 @@ dotenv.config();
 const network = process.env.ZG_NETWORK ?? "mainnet";
 const isMainnet = network === "mainnet";
 const defaultLegacyRegistries = isMainnet ? "0xc8139e917eEccB8DAE47e14fb727B6EB71f9712E" : "";
+const legacyRegistryEnv = process.env.ZG_LEGACY_REGISTRY_CONTRACTS;
+const legacyRegistrySource = legacyRegistryEnv && ["none", "off", "disabled"].includes(legacyRegistryEnv.toLowerCase())
+  ? ""
+  : legacyRegistryEnv ?? defaultLegacyRegistries;
 
 export const config = {
   port: Number(process.env.PORT ?? 8787),
@@ -20,7 +24,7 @@ export const config = {
     process.env.ZG_STORAGE_EXPLORER_URL ?? (isMainnet ? "https://storagescan.0g.ai" : "https://storagescan-galileo.0g.ai"),
   privateKey: process.env.ZG_PRIVATE_KEY,
   registryContract: process.env.ZG_REGISTRY_CONTRACT,
-  legacyRegistryContracts: (process.env.ZG_LEGACY_REGISTRY_CONTRACTS ?? defaultLegacyRegistries)
+  legacyRegistryContracts: legacyRegistrySource
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean),
