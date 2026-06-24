@@ -4,6 +4,7 @@
 
 Railway is the primary ZeroScout deployment. Express serves both the API and the built React app, which keeps 0G Storage, 0G Compute, video upload review, API keys, and top-up verification on one origin.
 Production deploys should come from the `main` branch.
+If Railway misses a webhook, redeploy the latest `main` commit from the Deployments tab.
 
 1. Create a Railway project.
 2. Connect this repo.
