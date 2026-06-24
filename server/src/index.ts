@@ -394,7 +394,13 @@ app.post("/api/capsules/:id/video-upload-review", upload.single("video"), async 
 
 app.post("/api/integrations/video-score", upload.single("video"), async (req, res, next) => {
   try {
-    const integration = await assertIntegrationAccess(req, integrationCosts.videoScore);
+    let integration: { id: string; name: string; partner?: string } | undefined;
+    try {
+      integration = await assertIntegrationAccess(req, integrationCosts.videoScore);
+    } catch (error) {
+      res.status(errorStatus(error)).json({ error: stageError("API key", error) });
+      return;
+    }
     if (!req.file) {
       res.status(400).json({ error: "Upload an MP4, MOV, or WebM video under 100 MB." });
       return;
@@ -406,9 +412,21 @@ app.post("/api/integrations/video-score", upload.single("video"), async (req, re
     const prompt = cleanBodyField(req.body.prompt, "");
     const id = nanoid(10);
     const now = new Date().toISOString();
-    const videoProof = await storeBinaryArtifact("video", id, req.file.buffer);
+    let videoProof;
+    try {
+      videoProof = await storeBinaryArtifact("video", id, req.file.buffer);
+    } catch (error) {
+      res.status(errorStatus(error)).json({ error: stageError("0G video storage", error) });
+      return;
+    }
     const videoUrl = `${publicBaseUrl(req)}/api/video-assets/${encodeURIComponent(videoProof.storageRoot)}?contentType=${encodeURIComponent(req.file.mimetype)}`;
-    const score = await generatePlatformVideoScore({ videoUrl, platform, program, projectName, prompt });
+    let score;
+    try {
+      score = await generatePlatformVideoScore({ videoUrl, platform, program, projectName, prompt });
+    } catch (error) {
+      res.status(errorStatus(error)).json({ error: stageError("0G Compute video review", error) });
+      return;
+    }
     const artifactWithoutProof = {
       id,
       artifactType: "zeroscout.platform-video-score",
@@ -431,7 +449,13 @@ app.post("/api/integrations/video-score", upload.single("video"), async (req, re
       ...score,
       createdAt: now
     };
-    const reviewProof = await storeCanonicalArtifact("video-review", id, artifactWithoutProof);
+    let reviewProof;
+    try {
+      reviewProof = await storeCanonicalArtifact("video-review", id, artifactWithoutProof);
+    } catch (error) {
+      res.status(errorStatus(error)).json({ error: stageError("0G review proof storage", error) });
+      return;
+    }
     res.status(201).json({
       id,
       ...score,
@@ -985,6 +1009,23 @@ function assertAdminAccess(req: express.Request): void {
   if (!safeEqual(bearerToken(req), config.adminToken)) {
     throw new Error("Unauthorized admin request.");
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unexpected server error";
+}
+
+function errorStatus(error: unknown): number {
+  const message = errorMessage(error);
+  if (message.includes("Unauthorized")) return 401;
+  if (message.includes("Not enough ZeroScout credits")) return 402;
+  if (message.includes("not configured")) return 503;
+  if (message.includes("timed out") || message.includes("timeout")) return 504;
+  return 400;
+}
+
+function stageError(stage: string, error: unknown): string {
+  return `${stage} failed: ${errorMessage(error)}`;
 }
 
 async function assertIntegrationAccess(req: express.Request, requiredCredits: number): Promise<{ id: string; name: string; partner?: string } | undefined> {
