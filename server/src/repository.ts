@@ -224,6 +224,10 @@ export async function addCreditsToWalletKeys(wallet: string, credits: number): P
   const ownerWallet = wallet.toLowerCase();
   const store = await readStore();
   const owned = (store.integrationKeys ?? []).filter((item) => item.ownerWallet?.toLowerCase() === ownerWallet && !item.revokedAt);
+  if (owned.length === 0) {
+    await writeStore(store);
+    return [];
+  }
   for (const key of owned) {
     key.creditBalance = (key.creditBalance ?? 0) + credits;
   }

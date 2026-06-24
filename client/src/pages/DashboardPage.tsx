@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { parseEther, toBeHex } from "ethers";
-import { CheckCircle2, Copy, KeyRound, Loader2, Wallet, Zap } from "lucide-react";
+import { CheckCircle2, Copy, KeyRound, Loader2, LogOut, Wallet, Zap } from "lucide-react";
 import { api } from "../api";
 import type { IntegrationKeyRecord } from "../../../shared/types";
 
@@ -18,6 +18,7 @@ export function DashboardPage() {
   const [newKey, setNewKey] = useState("");
   const [amountOg, setAmountOg] = useState("1");
   const [txHash, setTxHash] = useState("");
+  const [pendingTx, setPendingTx] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState("");
 
@@ -31,6 +32,7 @@ export function DashboardPage() {
   useEffect(() => {
     if (!wallet) return;
     refreshKeys(wallet);
+    setPendingTx(localStorage.getItem(pendingTxKey(wallet)) ?? "");
   }, [wallet]);
 
   async function refreshKeys(nextWallet = wallet) {
@@ -56,6 +58,15 @@ export function DashboardPage() {
     } finally {
       setLoading("");
     }
+  }
+
+  function disconnectWallet() {
+    setWallet("");
+    setKeys([]);
+    setBalance({ creditedOg: "0", creditsPurchased: 0, topUpCount: 0 });
+    setPendingTx("");
+    setNewKey("");
+    setStatus("Wallet disconnected.");
   }
 
   async function createKey() {
@@ -120,11 +131,15 @@ export function DashboardPage() {
         }]
       });
       setTxHash(String(hash));
+      setPendingTx(String(hash));
+      localStorage.setItem(pendingTxKey(wallet), String(hash));
       setStatus("Transaction sent. Waiting for 0G Chain confirmation...");
       const result = await pollTopUpVerification(wallet, String(hash), (message) => setStatus(message));
       setKeys(result.keys);
       setBalance({ creditedOg: addDecimal(balance.creditedOg, result.amountOg), creditsPurchased: balance.creditsPurchased + result.credits, topUpCount: balance.topUpCount + 1 });
       setTxHash("");
+      setPendingTx("");
+      localStorage.removeItem(pendingTxKey(wallet));
       setStatus(`Credits funded: ${result.amountOg} OG added ${result.credits} credits.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Credit funding failed.");
@@ -142,6 +157,16 @@ export function DashboardPage() {
     if (!wallet) return connectWallet();
     setLoading("refresh");
     try {
+      if (pendingTx) {
+        setStatus("Checking your last submitted transfer...");
+        const verified = await pollTopUpVerification(wallet, pendingTx, (message) => setStatus(message));
+        setKeys(verified.keys);
+        setBalance({ creditedOg: addDecimal(balance.creditedOg, verified.amountOg), creditsPurchased: balance.creditsPurchased + verified.credits, topUpCount: balance.topUpCount + 1 });
+        setPendingTx("");
+        localStorage.removeItem(pendingTxKey(wallet));
+        setStatus(`Credits funded: ${verified.amountOg} OG added ${verified.credits} credits.`);
+        return;
+      }
       const result = await api.syncTopUps(wallet);
       setKeys(result.keys);
       setBalance(result.balance);
@@ -172,17 +197,31 @@ export function DashboardPage() {
           <h2>{wallet ? short(wallet) : "Connect wallet"}</h2>
           <p>Your wallet owns the keys. Credits limit usage, so a platform can call ZeroScout without exposing your account or running unlimited 0G work.</p>
         </div>
-        <button className="btn btn-primary" type="button" onClick={connectWallet} disabled={loading === "wallet"}>
-          {loading === "wallet" ? <Loader2 size={14} className="spin" /> : <Wallet size={14} />}
-          {wallet ? "Wallet connected" : "Connect wallet"}
-        </button>
+        <div className="wallet-actions">
+          <button className="btn btn-primary" type="button" onClick={connectWallet} disabled={loading === "wallet"}>
+            {loading === "wallet" ? <Loader2 size={14} className="spin" /> : <Wallet size={14} />}
+            {wallet ? "Connected" : "Connect wallet"}
+          </button>
+          {wallet && (
+            <button className="btn btn-ghost" type="button" onClick={disconnectWallet}>
+              <LogOut size={14} /> Disconnect
+            </button>
+          )}
+        </div>
       </section>
 
       <section className="balance-board surface">
         <div className="balance-primary">
-          <span>Available credits</span>
+          <div className="balance-label-row">
+            <span>Available credits</span>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={refreshCredits} disabled={loading === "refresh"}>
+              {loading === "refresh" ? <Loader2 size={13} className="spin" /> : <CheckCircle2 size={13} />}
+              Refresh
+            </button>
+          </div>
           <strong>{totalCredits}</strong>
-          <p>{balance.creditedOg} OG credited across {balance.topUpCount} top-up{balance.topUpCount === 1 ? "" : "s"}.</p>
+          <p>{balance.creditedOg} OG credited across {balance.topUpCount} confirmed top-up{balance.topUpCount === 1 ? "" : "s"}.</p>
+          {pendingTx && <p className="pending-note">One submitted transfer is waiting for confirmation.</p>}
         </div>
         <div className="balance-secondary">
           <Metric label="Credits used" value={String(totalUsed)} />
@@ -329,6 +368,10 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function short(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function pendingTxKey(wallet: string) {
+  return `zeroscout-pending-topup-${wallet.toLowerCase()}`;
 }
 
 function addDecimal(left: string, right: string) {

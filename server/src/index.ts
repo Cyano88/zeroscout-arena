@@ -580,12 +580,13 @@ app.post("/api/dashboard/topups/sync", async (req, res, next) => {
 
     const provider = new ethers.JsonRpcProvider(config.rpcUrl, config.chainId);
     const latest = await provider.getBlockNumber();
-    const start = Math.max(0, latest - Math.max(1, Math.min(config.topUpScanBlocks, 1000)));
+    const start = Math.max(0, latest - Math.max(1, Math.min(config.topUpScanBlocks, 5000)));
     const credited = [];
 
     for (let blockNumber = latest; blockNumber >= start; blockNumber -= 1) {
-      const block = await provider.getBlock(blockNumber, true) as unknown as { prefetchedTransactions?: Array<{ hash: string; from: string; to?: string | null; value: bigint }> };
-      for (const tx of block?.prefetchedTransactions ?? []) {
+      const block = await provider.getBlock(blockNumber, true);
+      const txs = await blockTransactions(provider, block);
+      for (const tx of txs) {
         if (tx.from.toLowerCase() !== wallet.toLowerCase()) continue;
         if (!tx.to || tx.to.toLowerCase() !== config.treasuryAddress.toLowerCase()) continue;
         if (tx.value <= 0n || await hasIntegrationTopUp(tx.hash)) continue;
@@ -881,6 +882,17 @@ function walletParam(value: unknown): string {
   const wallet = cleanBodyField(value, "").slice(0, 80);
   if (!ethers.isAddress(wallet)) throw new Error("Connect a valid wallet address.");
   return ethers.getAddress(wallet);
+}
+
+async function blockTransactions(provider: ethers.JsonRpcProvider, block: ethers.Block | null): Promise<Array<{ hash: string; from: string; to?: string | null; value: bigint }>> {
+  if (!block) return [];
+  const maybePrefetched = (block as unknown as { prefetchedTransactions?: Array<{ hash: string; from: string; to?: string | null; value: bigint }> }).prefetchedTransactions;
+  if (Array.isArray(maybePrefetched) && maybePrefetched.length > 0) return maybePrefetched;
+  const hashes = block.transactions.filter((item): item is string => typeof item === "string");
+  const fetched = await Promise.all(hashes.map((hash) => provider.getTransaction(hash)));
+  return fetched
+    .filter((tx): tx is ethers.TransactionResponse => Boolean(tx))
+    .map((tx) => ({ hash: tx.hash, from: tx.from, to: tx.to, value: tx.value }));
 }
 
 function hashSecret(secret: string): string {
