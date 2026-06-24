@@ -24,7 +24,7 @@ export const config = {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean),
-  registryFromBlock: Number(process.env.ZG_REGISTRY_FROM_BLOCK ?? 0),
+  registryFromBlock: Number(process.env.ZG_REGISTRY_FROM_BLOCK ?? (isMainnet ? 36938000 : 0)),
   computeApiKey: process.env.ZG_COMPUTE_API_KEY,
   computeBaseUrl: process.env.ZG_COMPUTE_BASE_URL ?? (isMainnet ? "https://router-api.0g.ai/v1" : "https://router-api-testnet.integratenetwork.work/v1"),
   computeModel: process.env.ZG_COMPUTE_MODEL ?? "zai-org/GLM-5-FP8",
