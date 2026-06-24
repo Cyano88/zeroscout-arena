@@ -66,6 +66,12 @@ export interface VideoReview {
   capsuleId: string;
   videoUrl: string;
   reviewMode?: "video" | "walkthrough-link";
+  videoStorageRoot?: string;
+  videoStorageUri?: string;
+  videoStorageTxHash?: string;
+  videoContentHash?: string;
+  videoContentType?: string;
+  videoSizeBytes?: number;
   aiProvider: string;
   summary: string;
   proofFlowObserved: string;

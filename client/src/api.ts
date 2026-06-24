@@ -68,6 +68,19 @@ export const api = {
     request<ProjectCapsule>(`/api/capsules/${id}/claim/verify`, { method: "POST" }),
   createVideoReview: (id: string, root?: string | null, tx?: string | null) =>
     request<VideoReview>(`/api/capsules/${id}/video-review${proofQuery(root, tx)}`, { method: "POST" }),
+  uploadVideoReview: async (id: string, file: File, root?: string | null, tx?: string | null) => {
+    const form = new FormData();
+    form.append("video", file);
+    const response = await fetch(`${API_BASE}/api/capsules/${id}/video-upload-review${proofQuery(root, tx)}`, {
+      method: "POST",
+      body: form
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(readableError(body.error, response.status));
+    }
+    return response.json() as Promise<VideoReview>;
+  },
   matchups: () => request<MatchupReport[]>("/api/matchups"),
   createMatchup: (capsuleAId: string, capsuleBId: string) =>
     request<MatchupReport>("/api/matchups", { method: "POST", body: JSON.stringify({ capsuleAId, capsuleBId }) })

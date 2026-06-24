@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, Copy, Download, ExternalLink, GitBranch, Loader2, PlayCircle, Share2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, Download, ExternalLink, GitBranch, Loader2, PlayCircle, Share2, Upload } from "lucide-react";
 import type { CapsuleIndexRecord, ClaimStartResponse, ProjectCapsule } from "../../../shared/types";
 import { api } from "../api";
 import { CopyButton, ProofLogo, ScoreStrip, TaskList, type ProofState } from "../components";
@@ -212,8 +212,9 @@ function UpdateProjectSection({ capsule }: { capsule: ProjectCapsule }) {
 }
 
 function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: ProjectCapsule; root: string | null; tx: string | null; onReviewed: (review: NonNullable<ProjectCapsule["videoReview"]>) => void }) {
-  const [state, setState] = useState<"idle" | "reviewing">("idle");
+  const [state, setState] = useState<"idle" | "reviewing" | "uploading">("idle");
   const [error, setError] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const review = capsule.videoReview;
 
   async function runReview() {
@@ -228,18 +229,34 @@ function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: Projec
     }
   }
 
-  if (!capsule.videoDemoUrl && !review) return null;
+  async function uploadReview() {
+    if (!file) {
+      setError("Choose an MP4, MOV, or WebM file first.");
+      return;
+    }
+    setError("");
+    setState("uploading");
+    try {
+      onReviewed(await api.uploadVideoReview(capsule.id, file, root, tx));
+      setFile(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Video upload review failed");
+    } finally {
+      setState("idle");
+    }
+  }
 
   return (
     <section className="surface section">
       <h2>Walkthrough review</h2>
-      {capsule.videoDemoUrl && <p>ZeroScout sends supported walkthrough links to 0G Compute. If YouTube or Loom blocks raw video metadata, the review is clearly labeled as a link/transcript review.</p>}
+      <p>Use YouTube or Loom for a quick walkthrough review. Upload MP4, MOV, or WebM under 100 MB when you want ZeroScout to store the video on 0G and request deeper video analysis.</p>
       {review ? (
         <>
           <p>{review.summary}</p>
           <div className="record-rows" style={{ marginTop: 14 }}>
             <Row k="Review mode" value={review.reviewMode === "video" ? "Video analysis" : "Walkthrough link review"} disableCopy />
             <Row k="AI provider" value={review.aiProvider} disableCopy />
+            {review.videoStorageRoot && <Row k="Video root" value={review.videoStorageRoot} />}
             <Row k="Review root" value={review.storageRoot} />
             <Row k="Review tx" value={review.storageTxHash ?? "-"} disabled={!review.storageTxHash} />
           </div>
@@ -251,10 +268,27 @@ function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: Projec
           <TaskList items={review.recommendedCuts} />
         </>
       ) : (
-        <button className="btn btn-primary btn-sm" type="button" onClick={runReview} disabled={state === "reviewing"} style={{ width: "auto", marginTop: 14 }}>
-          {state === "reviewing" ? <Loader2 className="spin" size={13} /> : <PlayCircle size={13} />}
-          Review walkthrough with 0G
-        </button>
+        <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+          {capsule.videoDemoUrl && (
+            <button className="btn btn-primary btn-sm" type="button" onClick={runReview} disabled={state !== "idle"} style={{ width: "fit-content" }}>
+              {state === "reviewing" ? <Loader2 className="spin" size={13} /> : <PlayCircle size={13} />}
+              Review link with 0G
+            </button>
+          )}
+          <div className="record-row" style={{ alignItems: "center" }}>
+            <span className="k">Upload video</span>
+            <input
+              className="v"
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm"
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            />
+            <button className="btn btn-ghost btn-sm" type="button" onClick={uploadReview} disabled={state !== "idle"} style={{ width: "fit-content" }}>
+              {state === "uploading" ? <Loader2 className="spin" size={13} /> : <Upload size={13} />}
+              Upload
+            </button>
+          </div>
+        </div>
       )}
       {error && <div className="error-banner" style={{ marginTop: 14 }}>{error}</div>}
     </section>

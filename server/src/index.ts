@@ -1,18 +1,31 @@
 import express from "express";
 import cors from "cors";
+import multer from "multer";
 import { nanoid } from "nanoid";
 import path from "node:path";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
 import { clearPendingClaim, getCapsule, getPendingClaim, listCapsulesByProjectKey, listMatchups, listPublicCapsules, saveCapsule, saveMatchup, savePendingClaim } from "./repository.js";
-import { checkAiHealth, generateMatchup, generateScout, generateVideoReview } from "./services/ai.js";
-import { loadCanonicalArtifact, storeCanonicalArtifact } from "./services/storage.js";
+import { checkAiHealth, generateMatchup, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
+import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
 import { parseGitHubRepo, projectKeyFor } from "./services/project-key.js";
 import type { CapsuleIndexRecord, ClaimStartResponse, HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput, VideoReview } from "../../shared/types.js";
 import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
 
 const app = express();
+const maxVideoBytes = 100 * 1024 * 1024;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: maxVideoBytes },
+  fileFilter: (_req, file, cb) => {
+    if (["video/mp4", "video/quicktime", "video/webm"].includes(file.mimetype)) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("Upload an MP4, MOV, or WebM video under 100 MB."));
+  }
+});
 
 app.use(cors({ origin: config.corsOrigin === "*" ? true : config.corsOrigin }));
 app.use(express.json({ limit: "1mb" }));
@@ -298,6 +311,71 @@ app.post("/api/capsules/:id/video-review", async (req, res, next) => {
   }
 });
 
+app.post("/api/capsules/:id/video-upload-review", upload.single("video"), async (req, res, next) => {
+  try {
+    const capsuleId = String(req.params.id);
+    const capsule = await hydrateCapsuleOwnership(await getCapsule(capsuleId) ?? await recoverCapsuleFromRoot(capsuleId, req.query.root, req.query.tx));
+    if (!capsule) {
+      res.status(404).json({ error: "Project Passport not found." });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ error: "Upload an MP4, MOV, or WebM video under 100 MB." });
+      return;
+    }
+
+    const id = nanoid(10);
+    const now = new Date().toISOString();
+    const videoProof = await storeBinaryArtifact("video", id, req.file.buffer);
+    const videoUrl = `${publicBaseUrl(req)}/api/video-assets/${encodeURIComponent(videoProof.storageRoot)}?contentType=${encodeURIComponent(req.file.mimetype)}`;
+    const review = await generateUploadedVideoReview(capsule, videoUrl);
+    const artifactWithoutProof = {
+      id,
+      artifactType: "zeroscout.video-review",
+      artifactVersion: "1.0.0",
+      capsuleId: capsule.id,
+      projectKey: capsule.projectKey,
+      projectName: capsule.projectName,
+      videoUrl,
+      uploadedVideo: {
+        filename: req.file.originalname,
+        contentType: req.file.mimetype,
+        sizeBytes: req.file.size,
+        storageRoot: videoProof.storageRoot,
+        storageUri: videoProof.storageUri,
+        contentHash: videoProof.capsuleHash,
+        storageTxHash: videoProof.storageTxHash
+      },
+      ...review,
+      createdAt: now
+    };
+    const proof = await storeCanonicalArtifact("video-review", id, artifactWithoutProof);
+    const videoReview: VideoReview = {
+      id,
+      capsuleId: capsule.id,
+      videoUrl,
+      videoStorageRoot: videoProof.storageRoot,
+      videoStorageUri: videoProof.storageUri,
+      videoStorageTxHash: videoProof.storageTxHash,
+      videoContentHash: videoProof.capsuleHash,
+      videoContentType: req.file.mimetype,
+      videoSizeBytes: req.file.size,
+      ...review,
+      ...proof,
+      createdAt: now
+    };
+    const updated: ProjectCapsule = {
+      ...capsule,
+      videoReview,
+      updatedAt: now
+    };
+    await saveCapsule(updated);
+    res.status(201).json(videoReview);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/integrations/capsules", async (req, res, next) => {
   try {
     const capsule = await createProjectCapsule(capsuleInputSchema.parse({ ...req.body, source: "api" }));
@@ -456,14 +534,61 @@ function normalizeClaimContent(value: string): string {
 }
 
 async function assertVideoSize(videoUrl: string): Promise<void> {
-  const maxBytes = 100 * 1024 * 1024;
   const response = await fetch(videoUrl, { method: "HEAD", headers: { "User-Agent": "ZeroScout-Arena" } }).catch(() => undefined);
   const size = response?.headers.get("content-length");
   if (!size) return;
   const bytes = Number(size);
-  if (Number.isFinite(bytes) && bytes > maxBytes) {
+  if (Number.isFinite(bytes) && bytes > maxVideoBytes) {
     throw new Error("Video walkthrough is too large. Use a link under 100 MB for 0G video review.");
   }
+}
+
+app.get("/api/video-assets/:root", async (req, res, next) => {
+  try {
+    const root = req.params.root;
+    if (!/^0x[a-fA-F0-9]{64}$/.test(root)) {
+      res.status(400).json({ error: "Invalid video root." });
+      return;
+    }
+    const contentType = typeof req.query.contentType === "string" ? req.query.contentType : "video/mp4";
+    const asset = await loadBinaryArtifact(root);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", String(asset.bytes.byteLength));
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    if (req.method === "HEAD") {
+      res.end();
+      return;
+    }
+    res.send(Buffer.from(asset.bytes));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.head("/api/video-assets/:root", async (req, res, next) => {
+  try {
+    const root = req.params.root;
+    if (!/^0x[a-fA-F0-9]{64}$/.test(root)) {
+      res.status(400).end();
+      return;
+    }
+    const contentType = typeof req.query.contentType === "string" ? req.query.contentType : "video/mp4";
+    const asset = await loadBinaryArtifact(root);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", String(asset.bytes.byteLength));
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+function publicBaseUrl(req: express.Request): string {
+  const protoHeader = req.get("x-forwarded-proto");
+  const proto = typeof protoHeader === "string" ? protoHeader.split(",")[0].trim() : req.protocol;
+  const host = req.get("host");
+  if (!host) throw new Error("Could not determine public host for video review.");
+  return `${proto}://${host}`;
 }
 
 app.get("/api/matchups", async (_req, res, next) => {

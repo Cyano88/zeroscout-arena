@@ -201,6 +201,48 @@ Use "video review signal", not official judging language. If the video cannot be
   };
 }
 
+export async function generateUploadedVideoReview(capsule: ProjectCapsule, videoUrl: string): Promise<VideoReviewResult> {
+  const ai = getVideoAiClient();
+  if (!ai) {
+    throw new Error("0G Compute Router is not configured for video review.");
+  }
+
+  const prompt = `Review this uploaded builder demo video for a ZeroScout Project Passport.
+
+Project:
+${JSON.stringify(summaryForAi(capsule))}
+
+Focus only on what is visible or reasonably inferable from the video. Return JSON with keys:
+summary, proofFlowObserved, demoClarityNotes array, strongestMoments array, missingProofMoments array, recommendedCuts array.
+
+Use "video review signal", not official judging language.`;
+
+  const content = await completeJson(ai, [
+    {
+      role: "system",
+      content: "You are ZeroScout's video review agent. Return strict JSON only. Do not claim official judging authority."
+    },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: prompt },
+        { type: "video_url", video_url: { url: videoUrl } }
+      ]
+    }
+  ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[]);
+  const parsed = parseJsonObject(content ?? "{}");
+  return {
+    reviewMode: "video",
+    aiProvider: ai.label,
+    summary: text(parsed.summary, "The uploaded video review could not extract a detailed summary."),
+    proofFlowObserved: text(parsed.proofFlowObserved, "The review did not identify a clear proof flow in the uploaded video."),
+    demoClarityNotes: list(parsed.demoClarityNotes, ["Show the product action, 0G proof, and public passport in one continuous path."]),
+    strongestMoments: list(parsed.strongestMoments, ["The uploaded video was submitted for review."]),
+    missingProofMoments: list(parsed.missingProofMoments, ["Make the storage root, registry tx, or Compute provider visible in the walkthrough."]),
+    recommendedCuts: list(parsed.recommendedCuts, ["Keep the walkthrough under two minutes and lead with the proof outcome."])
+  };
+}
+
 async function resolveVideoInputUrl(videoUrl: string): Promise<string> {
   const host = new URL(videoUrl).hostname.replace(/^www\./, "").toLowerCase();
   if (host !== "loom.com") return videoUrl;

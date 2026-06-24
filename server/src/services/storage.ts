@@ -1,5 +1,6 @@
 import { TextEncoder } from "node:util";
 import { writeFile, mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { ethers } from "ethers";
 import { config } from "../config.js";
@@ -40,6 +41,30 @@ export async function storeCanonicalArtifact(kind: "capsule" | "matchup" | "clai
   };
 }
 
+export async function storeBinaryArtifact(kind: "video", id: string, data: Uint8Array): Promise<StorageResult> {
+  const contentHash = sha256Bytes(data);
+
+  if (config.privateKey) {
+    return uploadBytesToZeroG(data, contentHash);
+  }
+
+  if (!config.devStorageFallback) {
+    throw new Error("0G storage is not configured. Set ZG_PRIVATE_KEY before uploading video proof.");
+  }
+
+  const dir = path.join(process.cwd(), config.dataDir, "fallback-artifacts");
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, `${kind}-${id}.bin`), data);
+
+  return {
+    storageRoot: contentHash,
+    storageUri: `local-dev://${kind}/${id}`,
+    capsuleHash: contentHash,
+    network: "local development fallback",
+    storageMode: "local-dev-fallback"
+  };
+}
+
 export async function loadCanonicalArtifact(rootHash: string): Promise<{ artifact: unknown; canonicalJson: string; capsuleHash: string }> {
   const { Indexer } = await import("@0gfoundation/0g-storage-ts-sdk");
   const indexer = new Indexer(config.storageIndexer);
@@ -53,6 +78,21 @@ export async function loadCanonicalArtifact(rootHash: string): Promise<{ artifac
     artifact: JSON.parse(canonicalJson) as unknown,
     canonicalJson,
     capsuleHash: sha256Hex(canonicalJson)
+  };
+}
+
+export async function loadBinaryArtifact(rootHash: string): Promise<{ bytes: Uint8Array; contentHash: string }> {
+  const { Indexer } = await import("@0gfoundation/0g-storage-ts-sdk");
+  const indexer = new Indexer(config.storageIndexer);
+  const [blob, err] = await indexer.downloadToBlob(rootHash, { proof: false });
+  if (err !== null) {
+    throw new Error(`0G download error: ${err.message}`);
+  }
+
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return {
+    bytes,
+    contentHash: sha256Bytes(bytes)
   };
 }
 
@@ -94,4 +134,47 @@ async function uploadToZeroG(canonicalJson: string, capsuleHash: string): Promis
     network: `0G ${config.network}`,
     storageMode: config.network === "mainnet" ? "0g-mainnet" : "0g-testnet"
   };
+}
+
+async function uploadBytesToZeroG(data: Uint8Array, contentHash: string): Promise<StorageResult> {
+  const { Indexer, MemData } = await import("@0gfoundation/0g-storage-ts-sdk");
+  const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+  const signer = new ethers.Wallet(config.privateKey!, provider);
+  const indexer = new Indexer(config.storageIndexer);
+  const memData = new MemData(data);
+
+  const [, treeErr] = await memData.merkleTree();
+  if (treeErr !== null) {
+    throw new Error(`0G Merkle tree error: ${treeErr}`);
+  }
+
+  const [tx, uploadErr] = await indexer.upload(memData, config.rpcUrl, signer as never);
+  if (uploadErr !== null) {
+    throw new Error(`0G upload error: ${uploadErr}`);
+  }
+
+  if ("rootHash" in tx) {
+    return {
+      storageRoot: tx.rootHash,
+      storageUri: `0g://${config.network}/${tx.rootHash}`,
+      capsuleHash: contentHash,
+      storageTxHash: tx.txHash,
+      network: `0G ${config.network}`,
+      storageMode: config.network === "mainnet" ? "0g-mainnet" : "0g-testnet"
+    };
+  }
+
+  const root = tx.rootHashes[0];
+  return {
+    storageRoot: root,
+    storageUri: `0g://${config.network}/${root}`,
+    capsuleHash: contentHash,
+    storageTxHash: tx.txHashes[0],
+    network: `0G ${config.network}`,
+    storageMode: config.network === "mainnet" ? "0g-mainnet" : "0g-testnet"
+  };
+}
+
+function sha256Bytes(data: Uint8Array): string {
+  return `0x${createHash("sha256").update(data).digest("hex")}`;
 }

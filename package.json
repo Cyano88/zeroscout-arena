@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@0gfoundation/0g-storage-ts-sdk": "^1.2.6",
+    "@types/multer": "^2.1.0",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
     "cors": "^2.8.5",
@@ -24,6 +25,7 @@
     "ethers": "6.13.1",
     "express": "^4.21.2",
     "lucide-react": "^0.468.0",
+    "multer": "^2.2.0",
     "nanoid": "^5.0.9",
     "openai": "^4.77.0",
     "react": "^18.3.1",
