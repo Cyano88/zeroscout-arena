@@ -1351,7 +1351,7 @@ input:focus, textarea:focus, select:focus {
 }
 .dashboard-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -1543,6 +1543,7 @@ input:focus, textarea:focus, select:focus {
   .directory-cta { align-items: flex-start; flex-direction: column; }
   .update-panel { align-items: flex-start; flex-direction: column; }
   .dashboard-grid { grid-template-columns: 1fr; }
+  .dashboard-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 640px) {

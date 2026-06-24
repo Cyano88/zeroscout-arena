@@ -7,7 +7,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ethers } from "ethers";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { addCreditsToWalletKeys, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, hasIntegrationTopUp, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, revokeIntegrationKey, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim } from "./repository.js";
+import { addCreditsToWalletKeys, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, revokeIntegrationKey, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim } from "./repository.js";
 import { checkAiHealth, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
 import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
@@ -480,7 +480,11 @@ app.post("/api/integrations/capsules", async (req, res, next) => {
 app.get("/api/dashboard/keys", async (req, res, next) => {
   try {
     const wallet = walletParam(req.query.wallet);
-    res.json(await listIntegrationKeysByWallet(wallet));
+    const [keys, balance] = await Promise.all([
+      listIntegrationKeysByWallet(wallet),
+      integrationTopUpSummary(wallet)
+    ]);
+    res.json({ keys, balance });
   } catch (error) {
     next(error);
   }

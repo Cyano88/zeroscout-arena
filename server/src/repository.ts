@@ -227,6 +227,18 @@ export async function hasIntegrationTopUp(txHash: string): Promise<boolean> {
   return (store.integrationTopUps ?? []).some((item) => item.txHash.toLowerCase() === txHash.toLowerCase());
 }
 
+export async function integrationTopUpSummary(wallet: string): Promise<{ creditedOg: string; creditsPurchased: number; topUpCount: number }> {
+  const ownerWallet = wallet.toLowerCase();
+  const store = await readStore();
+  const topUps = (store.integrationTopUps ?? []).filter((item) => item.wallet.toLowerCase() === ownerWallet);
+  const credited = topUps.reduce((sum, item) => sum + Number(item.amountOg), 0);
+  return {
+    creditedOg: credited.toFixed(6).replace(/\.?0+$/, ""),
+    creditsPurchased: topUps.reduce((sum, item) => sum + item.credits, 0),
+    topUpCount: topUps.length
+  };
+}
+
 export async function revokeIntegrationKey(id: string): Promise<Omit<IntegrationKeyRecord, "keyHash"> | undefined> {
   const store = await readStore();
   const target = (store.integrationKeys ?? []).find((item) => item.id === id);

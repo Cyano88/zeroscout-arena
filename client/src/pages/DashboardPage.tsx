@@ -11,6 +11,7 @@ const API_ORIGIN = window.location.origin;
 export function DashboardPage() {
   const [wallet, setWallet] = useState("");
   const [keys, setKeys] = useState<PublicKey[]>([]);
+  const [balance, setBalance] = useState({ creditedOg: "0", creditsPurchased: 0, topUpCount: 0 });
   const [pricing, setPricing] = useState<{ costs: { capsule: number; videoScore: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string } | null>(null);
   const [keyName, setKeyName] = useState("production");
   const [partner, setPartner] = useState("My platform");
@@ -34,7 +35,10 @@ export function DashboardPage() {
 
   async function refreshKeys(nextWallet = wallet) {
     if (!nextWallet) return;
-    setKeys(await api.dashboardKeys(nextWallet));
+    const result = await api.dashboardKeys(nextWallet);
+    setKeys(result.keys);
+    setBalance(result.balance);
+    setStatus("Credits refreshed.");
   }
 
   async function connectWallet() {
@@ -78,6 +82,7 @@ export function DashboardPage() {
     try {
       const result = await pollTopUpVerification(wallet, txHash, (message) => setStatus(message));
       setKeys(result.keys);
+      setBalance({ creditedOg: addDecimal(balance.creditedOg, result.amountOg), creditsPurchased: balance.creditsPurchased + result.credits, topUpCount: balance.topUpCount + 1 });
       setTxHash("");
       setStatus(`Top-up confirmed: ${result.amountOg} OG added ${result.credits} credits.`);
     } catch (error) {
@@ -119,6 +124,7 @@ export function DashboardPage() {
       setStatus("Transaction sent. Waiting for 0G Chain confirmation...");
       const result = await pollTopUpVerification(wallet, String(hash), (message) => setStatus(message));
       setKeys(result.keys);
+      setBalance({ creditedOg: addDecimal(balance.creditedOg, result.amountOg), creditsPurchased: balance.creditsPurchased + result.credits, topUpCount: balance.topUpCount + 1 });
       setTxHash("");
       setStatus(`Credits funded: ${result.amountOg} OG added ${result.credits} credits.`);
     } catch (error) {
@@ -131,6 +137,18 @@ export function DashboardPage() {
   async function copy(text: string) {
     await navigator.clipboard.writeText(text);
     setStatus("Copied.");
+  }
+
+  async function refreshCredits() {
+    if (!wallet) return connectWallet();
+    setLoading("refresh");
+    try {
+      await refreshKeys(wallet);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not refresh credits.");
+    } finally {
+      setLoading("");
+    }
   }
 
   return (
@@ -156,6 +174,8 @@ export function DashboardPage() {
       <section className="dashboard-stats">
         <Metric label="Available credits" value={String(totalCredits)} />
         <Metric label="Credits used" value={String(totalUsed)} />
+        <Metric label="Credited OG" value={balance.creditedOg} />
+        <Metric label="Top-ups" value={String(balance.topUpCount)} />
         <Metric label="Passport API" value={`${pricing?.costs.capsule ?? 5} cr`} />
         <Metric label="Video review" value={`${pricing?.costs.videoScore ?? 20} cr`} />
       </section>
@@ -208,9 +228,13 @@ export function DashboardPage() {
             {loading === "fund" ? <Loader2 size={14} className="spin" /> : <Wallet size={14} />}
             Fund credits
           </button>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={refreshCredits} disabled={loading === "refresh"}>
+            {loading === "refresh" ? <Loader2 size={14} className="spin" /> : <CheckCircle2 size={14} />}
+            Refresh credits
+          </button>
           <details className="recovery-box">
-            <summary>Already sent OG?</summary>
-            <p className="muted-copy">Use this only if the wallet closed, the page refreshed, or confirmation took longer than expected.</p>
+            <summary>Recover a sent transfer</summary>
+            <p className="muted-copy">Use this only if the wallet closed or the page refreshed after payment.</p>
             <label>
               Transaction hash
               <input value={txHash} onChange={(event) => setTxHash(event.target.value)} placeholder="0x..." />
@@ -226,7 +250,7 @@ export function DashboardPage() {
       <section className="surface key-table">
         <div className="panel-head">
           <span className="eyebrow">Keys</span>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => refreshKeys()}>Refresh</button>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={refreshCredits}>Refresh credits</button>
         </div>
         {keys.length === 0 ? (
           <p className="muted-copy">No keys yet. Create a key, fund it with credits, then use it from your backend.</p>
@@ -294,6 +318,11 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function short(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function addDecimal(left: string, right: string) {
+  const value = Number(left || "0") + Number(right || "0");
+  return value.toFixed(6).replace(/\.?0+$/, "");
 }
 
 function walletProvider() {
