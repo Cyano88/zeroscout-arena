@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { config } from "../config.js";
-import type { AiHealthResponse, CampaignPack, ProjectCapsule, ProjectCapsuleInput, SurvivalDelta } from "../../../shared/types.js";
+import type { AiHealthResponse, CampaignPack, ProjectCapsule, ProjectCapsuleInput, SurvivalDelta, VideoReview } from "../../../shared/types.js";
 
 interface ScoutResult {
   aiProvider: string;
@@ -25,6 +25,8 @@ interface MatchupResult {
   nextMoveForA: string;
   nextMoveForB: string;
 }
+
+type VideoReviewResult = Pick<VideoReview, "aiProvider" | "summary" | "proofFlowObserved" | "demoClarityNotes" | "strongestMoments" | "missingProofMoments" | "recommendedCuts">;
 
 export async function generateScout(input: ProjectCapsuleInput, previous?: ProjectCapsule): Promise<ScoutResult> {
   const prompt = scoutPrompt(input, previous);
@@ -134,6 +136,53 @@ Return JSON with keys summary, strongerProof, clearerDemo, strongerPublicVoteCas
   };
 }
 
+export async function generateVideoReview(capsule: ProjectCapsule): Promise<VideoReviewResult> {
+  if (!capsule.videoDemoUrl) {
+    throw new Error("Add a video walkthrough URL before requesting a video review.");
+  }
+
+  const ai = getVideoAiClient();
+  if (!ai) {
+    throw new Error("0G Compute Router is not configured for video review.");
+  }
+
+  const prompt = `Review this builder demo video for a ZeroScout Project Passport.
+
+Project:
+${JSON.stringify(summaryForAi(capsule))}
+
+Focus only on what is visible or reasonably inferable from the video. Return JSON with keys:
+summary, proofFlowObserved, demoClarityNotes array, strongestMoments array, missingProofMoments array, recommendedCuts array.
+
+Use "video review signal", not official judging language. If the video cannot be read, say that clearly in the JSON.`;
+
+  const messages = [
+    {
+      role: "system",
+      content: "You are ZeroScout's video review agent. Return strict JSON only. Do not claim official judging authority."
+    },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: prompt },
+        { type: "video_url", video_url: { url: capsule.videoDemoUrl } }
+      ]
+    }
+  ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+
+  const content = await completeJson(ai, messages);
+  const parsed = parseJsonObject(content ?? "{}");
+  return {
+    aiProvider: ai.label,
+    summary: text(parsed.summary, "The video review could not extract a detailed summary."),
+    proofFlowObserved: text(parsed.proofFlowObserved, "The review did not identify a clear proof flow in the video."),
+    demoClarityNotes: list(parsed.demoClarityNotes, ["Show the product action, 0G proof, and public passport in one continuous path."]),
+    strongestMoments: list(parsed.strongestMoments, ["The video link was submitted for review."]),
+    missingProofMoments: list(parsed.missingProofMoments, ["Make the storage root, registry tx, or Compute provider visible in the walkthrough."]),
+    recommendedCuts: list(parsed.recommendedCuts, ["Keep the walkthrough under two minutes and lead with the proof outcome."])
+  };
+}
+
 function getAiClient(): { client: OpenAI; model: string; label: string } | undefined {
   if (config.computeApiKey) {
     return {
@@ -156,6 +205,19 @@ function getAiClient(): { client: OpenAI; model: string; label: string } | undef
   }
 
   return undefined;
+}
+
+function getVideoAiClient(): { client: OpenAI; model: string; label: string } | undefined {
+  if (!config.computeApiKey) return undefined;
+  return {
+    client: new OpenAI({
+      apiKey: config.computeApiKey,
+      baseURL: config.computeBaseUrl,
+      defaultHeaders: computeHeaders()
+    }),
+    model: config.computeVideoModel,
+    label: `0G Compute Router video (${config.computeVideoModel})`
+  };
 }
 
 function computeHeaders(): Record<string, string> | undefined {

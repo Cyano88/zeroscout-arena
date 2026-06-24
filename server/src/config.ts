@@ -32,6 +32,7 @@ export const config = {
   computeApiKey: process.env.ZG_COMPUTE_API_KEY,
   computeBaseUrl: process.env.ZG_COMPUTE_BASE_URL ?? (isMainnet ? "https://router-api.0g.ai/v1" : "https://router-api-testnet.integratenetwork.work/v1"),
   computeModel: process.env.ZG_COMPUTE_MODEL ?? "zai-org/GLM-5-FP8",
+  computeVideoModel: process.env.ZG_COMPUTE_VIDEO_MODEL ?? "qwen3.7-plus",
   computeTrustMode: process.env.ZG_COMPUTE_TRUST_MODE ?? "verified",
   openAiApiKey: process.env.OPENAI_API_KEY,
   openAiBaseUrl: process.env.OPENAI_BASE_URL,

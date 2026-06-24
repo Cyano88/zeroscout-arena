@@ -61,6 +61,26 @@ export interface ProjectOwnershipClaim {
   verifiedAt: string;
 }
 
+export interface VideoReview {
+  id: string;
+  capsuleId: string;
+  videoUrl: string;
+  aiProvider: string;
+  summary: string;
+  proofFlowObserved: string;
+  demoClarityNotes: string[];
+  strongestMoments: string[];
+  missingProofMoments: string[];
+  recommendedCuts: string[];
+  storageRoot: string;
+  storageUri: string;
+  capsuleHash: string;
+  storageTxHash?: string;
+  network: string;
+  storageMode: "0g-mainnet" | "0g-testnet" | "local-dev-fallback";
+  createdAt: string;
+}
+
 export interface ClaimStartResponse {
   claimCode: string;
   expectedPath: string;
@@ -102,6 +122,7 @@ export interface ProjectCapsule extends ProjectCapsuleInput {
   projectKey: string;
   versionNumber: number;
   ownership?: ProjectOwnershipClaim;
+  videoReview?: VideoReview;
   aiProvider: string;
   scoutBrief: string;
   technicalSummary: string;
@@ -128,6 +149,7 @@ export interface CapsuleIndexRecord {
   versionNumber: number;
   previousCapsuleId?: string;
   ownership?: ProjectOwnershipClaim;
+  videoReview?: VideoReview;
   projectName: string;
   teamName: string;
   tagline: string;

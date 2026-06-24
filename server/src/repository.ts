@@ -86,6 +86,7 @@ export async function saveCapsule(capsule: ProjectCapsule): Promise<void> {
     versionNumber: normalized.versionNumber,
     previousCapsuleId: normalized.previousCapsuleId,
     ownership: normalized.ownership,
+    videoReview: normalized.videoReview,
     projectName: normalized.projectName,
     teamName: normalized.teamName,
     tagline: normalized.tagline,

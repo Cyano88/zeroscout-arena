@@ -147,6 +147,7 @@ async function loadRegistryRecord(id: string, root: string, tx: string): Promise
     projectKey: artifact.projectKey ?? projectKeyFor(artifact.campaignId, artifact.repoUrl ?? root),
     versionNumber: artifact.versionNumber ?? 1,
     ownership,
+    videoReview: artifact.videoReview,
     projectName: artifact.projectName ?? "Untitled project",
     teamName: artifact.teamName ?? "Unknown builder",
     tagline: artifact.tagline ?? "",

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Check, Copy, Download, ExternalLink, GitBranch, Loader2, Share2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, Download, ExternalLink, GitBranch, Loader2, PlayCircle, Share2 } from "lucide-react";
 import type { CapsuleIndexRecord, ClaimStartResponse, ProjectCapsule } from "../../../shared/types";
 import { api } from "../api";
 import { CopyButton, ProofLogo, ScoreStrip, TaskList, type ProofState } from "../components";
@@ -75,6 +75,8 @@ export function CapsulePage() {
       </section>
 
       <ClaimSection capsule={capsule} onClaimed={setCapsule} />
+
+      <VideoReviewSection capsule={capsule} root={root} tx={tx} onReviewed={(videoReview) => setCapsule({ ...capsule, videoReview })} />
 
       {versions.length > 1 && (
         <section className="surface section">
@@ -172,6 +174,55 @@ export function CapsulePage() {
         </div>
       </section>
     </main>
+  );
+}
+
+function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: ProjectCapsule; root?: string | null; tx?: string | null; onReviewed: (review: NonNullable<ProjectCapsule["videoReview"]>) => void }) {
+  const [state, setState] = useState<"idle" | "reviewing">("idle");
+  const [error, setError] = useState("");
+  const review = capsule.videoReview;
+
+  async function runReview() {
+    setError("");
+    setState("reviewing");
+    try {
+      onReviewed(await api.createVideoReview(capsule.id, root, tx));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Video review failed");
+    } finally {
+      setState("idle");
+    }
+  }
+
+  if (!capsule.videoDemoUrl && !review) return null;
+
+  return (
+    <section className="surface section">
+      <h2>Video review</h2>
+      {capsule.videoDemoUrl && <p>ZeroScout can review the walkthrough with a video-capable 0G Compute model and store the review as a separate 0G artifact.</p>}
+      {review ? (
+        <>
+          <p>{review.summary}</p>
+          <div className="record-rows" style={{ marginTop: 14 }}>
+            <Row k="AI provider" value={review.aiProvider} disableCopy />
+            <Row k="Review root" value={review.storageRoot} />
+            <Row k="Review tx" value={review.storageTxHash ?? "-"} disabled={!review.storageTxHash} />
+          </div>
+          <h2 style={{ marginTop: 22 }}>Observed proof flow</h2>
+          <p>{review.proofFlowObserved}</p>
+          <h2 style={{ marginTop: 22 }}>Demo notes</h2>
+          <TaskList items={review.demoClarityNotes} />
+          <h2 style={{ marginTop: 22 }}>Recommended cuts</h2>
+          <TaskList items={review.recommendedCuts} />
+        </>
+      ) : (
+        <button className="btn btn-primary btn-sm" type="button" onClick={runReview} disabled={state === "reviewing"} style={{ width: "auto", marginTop: 14 }}>
+          {state === "reviewing" ? <Loader2 className="spin" size={13} /> : <PlayCircle size={13} />}
+          Review video with 0G
+        </button>
+      )}
+      {error && <div className="error-banner" style={{ marginTop: 14 }}>{error}</div>}
+    </section>
   );
 }
 

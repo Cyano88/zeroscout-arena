@@ -5,11 +5,11 @@ import path from "node:path";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
 import { clearPendingClaim, getCapsule, getPendingClaim, listCapsulesByProjectKey, listMatchups, listPublicCapsules, saveCapsule, saveMatchup, savePendingClaim } from "./repository.js";
-import { checkAiHealth, generateMatchup, generateScout } from "./services/ai.js";
+import { checkAiHealth, generateMatchup, generateScout, generateVideoReview } from "./services/ai.js";
 import { loadCanonicalArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
 import { parseGitHubRepo, projectKeyFor } from "./services/project-key.js";
-import type { CapsuleIndexRecord, ClaimStartResponse, HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
+import type { CapsuleIndexRecord, ClaimStartResponse, HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput, VideoReview } from "../../shared/types.js";
 import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
 
 const app = express();
@@ -249,6 +249,55 @@ app.post("/api/capsules/:id/claim/verify", async (req, res, next) => {
   }
 });
 
+app.post("/api/capsules/:id/video-review", async (req, res, next) => {
+  try {
+    const capsule = await hydrateCapsuleOwnership(await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx));
+    if (!capsule) {
+      res.status(404).json({ error: "Project Passport not found." });
+      return;
+    }
+    if (!capsule.videoDemoUrl) {
+      res.status(400).json({ error: "Add a video walkthrough URL before requesting a video review." });
+      return;
+    }
+
+    await assertVideoSize(capsule.videoDemoUrl);
+
+    const id = nanoid(10);
+    const now = new Date().toISOString();
+    const review = await generateVideoReview(capsule);
+    const artifactWithoutProof = {
+      id,
+      artifactType: "zeroscout.video-review",
+      artifactVersion: "1.0.0",
+      capsuleId: capsule.id,
+      projectKey: capsule.projectKey,
+      projectName: capsule.projectName,
+      videoUrl: capsule.videoDemoUrl,
+      ...review,
+      createdAt: now
+    };
+    const proof = await storeCanonicalArtifact("video-review", id, artifactWithoutProof);
+    const videoReview: VideoReview = {
+      id,
+      capsuleId: capsule.id,
+      videoUrl: capsule.videoDemoUrl,
+      ...review,
+      ...proof,
+      createdAt: now
+    };
+    const updated: ProjectCapsule = {
+      ...capsule,
+      videoReview,
+      updatedAt: now
+    };
+    await saveCapsule(updated);
+    res.status(201).json(videoReview);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/integrations/capsules", async (req, res, next) => {
   try {
     const capsule = await createProjectCapsule(capsuleInputSchema.parse({ ...req.body, source: "api" }));
@@ -404,6 +453,17 @@ async function findVerifiedClaimFile(urls: string[], expectedContent: string): P
 
 function normalizeClaimContent(value: string): string {
   return value.replace(/\r\n/g, "\n").trim();
+}
+
+async function assertVideoSize(videoUrl: string): Promise<void> {
+  const maxBytes = 100 * 1024 * 1024;
+  const response = await fetch(videoUrl, { method: "HEAD", headers: { "User-Agent": "ZeroScout-Arena" } }).catch(() => undefined);
+  const size = response?.headers.get("content-length");
+  if (!size) return;
+  const bytes = Number(size);
+  if (Number.isFinite(bytes) && bytes > maxBytes) {
+    throw new Error("Video walkthrough is too large. Use a link under 100 MB for 0G video review.");
+  }
 }
 
 app.get("/api/matchups", async (_req, res, next) => {
