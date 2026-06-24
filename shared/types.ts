@@ -74,6 +74,7 @@ export interface ProjectCapsuleInput {
   tagline: string;
   repoUrl: string;
   demoUrl: string;
+  videoDemoUrl?: string;
   creatorWallet?: string;
   round: Round;
   description: string;

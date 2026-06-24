@@ -42,7 +42,8 @@ function fieldLabel(field: string): string {
     pitchNotes: "Memory line",
     helpNeeded: "What you need next",
     repoUrl: "Repo URL",
-    demoUrl: "Demo URL"
+    demoUrl: "Live demo URL",
+    videoDemoUrl: "Video walkthrough URL"
   };
   return labels[field] ?? "This field";
 }

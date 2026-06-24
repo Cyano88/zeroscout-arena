@@ -7,6 +7,7 @@ export const capsuleInputSchema = z.object({
   tagline: z.string().min(4).max(140),
   repoUrl: z.string().url(),
   demoUrl: z.string().url(),
+  videoDemoUrl: z.string().url().optional(),
   creatorWallet: z.string().optional(),
   round: z.enum(rounds),
   description: z.string().min(20).max(4000),

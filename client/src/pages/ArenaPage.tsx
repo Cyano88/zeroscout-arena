@@ -47,6 +47,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
     teamName: searchParams.get("builder") ?? searchParams.get("team") ?? "",
     repoUrl: searchParams.get("repo") ?? "",
     demoUrl: searchParams.get("demo") ?? "",
+    videoDemoUrl: searchParams.get("video") ?? undefined,
     tagline: searchParams.get("tagline") ?? "",
     builderWallet: searchParams.get("wallet") ?? undefined,
     helpNeeded: searchParams.get("help") ?? undefined,
@@ -184,8 +185,10 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
 
             <div className="field-row two">
               <Field label="Repo URL" type="url" value={form.repoUrl} onChange={(v) => setForm({ ...form, repoUrl: v })} placeholder="https://github.com/..." required />
-              <Field label="Demo URL" type="url" value={form.demoUrl} onChange={(v) => setForm({ ...form, demoUrl: v })} placeholder="https://..." required />
+              <Field label="Live demo URL" type="url" value={form.demoUrl} onChange={(v) => setForm({ ...form, demoUrl: v })} placeholder="https://..." required />
             </div>
+
+            <Field label="Video walkthrough URL" type="url" value={form.videoDemoUrl ?? ""} onChange={(v) => setForm({ ...form, videoDemoUrl: v || undefined })} placeholder="YouTube, Loom, Drive, or hosted MP4 link" />
 
             <div className="field">
               <label>Checkpoint</label>

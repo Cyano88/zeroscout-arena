@@ -147,6 +147,7 @@ export function CapsulePage() {
           <Row k="Registry tx" value={capsule.registryTxHash ?? "-"} disabled={!capsule.registryTxHash} />
           <Row k="Ownership" value={capsule.ownership ? "Claimed by repo proof" : "Unclaimed"} disableCopy />
           <Row k="AI provider" value={capsule.aiProvider} disableCopy />
+          <Row k="Video demo" value={capsule.videoDemoUrl ?? "-"} disabled={!capsule.videoDemoUrl} disableCopy />
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
           <a className="btn btn-ghost btn-sm" href={`/api/capsules/${capsule.id}.json?root=${encodeURIComponent(capsule.storageRoot)}${capsule.storageTxHash ? `&tx=${encodeURIComponent(capsule.storageTxHash)}` : ""}`} target="_blank" rel="noreferrer">
@@ -166,7 +167,8 @@ export function CapsulePage() {
             </a>
           )}
           <a className="btn btn-ghost btn-sm" href={capsule.repoUrl} target="_blank" rel="noreferrer">Repo <ExternalLink size={13} /></a>
-          <a className="btn btn-ghost btn-sm" href={capsule.demoUrl} target="_blank" rel="noreferrer">Demo <ExternalLink size={13} /></a>
+          <a className="btn btn-ghost btn-sm" href={capsule.demoUrl} target="_blank" rel="noreferrer">Live demo <ExternalLink size={13} /></a>
+          {capsule.videoDemoUrl && <a className="btn btn-ghost btn-sm" href={capsule.videoDemoUrl} target="_blank" rel="noreferrer">Video demo <ExternalLink size={13} /></a>}
         </div>
       </section>
     </main>
