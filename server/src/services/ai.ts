@@ -72,7 +72,8 @@ export async function checkAiHealth(): Promise<AiHealthResponse> {
       configured: true,
       ok: parsed.ok === true,
       provider: ai.label,
-      model: ai.model
+      model: ai.model,
+      trustMode: config.computeApiKey ? config.computeTrustMode : undefined
     };
   } catch (error) {
     return {
@@ -80,6 +81,7 @@ export async function checkAiHealth(): Promise<AiHealthResponse> {
       ok: false,
       provider: ai.label,
       model: ai.model,
+      trustMode: config.computeApiKey ? config.computeTrustMode : undefined,
       error: sanitizeAiError(error)
     };
   }

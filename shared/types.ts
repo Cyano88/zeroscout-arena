@@ -201,5 +201,6 @@ export interface AiHealthResponse {
   ok: boolean;
   provider: string;
   model?: string;
+  trustMode?: string;
   error?: string;
 }
