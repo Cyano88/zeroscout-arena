@@ -4,12 +4,12 @@ import { nanoid } from "nanoid";
 import path from "node:path";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { clearPendingClaim, getCapsule, getPendingClaim, listMatchups, listPublicCapsules, saveCapsule, saveMatchup, savePendingClaim } from "./repository.js";
-import { generateMatchup, generateScout } from "./services/ai.js";
+import { clearPendingClaim, getCapsule, getPendingClaim, listCapsulesByProjectKey, listMatchups, listPublicCapsules, saveCapsule, saveMatchup, savePendingClaim } from "./repository.js";
+import { checkAiHealth, generateMatchup, generateScout } from "./services/ai.js";
 import { loadCanonicalArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
 import { parseGitHubRepo, projectKeyFor } from "./services/project-key.js";
-import type { ClaimStartResponse, HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
+import type { CapsuleIndexRecord, ClaimStartResponse, HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
 import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
 
 const app = express();
@@ -32,6 +32,14 @@ app.get("/api/config/public", (_req, res) => {
   res.json(publicConfig());
 });
 
+app.get("/api/ai/health", async (_req, res, next) => {
+  try {
+    res.json(await checkAiHealth());
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/campaigns", (_req, res) => {
   res.json(campaignPresets);
 });
@@ -39,7 +47,7 @@ app.get("/api/campaigns", (_req, res) => {
 app.get("/api/campaigns/:id", async (req, res, next) => {
   try {
     const campaign = findCampaignPreset(req.params.id);
-    const capsules = await listPublicCapsulesMerged();
+    const capsules = await listPublicLatestCapsulesMerged();
     const campaignCapsules = capsules.filter((item) => item.campaignId === campaign.id);
     res.json({
       ...campaign,
@@ -55,7 +63,7 @@ app.get("/api/campaigns/:id", async (req, res, next) => {
 app.get("/api/campaigns/:id/capsules", async (req, res, next) => {
   try {
     const campaign = findCampaignPreset(req.params.id);
-    const capsules = await listPublicCapsulesMerged();
+    const capsules = await listPublicLatestCapsulesMerged();
     res.json(capsules.filter((item) => item.campaignId === campaign.id));
   } catch (error) {
     next(error);
@@ -72,7 +80,7 @@ app.get("/api/capsules", async (_req, res, next) => {
 
 app.get("/api/projects", async (_req, res, next) => {
   try {
-    res.json(await listPublicCapsulesMerged());
+    res.json(await listPublicLatestCapsulesMerged());
   } catch (error) {
     next(error);
   }
@@ -99,6 +107,20 @@ app.get("/api/capsules/:id.json", async (req, res, next) => {
       return;
     }
     res.type("application/json").send(JSON.stringify(capsule, null, 2));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/capsules/:id/versions", async (req, res, next) => {
+  try {
+    const capsule = await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx);
+    if (!capsule) {
+      res.status(404).json({ error: "Capsule not found" });
+      return;
+    }
+    const versions = await listCapsulesByProjectKey(capsule.projectKey);
+    res.json(versions.sort((a, b) => (b.versionNumber ?? 1) - (a.versionNumber ?? 1) || b.createdAt.localeCompare(a.createdAt)));
   } catch (error) {
     next(error);
   }
@@ -255,14 +277,21 @@ async function createProjectCapsule(parsed: ProjectCapsuleInput): Promise<Projec
     visibility: parsed.visibility ?? "public",
     source: parsed.source ?? "hosted"
   };
-  const previous = input.previousCapsuleId ? await getCapsule(input.previousCapsuleId) : undefined;
+  const projectKey = projectKeyFor(campaign.id, input.repoUrl);
+  const projectVersions = await listCapsulesByProjectKey(projectKey);
+  const latestVersion = projectVersions[0] ? await getCapsule(projectVersions[0].id) : undefined;
+  const explicitPrevious = input.previousCapsuleId ? await getCapsule(input.previousCapsuleId) : undefined;
+  const previous = explicitPrevious?.projectKey === projectKey ? explicitPrevious : latestVersion;
+  const versionNumber = previous ? (previous.versionNumber ?? 1) + 1 : 1;
+  const versionedInput: ProjectCapsuleInput = previous ? { ...input, previousCapsuleId: previous.id } : input;
   const id = nanoid(10);
   const now = new Date().toISOString();
-  const scout = await generateScout(input, previous);
+  const scout = await generateScout(versionedInput, previous);
   const artifactWithoutProof = {
     id,
-    projectKey: projectKeyFor(campaign.id, input.repoUrl),
-    ...input,
+    projectKey,
+    versionNumber,
+    ...versionedInput,
     ...scout,
     createdAt: now,
     updatedAt: now,
@@ -289,6 +318,20 @@ async function listPublicCapsulesMerged() {
   return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+async function listPublicLatestCapsulesMerged() {
+  const all = await listPublicCapsulesMerged();
+  const byProjectRecord = new Map<string, CapsuleIndexRecord>();
+  for (const item of all) {
+    const current = byProjectRecord.get(item.projectKey);
+    const itemVersion = item.versionNumber ?? 1;
+    const currentVersion = current?.versionNumber ?? 1;
+    if (!current || itemVersion > currentVersion || (itemVersion === currentVersion && item.createdAt > current.createdAt)) {
+      byProjectRecord.set(item.projectKey, item);
+    }
+  }
+  return [...byProjectRecord.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
 async function recoverCapsuleFromRoot(id: string, rootQuery: unknown, txQuery: unknown): Promise<ProjectCapsule | undefined> {
   const root = typeof rootQuery === "string" ? rootQuery : "";
   const tx = typeof txQuery === "string" ? txQuery : undefined;
@@ -301,6 +344,7 @@ async function recoverCapsuleFromRoot(id: string, rootQuery: unknown, txQuery: u
   const capsule: ProjectCapsule = {
     ...(artifact as ProjectCapsule),
     projectKey: artifact.projectKey ?? projectKeyFor(artifact.campaignId, artifact.repoUrl ?? root),
+    versionNumber: artifact.versionNumber ?? 1,
     storageRoot: root,
     storageUri: `0g://${config.network}/${root}`,
     capsuleHash: downloaded.capsuleHash,

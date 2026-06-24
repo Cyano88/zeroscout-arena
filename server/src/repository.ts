@@ -60,6 +60,11 @@ export async function listCapsulesByCampaign(campaignId: string): Promise<Capsul
   return all.filter((item) => item.campaignId === campaignId);
 }
 
+export async function listCapsulesByProjectKey(projectKey: string): Promise<CapsuleIndexRecord[]> {
+  const all = await listCapsules();
+  return all.filter((item) => item.projectKey === projectKey);
+}
+
 export async function listPublicCapsulesByCampaign(campaignId: string): Promise<CapsuleIndexRecord[]> {
   const all = await listPublicCapsules();
   return all.filter((item) => item.campaignId === campaignId);
@@ -78,10 +83,13 @@ export async function saveCapsule(capsule: ProjectCapsule): Promise<void> {
   const record: CapsuleIndexRecord = {
     id: normalized.id,
     projectKey: normalized.projectKey,
+    versionNumber: normalized.versionNumber,
+    previousCapsuleId: normalized.previousCapsuleId,
     ownership: normalized.ownership,
     projectName: normalized.projectName,
     teamName: normalized.teamName,
     tagline: normalized.tagline,
+    repoUrl: normalized.repoUrl,
     round: normalized.round,
     stage: normalized.stage,
     campaignId: normalized.campaignId ?? campaign.id,
@@ -143,6 +151,8 @@ function withCampaignDefaults(record: CapsuleIndexRecord): CapsuleIndexRecord {
   return {
     ...record,
     projectKey: record.projectKey ?? projectKeyFor(record.campaignId, record.storageUri),
+    versionNumber: record.versionNumber ?? 1,
+    repoUrl: record.repoUrl ?? "",
     campaignId: record.campaignId ?? campaign.id,
     campaignName: record.campaignName ?? campaign.name,
     campaignType: record.campaignType ?? campaign.type,
@@ -155,6 +165,7 @@ function withCapsuleCampaignDefaults(capsule: ProjectCapsule): ProjectCapsule {
   return {
     ...capsule,
     projectKey: capsule.projectKey ?? projectKeyFor(capsule.campaignId, capsule.repoUrl),
+    versionNumber: capsule.versionNumber ?? 1,
     campaignId: capsule.campaignId ?? campaign.id,
     campaignName: capsule.campaignName ?? campaign.name,
     campaignType: capsule.campaignType ?? campaign.type,

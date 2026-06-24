@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { config } from "../config.js";
-import type { CampaignPack, ProjectCapsule, ProjectCapsuleInput, SurvivalDelta } from "../../../shared/types.js";
+import type { AiHealthResponse, CampaignPack, ProjectCapsule, ProjectCapsuleInput, SurvivalDelta } from "../../../shared/types.js";
 
 interface ScoutResult {
   aiProvider: string;
@@ -49,6 +49,40 @@ export async function generateScout(input: ProjectCapsuleInput, previous?: Proje
   }
 
   return deterministicScout(input, previous);
+}
+
+export async function checkAiHealth(): Promise<AiHealthResponse> {
+  const ai = getAiClient();
+  if (!ai) {
+    return {
+      configured: false,
+      ok: false,
+      provider: "deterministic local scout fallback",
+      error: "No 0G Compute or OpenAI-compatible key is configured."
+    };
+  }
+
+  try {
+    const content = await completeJson(ai, [
+      { role: "system", content: "Return strict JSON only." },
+      { role: "user", content: "Return {\"ok\":true,\"service\":\"zeroscout-ai-health\"}." }
+    ]);
+    const parsed = content ? parseJsonObject(content) : {};
+    return {
+      configured: true,
+      ok: parsed.ok === true,
+      provider: ai.label,
+      model: ai.model
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      ok: false,
+      provider: ai.label,
+      model: ai.model,
+      error: sanitizeAiError(error)
+    };
+  }
 }
 
 export async function generateMatchup(a: ProjectCapsule, b: ProjectCapsule): Promise<MatchupResult> {
@@ -116,6 +150,14 @@ function getAiClient(): { client: OpenAI; model: string; label: string } | undef
   }
 
   return undefined;
+}
+
+function sanitizeAiError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  return raw
+    .replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]")
+    .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]")
+    .slice(0, 280);
 }
 
 async function completeJson(ai: { client: OpenAI; model: string }, messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): Promise<string | undefined> {

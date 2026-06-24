@@ -103,10 +103,12 @@ async function loadRegistryRecord(id: string, root: string, tx: string): Promise
   return {
     id,
     projectKey: artifact.projectKey ?? projectKeyFor(artifact.campaignId, artifact.repoUrl ?? root),
+    versionNumber: artifact.versionNumber ?? 1,
     ownership: artifact.ownership,
     projectName: artifact.projectName ?? "Untitled project",
     teamName: artifact.teamName ?? "Unknown builder",
     tagline: artifact.tagline ?? "",
+    repoUrl: artifact.repoUrl ?? "",
     round: artifact.round ?? "Group Stage",
     stage: artifact.stage ?? "MVP",
     campaignId: artifact.campaignId ?? campaign.id,

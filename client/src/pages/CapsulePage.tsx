@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Check, Copy, Download, ExternalLink, GitBranch, Loader2, Share2 } from "lucide-react";
-import type { ClaimStartResponse, ProjectCapsule } from "../../../shared/types";
+import { ArrowLeft, ArrowRight, Check, Copy, Download, ExternalLink, GitBranch, Loader2, Share2 } from "lucide-react";
+import type { CapsuleIndexRecord, ClaimStartResponse, ProjectCapsule } from "../../../shared/types";
 import { api } from "../api";
 import { CopyButton, ProofLogo, ScoreStrip, TaskList, type ProofState } from "../components";
 import { explorerTxUrl, isRealProof, shortHash } from "../utils";
@@ -10,6 +10,7 @@ export function CapsulePage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const [capsule, setCapsule] = useState<ProjectCapsule | null>(null);
+  const [versions, setVersions] = useState<CapsuleIndexRecord[]>([]);
   const [error, setError] = useState("");
   const root = searchParams.get("root");
   const tx = searchParams.get("tx");
@@ -17,6 +18,7 @@ export function CapsulePage() {
   useEffect(() => {
     if (!id) return;
     void api.capsule(id, root, tx).then(setCapsule).catch((err) => setError(err instanceof Error ? err.message : "Project not found"));
+    void api.capsuleVersions(id, root, tx).then(setVersions).catch(() => setVersions([]));
   }, [id, root, tx]);
 
   if (error) return <main className="page-narrow"><div className="error-banner">{error}</div></main>;
@@ -42,6 +44,8 @@ export function CapsulePage() {
             <span>{capsule.campaignName ?? "ZeroScout"}</span>
             <span className="dot" />
             <span>{capsule.checkpointLabel ?? capsule.round}</span>
+            <span className="dot" />
+            <span>v{capsule.versionNumber ?? 1}</span>
             <span className="dot" />
             <span>{capsule.stage}</span>
             <span className="dot" />
@@ -71,6 +75,22 @@ export function CapsulePage() {
       </section>
 
       <ClaimSection capsule={capsule} onClaimed={setCapsule} />
+
+      {versions.length > 1 && (
+        <section className="surface section">
+          <h2>Version history</h2>
+          <p>Each update is a new stored checkpoint for the same repo and program.</p>
+          <div className="record-rows" style={{ marginTop: 14 }}>
+            {versions.map((item) => (
+              <Link className="record-row version-row" to={`/projects/${item.id}?root=${encodeURIComponent(item.storageRoot)}${item.storageTxHash ? `&tx=${encodeURIComponent(item.storageTxHash)}` : ""}`} key={item.id}>
+                <span className="k">v{item.versionNumber ?? 1} - {item.checkpointLabel ?? item.round}</span>
+                <span className="v">{item.scores.total}/100 - {shortHash(item.storageRoot)}</span>
+                <ArrowRight size={13} />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="surface section">
         <h2>What it does</h2>
@@ -120,6 +140,7 @@ export function CapsulePage() {
         <div className="record-rows">
           <Row k="Campaign" value={capsule.campaignName ?? "ZeroScout"} disableCopy />
           <Row k="Checkpoint" value={capsule.checkpointLabel ?? capsule.round} disableCopy />
+          <Row k="Version" value={`v${capsule.versionNumber ?? 1}`} disableCopy />
           <Row k="Root" value={capsule.storageRoot} />
           <Row k="Content hash" value={capsule.capsuleHash} />
           <Row k="Transaction" value={capsule.storageTxHash ?? "-"} disabled={!capsule.storageTxHash} />

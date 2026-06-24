@@ -1,4 +1,4 @@
-import type { CampaignPreset, CapsuleIndexRecord, ClaimStartResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput, PublicConfig } from "../../shared/types";
+import type { AiHealthResponse, CampaignPreset, CapsuleIndexRecord, ClaimStartResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput, PublicConfig } from "../../shared/types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -36,7 +36,7 @@ function fieldLabel(field: string): string {
   const labels: Record<string, string> = {
     projectName: "Project name",
     teamName: "Builder or team",
-    tagline: "One-line promise",
+    tagline: "One-line outcome",
     description: "Product description",
     ogUsageClaims: "0G usage",
     pitchNotes: "Memory line",
@@ -49,6 +49,7 @@ function fieldLabel(field: string): string {
 
 export const api = {
   config: () => request<PublicConfig>("/api/config/public"),
+  aiHealth: () => request<AiHealthResponse>("/api/ai/health"),
   campaigns: () => request<CampaignPreset[]>("/api/campaigns"),
   campaign: (id: string) => request<CampaignPreset & { profileCount: number; storedProofs: number; latestProfiles: CapsuleIndexRecord[] }>(`/api/campaigns/${id}`),
   campaignCapsules: (id: string) => request<CapsuleIndexRecord[]>(`/api/campaigns/${id}/capsules`),
@@ -56,6 +57,8 @@ export const api = {
   capsules: () => request<CapsuleIndexRecord[]>("/api/capsules"),
   capsule: (id: string, root?: string | null, tx?: string | null) =>
     request<ProjectCapsule>(`/api/capsules/${id}${proofQuery(root, tx)}`),
+  capsuleVersions: (id: string, root?: string | null, tx?: string | null) =>
+    request<CapsuleIndexRecord[]>(`/api/capsules/${id}/versions${proofQuery(root, tx)}`),
   createCapsule: (input: ProjectCapsuleInput) =>
     request<ProjectCapsule>("/api/capsules", { method: "POST", body: JSON.stringify(input) }),
   startClaim: (id: string) =>

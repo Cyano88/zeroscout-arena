@@ -22,7 +22,7 @@ export const capsuleInputSchema = z.object({
   builderWallet: z.string().max(120).optional(),
   builderEmail: z.string().email().optional(),
   mentorFocus: z.string().max(2000).optional(),
-  helpNeeded: z.string().max(120).optional(),
+  helpNeeded: z.string().max(240).optional(),
   visibility: z.enum(["public", "unlisted"]).optional(),
   source: z.enum(["hosted", "deeplink", "widget", "api"]).optional(),
   externalUserId: z.string().max(160).optional(),

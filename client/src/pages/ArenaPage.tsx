@@ -62,9 +62,16 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
     void api.campaigns().then(setCampaigns).catch(() => undefined);
   }, []);
 
+  const activeCampaign = findCampaignPreset(form.campaignId);
+
   const previousOptions = useMemo(
-    () => capsules.filter((item) => item.projectName.toLowerCase() === form.projectName.toLowerCase() || item.teamName.toLowerCase() === form.teamName.toLowerCase()),
-    [capsules, form.projectName, form.teamName]
+    () => capsules.filter((item) => {
+      const sameCampaign = item.campaignId === activeCampaign.id;
+      const sameRepo = normalizeUrl(item.repoUrl) && normalizeUrl(item.repoUrl) === normalizeUrl(form.repoUrl);
+      const sameName = form.projectName.length > 1 && item.projectName.toLowerCase() === form.projectName.toLowerCase();
+      return sameCampaign && (sameRepo || sameName);
+    }),
+    [activeCampaign.id, capsules, form.projectName, form.repoUrl]
   );
 
   const ready = detailsReady(form);
@@ -72,7 +79,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
   const stored = flow.kind === "stored";
   const fallback = flow.kind === "fallback";
   const errored = flow.kind === "error";
-  const activeCampaign = findCampaignPreset(form.campaignId);
+  const hasPreviousVersion = previousOptions.length > 0;
 
   const steps = railSteps({ ready, submitting, stored, fallback, errored });
   const logoState: ProofState = stored ? "complete" : submitting ? "active" : errored || fallback ? "error" : "pending";
@@ -96,7 +103,9 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
     ? "Storing proof on 0G..."
     : stored
       ? "Proof page ready"
-      : "Create proof page";
+      : hasPreviousVersion
+        ? "Publish checkpoint update"
+        : "Create Project Passport";
 
   function chooseProgram(id: string) {
     const campaign = findCampaignPreset(id);
@@ -122,7 +131,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
       <header className="page-heading">
         <span className="eyebrow">Create</span>
         <h1>Create a verified project profile</h1>
-        <p>Choose a path, add your repo and demo, then publish a 0G-backed Project Passport.</p>
+        <p>Choose a program, add your real project repo and demo, then publish a 0G-backed Project Passport.</p>
       </header>
 
       {!selectedProgram && !compact && (
@@ -167,11 +176,11 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
             </div>
 
             <div className="field-row two">
-              <Field label="Project name" value={form.projectName} onChange={(v) => setForm({ ...form, projectName: v })} placeholder="ZeroScout Arena" required maxLength={90} />
+              <Field label="Project name" value={form.projectName} onChange={(v) => setForm({ ...form, projectName: v })} placeholder="Your product name, not the program" required maxLength={90} />
               <Field label="Builder or team" value={form.teamName} onChange={(v) => setForm({ ...form, teamName: v })} placeholder="Your team" required maxLength={90} />
             </div>
 
-            <Field label="One-line promise" value={form.tagline} onChange={(v) => setForm({ ...form, tagline: v })} placeholder="Say the outcome in one clear sentence." required maxLength={140} />
+            <Field label="One-line outcome" value={form.tagline} onChange={(v) => setForm({ ...form, tagline: v })} placeholder="What should someone understand in one sentence?" required maxLength={140} />
 
             <div className="field-row two">
               <Field label="Repo URL" type="url" value={form.repoUrl} onChange={(v) => setForm({ ...form, repoUrl: v })} placeholder="https://github.com/..." required />
@@ -209,20 +218,21 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
 
             {previousOptions.length > 0 && (
               <div className="field">
-                <label>Continue from a previous version</label>
+                <label>Update an existing passport</label>
                 <select value={form.previousCapsuleId ?? ""} onChange={(e) => setForm({ ...form, previousCapsuleId: e.target.value || undefined })}>
-                  <option value="">None</option>
+                  <option value="">Auto-link latest matching repo</option>
                   {previousOptions.map((item) => (
-                    <option key={item.id} value={item.id}>{item.projectName} - {item.checkpointLabel ?? item.round}</option>
+                    <option key={item.id} value={item.id}>v{item.versionNumber ?? 1} - {item.projectName} - {item.checkpointLabel ?? item.round}</option>
                   ))}
                 </select>
+                <span className="hint">Same repo and program become a version history, not duplicate listings.</span>
               </div>
             )}
 
             <Textarea label="What does the product do?" value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder="Who is it for, and what do they get?" required maxLength={4000} />
             <Textarea label="What does 0G power?" value={form.ogUsageClaims} onChange={(v) => setForm({ ...form, ogUsageClaims: v })} placeholder="Example: stores the public proof record, runs AI analysis, or verifies progress." required maxLength={3000} />
             <Textarea label="What should people remember?" value={form.pitchNotes ?? ""} onChange={(v) => setForm({ ...form, pitchNotes: v })} placeholder="Write the sentence you want users, mentors, or voters to repeat." maxLength={3000} />
-            <Textarea label="What do you need next?" value={form.helpNeeded ?? ""} onChange={(v) => setForm({ ...form, helpNeeded: v })} placeholder="Example: pilots, users, funding, mentors, design partners." maxLength={120} />
+            <Textarea label="What do you need next?" value={form.helpNeeded ?? ""} onChange={(v) => setForm({ ...form, helpNeeded: v })} placeholder="Example: pilots, users, funding, mentors, design partners." maxLength={240} />
 
             {errored && <div className="error-banner">{flow.message}</div>}
             {fallback && (
@@ -362,4 +372,8 @@ function programDescription(campaign: CampaignPreset): string {
   if (campaign.id === "zero-cup") return "Hackathons, grants, and ecosystem competitions.";
   if (campaign.id === "grail-builders-university") return "Universities, cohorts, tutors, and accelerators.";
   return "Independent builders creating public or unlisted proof.";
+}
+
+function normalizeUrl(value?: string): string {
+  return (value ?? "").trim().replace(/\/$/, "").toLowerCase();
 }

@@ -99,6 +99,7 @@ export interface ProjectCapsuleInput {
 export interface ProjectCapsule extends ProjectCapsuleInput {
   id: string;
   projectKey: string;
+  versionNumber: number;
   ownership?: ProjectOwnershipClaim;
   aiProvider: string;
   scoutBrief: string;
@@ -123,10 +124,13 @@ export interface ProjectCapsule extends ProjectCapsuleInput {
 export interface CapsuleIndexRecord {
   id: string;
   projectKey: string;
+  versionNumber: number;
+  previousCapsuleId?: string;
   ownership?: ProjectOwnershipClaim;
   projectName: string;
   teamName: string;
   tagline: string;
+  repoUrl: string;
   round: Round;
   stage: ProjectStage;
   campaignId: string;
@@ -190,4 +194,12 @@ export interface HealthResponse {
   network: string;
   storageConfigured: boolean;
   aiConfigured: boolean;
+}
+
+export interface AiHealthResponse {
+  configured: boolean;
+  ok: boolean;
+  provider: string;
+  model?: string;
+  error?: string;
 }
