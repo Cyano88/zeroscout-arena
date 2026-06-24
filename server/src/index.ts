@@ -7,7 +7,7 @@ import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
 import { clearPendingClaim, getCapsule, getPendingClaim, listMatchups, listPublicCapsules, saveCapsule, saveMatchup, savePendingClaim } from "./repository.js";
 import { generateMatchup, generateScout } from "./services/ai.js";
 import { loadCanonicalArtifact, storeCanonicalArtifact } from "./services/storage.js";
-import { listRegistryCapsules, registerPassportOnChain } from "./services/registry.js";
+import { listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
 import { parseGitHubRepo, projectKeyFor } from "./services/project-key.js";
 import type { ClaimStartResponse, HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
 import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
@@ -212,6 +212,10 @@ app.post("/api/capsules/:id/claim/verify", async (req, res, next) => {
       },
       updatedAt: now
     };
+    const claimRegistryTxHash = await registerClaimOnChain(updated);
+    if (claimRegistryTxHash && updated.ownership) {
+      updated.ownership.claimRegistryTxHash = claimRegistryTxHash;
+    }
 
     await saveCapsule(updated);
     await clearPendingClaim(capsule.id);

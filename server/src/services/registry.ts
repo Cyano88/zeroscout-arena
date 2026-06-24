@@ -7,7 +7,9 @@ import { projectKeyFor } from "./project-key.js";
 
 const registryAbi = [
   "event PassportRegistered(string id, bytes32 indexed root, bytes32 capsuleHash, bytes32 storageTxHash, string campaignId, bool isPublic, uint256 createdAt)",
-  "function registerPassport(string id, bytes32 root, bytes32 capsuleHash, bytes32 storageTxHash, string campaignId, bool isPublic) external"
+  "event ProjectClaimed(string id, bytes32 indexed projectKey, bytes32 claimRoot, bytes32 claimHash, bytes32 claimStorageTxHash, string method, string claimedBy, uint256 claimedAt)",
+  "function registerPassport(string id, bytes32 root, bytes32 capsuleHash, bytes32 storageTxHash, string campaignId, bool isPublic) external",
+  "function registerClaim(string id, bytes32 projectKey, bytes32 claimRoot, bytes32 claimHash, bytes32 claimStorageTxHash, string method, string claimedBy) external"
 ];
 
 export function registryConfigured(): boolean {
@@ -27,6 +29,25 @@ export async function registerPassportOnChain(capsule: ProjectCapsule): Promise<
     toBytes32(capsule.storageTxHash),
     capsule.campaignId ?? "custom",
     capsule.visibility !== "unlisted"
+  );
+  const receipt = await tx.wait();
+  return receipt?.hash ?? tx.hash;
+}
+
+export async function registerClaimOnChain(capsule: ProjectCapsule): Promise<string | undefined> {
+  if (!config.registryContract || !config.privateKey || !capsule.ownership) return undefined;
+
+  const provider = new ethers.JsonRpcProvider(config.rpcUrl, config.chainId);
+  const signer = new ethers.Wallet(config.privateKey, provider);
+  const contract = new ethers.Contract(config.registryContract, registryAbi, signer);
+  const tx = await contract.registerClaim(
+    capsule.id,
+    projectKeyBytes(capsule.projectKey),
+    toBytes32(capsule.ownership.claimRoot),
+    toBytes32(capsule.ownership.claimHash),
+    toBytes32(capsule.ownership.claimTxHash),
+    capsule.ownership.method,
+    capsule.ownership.claimedBy
   );
   const receipt = await tx.wait();
   return receipt?.hash ?? tx.hash;
@@ -117,4 +138,9 @@ async function loadRegistryRecord(id: string, root: string, tx: string): Promise
 
 function toBytes32(value?: string): string {
   return value && /^0x[a-fA-F0-9]{64}$/.test(value) ? value : ethers.ZeroHash;
+}
+
+function projectKeyBytes(projectKey: string): string {
+  if (/^0x[a-fA-F0-9]{64}$/.test(projectKey)) return projectKey;
+  return `0x${projectKey.padEnd(64, "0").slice(0, 64)}`;
 }

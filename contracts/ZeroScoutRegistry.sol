@@ -14,6 +14,17 @@ contract ZeroScoutRegistry {
         uint256 createdAt
     );
 
+    event ProjectClaimed(
+        string id,
+        bytes32 indexed projectKey,
+        bytes32 claimRoot,
+        bytes32 claimHash,
+        bytes32 claimStorageTxHash,
+        string method,
+        string claimedBy,
+        uint256 claimedAt
+    );
+
     modifier onlyOwner() {
         require(msg.sender == owner, "not owner");
         _;
@@ -39,5 +50,20 @@ contract ZeroScoutRegistry {
         require(bytes(id).length > 0, "empty id");
         require(root != bytes32(0), "empty root");
         emit PassportRegistered(id, root, capsuleHash, storageTxHash, campaignId, isPublic, block.timestamp);
+    }
+
+    function registerClaim(
+        string calldata id,
+        bytes32 projectKey,
+        bytes32 claimRoot,
+        bytes32 claimHash,
+        bytes32 claimStorageTxHash,
+        string calldata method,
+        string calldata claimedBy
+    ) external onlyOwner {
+        require(bytes(id).length > 0, "empty id");
+        require(projectKey != bytes32(0), "empty project key");
+        require(claimRoot != bytes32(0), "empty claim root");
+        emit ProjectClaimed(id, projectKey, claimRoot, claimHash, claimStorageTxHash, method, claimedBy, block.timestamp);
     }
 }

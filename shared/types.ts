@@ -57,6 +57,7 @@ export interface ProjectOwnershipClaim {
   claimRoot: string;
   claimHash: string;
   claimTxHash?: string;
+  claimRegistryTxHash?: string;
   verifiedAt: string;
 }
 

@@ -182,6 +182,7 @@ function ClaimSection({ capsule, onClaimed }: { capsule: ProjectCapsule; onClaim
   }
 
   if (capsule.ownership) {
+    const claimRegistryTxUrl = explorerTxUrl(capsule.network, capsule.ownership.claimRegistryTxHash);
     return (
       <section className="surface section">
         <h2>Ownership</h2>
@@ -189,8 +190,14 @@ function ClaimSection({ capsule, onClaimed }: { capsule: ProjectCapsule; onClaim
         <div className="record-rows" style={{ marginTop: 14 }}>
           <Row k="Method" value="Repo file proof" disableCopy />
           <Row k="Claim root" value={capsule.ownership.claimRoot} />
+          <Row k="Claim registry tx" value={capsule.ownership.claimRegistryTxHash ?? "-"} disabled={!capsule.ownership.claimRegistryTxHash} />
           <Row k="Verified" value={new Date(capsule.ownership.verifiedAt).toLocaleString()} disableCopy />
         </div>
+        {claimRegistryTxUrl && (
+          <a className="btn btn-ghost btn-sm" href={claimRegistryTxUrl} target="_blank" rel="noreferrer" style={{ width: "auto", marginTop: 14 }}>
+            Claim registry tx <ExternalLink size={13} />
+          </a>
+        )}
       </section>
     );
   }
