@@ -146,6 +146,7 @@ export async function generateVideoReview(capsule: ProjectCapsule): Promise<Vide
     throw new Error("0G Compute Router is not configured for video review.");
   }
 
+  const videoInputUrl = await resolveVideoInputUrl(capsule.videoDemoUrl);
   const prompt = `Review this builder demo video for a ZeroScout Project Passport.
 
 Project:
@@ -165,7 +166,7 @@ Use "video review signal", not official judging language. If the video cannot be
       role: "user",
       content: [
         { type: "text", text: prompt },
-        { type: "video_url", video_url: { url: capsule.videoDemoUrl } }
+        { type: "video_url", video_url: { url: videoInputUrl } }
       ]
     }
   ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[];
@@ -181,6 +182,19 @@ Use "video review signal", not official judging language. If the video cannot be
     missingProofMoments: list(parsed.missingProofMoments, ["Make the storage root, registry tx, or Compute provider visible in the walkthrough."]),
     recommendedCuts: list(parsed.recommendedCuts, ["Keep the walkthrough under two minutes and lead with the proof outcome."])
   };
+}
+
+async function resolveVideoInputUrl(videoUrl: string): Promise<string> {
+  const host = new URL(videoUrl).hostname.replace(/^www\./, "").toLowerCase();
+  if (host !== "loom.com") return videoUrl;
+
+  const response = await fetch(videoUrl, { headers: { "User-Agent": "ZeroScout-Arena" } });
+  if (!response.ok) throw new Error("Could not load the Loom page for video review.");
+  const html = await response.text();
+  const match = html.match(/"nullableRawCdnUrl\(\{\\"acceptableMimes\\":\[\\"M3U8\\"\].*?\)":\{"__typename":"CloudfrontSignedUrlPayload","url":"([^"]+)"/);
+  const signedUrl = match?.[1]?.replace(/\\u0026/g, "&").replace(/\\\//g, "/");
+  if (!signedUrl) throw new Error("Could not resolve a Loom video stream for 0G review.");
+  return signedUrl;
 }
 
 function getAiClient(): { client: OpenAI; model: string; label: string } | undefined {
