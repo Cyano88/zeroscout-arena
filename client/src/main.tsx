@@ -72,8 +72,27 @@ function App() {
           <Route path="/matchup" element={<Navigate to="/compare" replace />} />
           <Route path="/docs" element={<Navigate to="/verify" replace />} />
         </Routes>
+        {!isEmbed && <SiteFooter />}
       </div>
     </BrowserRouter>
+  );
+}
+
+function SiteFooter() {
+  return (
+    <footer className="site-footer">
+      <div>
+        <span>Powered by</span>
+        <strong>0G Labs</strong>
+      </div>
+      <nav aria-label="Footer navigation">
+        <NavLink to="/verify">Verify</NavLink>
+        <NavLink to="/dashboard">API</NavLink>
+        <NavLink to="/integrate">Integrate</NavLink>
+        <NavLink to="/compare">Compare</NavLink>
+        <NavLink to="/projects">Projects</NavLink>
+      </nav>
+    </footer>
   );
 }
 

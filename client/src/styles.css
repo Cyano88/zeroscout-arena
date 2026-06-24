@@ -1031,6 +1031,63 @@ input:focus, textarea:focus, select:focus {
   color: var(--bg);
 }
 
+.site-footer,
+.embed-footer {
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+  padding: 20px 24px;
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.site-footer div,
+.embed-footer div {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.site-footer span,
+.embed-footer span {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.site-footer strong,
+.embed-footer strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.site-footer nav,
+.embed-footer nav {
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.site-footer a,
+.embed-footer button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.site-footer a:hover,
+.embed-footer button:hover {
+  color: var(--text);
+}
+
 /* === Integrations page === */
 .integrate-primary {
   display: grid;
