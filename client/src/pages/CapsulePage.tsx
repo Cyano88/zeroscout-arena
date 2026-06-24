@@ -26,6 +26,7 @@ export function CapsulePage() {
   const proofState: ProofState = real ? "complete" : "error";
   const shareUrl = proofUrl(capsule);
   const txUrl = explorerTxUrl(capsule.network, capsule.storageTxHash);
+  const registryTxUrl = explorerTxUrl(capsule.network, capsule.registryTxHash);
 
   return (
     <main className="page-narrow section-stack">
@@ -120,6 +121,7 @@ export function CapsulePage() {
           <Row k="Root" value={capsule.storageRoot} />
           <Row k="Content hash" value={capsule.capsuleHash} />
           <Row k="Transaction" value={capsule.storageTxHash ?? "-"} disabled={!capsule.storageTxHash} />
+          <Row k="Registry tx" value={capsule.registryTxHash ?? "-"} disabled={!capsule.registryTxHash} />
           <Row k="AI provider" value={capsule.aiProvider} disableCopy />
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
@@ -132,6 +134,11 @@ export function CapsulePage() {
           {txUrl && (
             <a className="btn btn-ghost btn-sm" href={txUrl} target="_blank" rel="noreferrer">
               Open tx <ExternalLink size={13} />
+            </a>
+          )}
+          {registryTxUrl && (
+            <a className="btn btn-ghost btn-sm" href={registryTxUrl} target="_blank" rel="noreferrer">
+              Registry tx <ExternalLink size={13} />
             </a>
           )}
           <a className="btn btn-ghost btn-sm" href={capsule.repoUrl} target="_blank" rel="noreferrer">Repo <ExternalLink size={13} /></a>

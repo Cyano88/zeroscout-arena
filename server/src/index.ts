@@ -4,9 +4,10 @@ import { nanoid } from "nanoid";
 import path from "node:path";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { getCapsule, listMatchups, listPublicCapsules, listPublicCapsulesByCampaign, saveCapsule, saveMatchup } from "./repository.js";
+import { getCapsule, listMatchups, listPublicCapsules, saveCapsule, saveMatchup } from "./repository.js";
 import { generateMatchup, generateScout } from "./services/ai.js";
 import { loadCanonicalArtifact, storeCanonicalArtifact } from "./services/storage.js";
+import { listRegistryCapsules, registerPassportOnChain } from "./services/registry.js";
 import type { HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput } from "../../shared/types.js";
 import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
 
@@ -37,12 +38,13 @@ app.get("/api/campaigns", (_req, res) => {
 app.get("/api/campaigns/:id", async (req, res, next) => {
   try {
     const campaign = findCampaignPreset(req.params.id);
-    const capsules = await listPublicCapsulesByCampaign(campaign.id);
+    const capsules = await listPublicCapsulesMerged();
+    const campaignCapsules = capsules.filter((item) => item.campaignId === campaign.id);
     res.json({
       ...campaign,
-      profileCount: capsules.length,
-      storedProofs: capsules.filter((item) => item.storageMode !== "local-dev-fallback").length,
-      latestProfiles: capsules.slice(0, 8)
+      profileCount: campaignCapsules.length,
+      storedProofs: campaignCapsules.filter((item) => item.storageMode !== "local-dev-fallback").length,
+      latestProfiles: campaignCapsules.slice(0, 8)
     });
   } catch (error) {
     next(error);
@@ -52,7 +54,8 @@ app.get("/api/campaigns/:id", async (req, res, next) => {
 app.get("/api/campaigns/:id/capsules", async (req, res, next) => {
   try {
     const campaign = findCampaignPreset(req.params.id);
-    res.json(await listPublicCapsulesByCampaign(campaign.id));
+    const capsules = await listPublicCapsulesMerged();
+    res.json(capsules.filter((item) => item.campaignId === campaign.id));
   } catch (error) {
     next(error);
   }
@@ -60,7 +63,7 @@ app.get("/api/campaigns/:id/capsules", async (req, res, next) => {
 
 app.get("/api/capsules", async (_req, res, next) => {
   try {
-    res.json(await listPublicCapsules());
+    res.json(await listPublicCapsulesMerged());
   } catch (error) {
     next(error);
   }
@@ -68,7 +71,7 @@ app.get("/api/capsules", async (_req, res, next) => {
 
 app.get("/api/projects", async (_req, res, next) => {
   try {
-    res.json(await listPublicCapsules());
+    res.json(await listPublicCapsulesMerged());
   } catch (error) {
     next(error);
   }
@@ -164,8 +167,21 @@ async function createProjectCapsule(parsed: ProjectCapsuleInput): Promise<Projec
   };
   const proof = await storeCanonicalArtifact("capsule", id, artifactWithoutProof);
   const capsule: ProjectCapsule = { ...artifactWithoutProof, ...proof };
+  const registryTxHash = await registerPassportOnChain(capsule);
+  if (registryTxHash) {
+    capsule.registryTxHash = registryTxHash;
+  }
   await saveCapsule(capsule);
   return capsule;
+}
+
+async function listPublicCapsulesMerged() {
+  const [local, registry] = await Promise.all([listPublicCapsules(), listRegistryCapsules()]);
+  const byId = new Map(local.map((item) => [item.id, item]));
+  for (const item of registry) {
+    byId.set(item.id, { ...byId.get(item.id), ...item });
+  }
+  return [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 async function recoverCapsuleFromRoot(id: string, rootQuery: unknown, txQuery: unknown): Promise<ProjectCapsule | undefined> {

@@ -93,6 +93,7 @@ export interface ProjectCapsule extends ProjectCapsuleInput {
   storageUri: string;
   capsuleHash: string;
   storageTxHash?: string;
+  registryTxHash?: string;
   network: string;
   storageMode: "0g-mainnet" | "0g-testnet" | "local-dev-fallback";
   createdAt: string;
@@ -117,6 +118,7 @@ export interface CapsuleIndexRecord {
   storageUri: string;
   capsuleHash: string;
   storageTxHash?: string;
+  registryTxHash?: string;
   network: string;
   storageMode: ProjectCapsule["storageMode"];
   aiProvider: string;
@@ -143,6 +145,7 @@ export interface MatchupReport {
   storageUri: string;
   capsuleHash: string;
   storageTxHash?: string;
+  registryTxHash?: string;
   network: string;
   storageMode: ProjectCapsule["storageMode"];
   createdAt: string;
@@ -154,6 +157,7 @@ export interface PublicConfig {
   storageIndexer: string;
   explorerUrl: string;
   storageExplorerUrl: string;
+  registryContract?: string;
   computeMode: string;
   storageMode: string;
 }

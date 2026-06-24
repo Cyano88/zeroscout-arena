@@ -35,8 +35,9 @@ The AI output is stored inside the 0G-backed Project Passport.
 
 - Project Passport JSON is uploaded to 0G Storage.
 - Project comparison reports are uploaded to 0G Storage.
+- Public passport roots can be registered on 0G Chain through `ZeroScoutRegistry`, giving the app a rebuildable public index from chain events.
 - The app records storage root, content hash, network, timestamp, and transaction hash when available.
-- The local JSON index is only for discovery and routing.
+- The local JSON index is only a cache for discovery and routing.
 - 0G Compute Router is preferred for AI generation when `ZG_COMPUTE_API_KEY` is configured.
 
 Mainnet defaults:
@@ -46,6 +47,8 @@ ZG_NETWORK=mainnet
 ZG_RPC_URL=https://evmrpc.0g.ai
 ZG_STORAGE_INDEXER=https://indexer-storage-turbo.0g.ai
 ZG_CHAIN_ID=16661
+ZG_REGISTRY_CONTRACT=0x...
+ZG_REGISTRY_FROM_BLOCK=...
 ```
 
 ## Routes
@@ -121,10 +124,20 @@ cp .env.example .env
 npm run dev
 ```
 
+Deploy the optional 0G Chain registry:
+
+```bash
+npm run deploy:registry
+```
+
+Then set `ZG_REGISTRY_CONTRACT` and `ZG_REGISTRY_FROM_BLOCK` in Railway. Once configured, new public passports are emitted as `PassportRegistered` events, and the Projects page can rebuild from chain events plus 0G Storage roots.
+
 For production proof:
 
 ```env
 ZG_PRIVATE_KEY=your_0g_mainnet_wallet_private_key
+ZG_REGISTRY_CONTRACT=your_deployed_registry_contract
+ZG_REGISTRY_FROM_BLOCK=deployment_block_number
 ZG_COMPUTE_API_KEY=your_0g_router_key
 DEV_STORAGE_FALLBACK=false
 ```
@@ -155,6 +168,7 @@ Unlisted passports are not shown in Projects, source lists, or Compare. They rem
 
 - AI-native: the core workflow is an AI project analyst.
 - 0G does real work: Project Passports and comparison reports are stored on 0G Storage.
+- 0G Chain can hold the public root registry through `PassportRegistered` events.
 - Built for the tournament window: scoped as a new repo and product.
 - Public repo and working demo: this README and deployment docs define the path.
 - Demo matches code: no hardcoded 0G responses.

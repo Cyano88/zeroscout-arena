@@ -18,6 +18,8 @@ export const config = {
   storageExplorerUrl:
     process.env.ZG_STORAGE_EXPLORER_URL ?? (isMainnet ? "https://storagescan.0g.ai" : "https://storagescan-galileo.0g.ai"),
   privateKey: process.env.ZG_PRIVATE_KEY,
+  registryContract: process.env.ZG_REGISTRY_CONTRACT,
+  registryFromBlock: Number(process.env.ZG_REGISTRY_FROM_BLOCK ?? 0),
   computeApiKey: process.env.ZG_COMPUTE_API_KEY,
   computeBaseUrl: process.env.ZG_COMPUTE_BASE_URL ?? (isMainnet ? "https://router-api.0g.ai/v1" : "https://router-api-testnet.integratenetwork.work/v1"),
   computeModel: process.env.ZG_COMPUTE_MODEL ?? "zai-org/GLM-5-FP8",
@@ -38,6 +40,7 @@ export function publicConfig() {
     storageIndexer: config.storageIndexer,
     explorerUrl: config.explorerUrl,
     storageExplorerUrl: config.storageExplorerUrl,
+    registryContract: config.registryContract,
     computeMode: has0gCompute ? "0G Compute Router" : config.openAiApiKey ? "OpenAI-compatible fallback" : "deterministic local scout fallback",
     storageMode: has0gStorage ? `0G ${config.network}` : config.devStorageFallback ? "local dev fallback" : "not configured"
   };
