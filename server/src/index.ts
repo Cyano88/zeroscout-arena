@@ -10,7 +10,7 @@ import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
 import { addCreditsToWalletKeys, claimIntegrationKeyByHash, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, getVideoScoreSession, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, markVideoScoreSessionUsed, revokeIntegrationKey, revokeIntegrationKeyForWallet, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim, saveVideoScoreSession } from "./repository.js";
 import { checkAiHealth, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
 import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
-import { getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
+import { getRegistryCapsuleRoot, getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
 import { parseGitHubRepo, projectKeyFor } from "./services/project-key.js";
 import type { CapsuleIndexRecord, ClaimStartResponse, HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput, VideoReview } from "../../shared/types.js";
 import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
@@ -844,8 +844,15 @@ async function listPublicLatestCapsulesMerged() {
 }
 
 async function recoverCapsuleFromRoot(id: string, rootQuery: unknown, txQuery: unknown): Promise<ProjectCapsule | undefined> {
-  const root = typeof rootQuery === "string" ? rootQuery : "";
-  const tx = typeof txQuery === "string" ? txQuery : undefined;
+  let root = typeof rootQuery === "string" ? rootQuery : "";
+  let tx = typeof txQuery === "string" ? txQuery : undefined;
+  let registryTxHash: string | undefined;
+  if (!root) {
+    const registryRecord = await getRegistryCapsuleRoot(id);
+    root = registryRecord?.root ?? "";
+    tx = registryRecord?.tx ?? tx;
+    registryTxHash = registryRecord?.registryTxHash;
+  }
   if (!/^0x[a-fA-F0-9]{64}$/.test(root)) return undefined;
 
   const downloaded = await loadCanonicalArtifact(root);
@@ -860,6 +867,7 @@ async function recoverCapsuleFromRoot(id: string, rootQuery: unknown, txQuery: u
     storageUri: `0g://${config.network}/${root}`,
     capsuleHash: downloaded.capsuleHash,
     storageTxHash: tx,
+    registryTxHash: registryTxHash ?? artifact.registryTxHash,
     network: `0G ${config.network}`,
     storageMode: config.network === "mainnet" ? "0g-mainnet" : "0g-testnet"
   };

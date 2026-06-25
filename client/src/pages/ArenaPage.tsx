@@ -95,6 +95,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
     setFlow({ kind: "submitting" });
     try {
       const capsule = await api.createCapsule(form);
+      rememberProof(capsule);
       if (isRealProof(capsule.storageMode)) {
         setFlow({ kind: "stored", capsule });
       } else {
@@ -328,6 +329,17 @@ function proofPath(capsule: ProjectCapsule): string {
   const params = new URLSearchParams({ root: capsule.storageRoot });
   if (capsule.storageTxHash) params.set("tx", capsule.storageTxHash);
   return `/projects/${capsule.id}?${params.toString()}`;
+}
+
+function rememberProof(capsule: ProjectCapsule) {
+  try {
+    localStorage.setItem(`zeroscout-proof:${capsule.id}`, JSON.stringify({
+      root: capsule.storageRoot,
+      tx: capsule.storageTxHash ?? ""
+    }));
+  } catch {
+    // Local cache is best-effort; the proof URL still carries root and tx.
+  }
 }
 
 function proofPathFromRecord(capsule: CapsuleIndexRecord): string {

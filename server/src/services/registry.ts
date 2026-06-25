@@ -124,6 +124,36 @@ export async function listRegistryCapsules(): Promise<CapsuleIndexRecord[]> {
   return records.filter((item): item is CapsuleIndexRecord => Boolean(item)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+export async function getRegistryCapsuleRoot(id: string): Promise<{ root: string; tx?: string; registryTxHash?: string } | undefined> {
+  const contracts = registryReadContracts();
+  if (contracts.length === 0) return undefined;
+
+  const provider = new ethers.JsonRpcProvider(config.rpcUrl, config.chainId);
+  const latest = await provider.getBlockNumber();
+  const fromBlock = Math.max(0, config.registryFromBlock);
+  const logs = (
+    await Promise.all(contracts.map(async (address) => {
+      const contract = new ethers.Contract(address, registryAbi, provider);
+      const filter = contract.filters.PassportRegistered();
+      return queryLogsInBatches(contract, filter, fromBlock, latest);
+    }))
+  ).flat();
+
+  const latestLog = logs
+    .filter((log) => registryInterface.parseLog(log)?.args.id === id)
+    .sort((a, b) => b.blockNumber - a.blockNumber || b.index - a.index)[0];
+  if (!latestLog) return undefined;
+
+  const parsed = registryInterface.parseLog(latestLog);
+  if (!parsed || !parsed.args.isPublic) return undefined;
+
+  return {
+    root: parsed.args.root,
+    tx: parsed.args.storageTxHash === ethers.ZeroHash ? undefined : parsed.args.storageTxHash,
+    registryTxHash: latestLog.transactionHash
+  };
+}
+
 async function queryLogsInBatches(contract: ethers.Contract, filter: ethers.DeferredTopicFilter, fromBlock: number, latest: number): Promise<ethers.EventLog[]> {
   const logs: ethers.EventLog[] = [];
   const batchSize = 4500;

@@ -17,7 +17,22 @@ export function CapsulePage() {
 
   useEffect(() => {
     if (!id) return;
-    void api.capsule(id, root, tx).then(setCapsule).catch((err) => setError(err instanceof Error ? err.message : "Project not found"));
+    setError("");
+    void api.capsule(id, root, tx)
+      .then((next) => {
+        rememberProof(next);
+        setCapsule(next);
+      })
+      .catch((err) => {
+        const remembered = loadRememberedProof(id);
+        if (!root && remembered?.root) {
+          const params = new URLSearchParams({ root: remembered.root });
+          if (remembered.tx) params.set("tx", remembered.tx);
+          window.location.replace(`/projects/${id}?${params.toString()}`);
+          return;
+        }
+        setError(err instanceof Error ? err.message : "Project not found");
+      });
     void api.capsuleVersions(id, root, tx).then(setVersions).catch(() => setVersions([]));
   }, [id, root, tx]);
 
@@ -395,6 +410,30 @@ function proofUrl(capsule: ProjectCapsule): string {
   url.searchParams.set("root", capsule.storageRoot);
   if (capsule.storageTxHash) url.searchParams.set("tx", capsule.storageTxHash);
   return url.toString();
+}
+
+function rememberProof(capsule: ProjectCapsule) {
+  try {
+    localStorage.setItem(proofCacheKey(capsule.id), JSON.stringify({
+      root: capsule.storageRoot,
+      tx: capsule.storageTxHash ?? ""
+    }));
+  } catch {
+    // The proof still works through the URL; local cache only helps naked refreshes.
+  }
+}
+
+function loadRememberedProof(id: string): { root: string; tx?: string } | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(proofCacheKey(id)) ?? "null") as { root?: string; tx?: string } | null;
+    return parsed?.root ? { root: parsed.root, tx: parsed.tx } : null;
+  } catch {
+    return null;
+  }
+}
+
+function proofCacheKey(id: string) {
+  return `zeroscout-proof:${id}`;
 }
 
 function updateProjectUrl(capsule: ProjectCapsule): string {
