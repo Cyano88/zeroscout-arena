@@ -6,6 +6,12 @@ It turns a builder's repo, demo, and checkpoint notes into an AI-reviewed Projec
 
 Zero Cup is the launch campaign. Grail Builders University is the first real-world cohort template.
 
+## Fast Links
+
+- [10-minute integration guide](./10_MINUTE_INTEGRATION.md): add Project Passports or video scoring to an existing platform.
+- [Demo script](./DEMO_SCRIPT.md): the clean recording flow for judges, builders, and partners.
+- [Deployment guide](./DEPLOYMENT.md): Railway, Vercel, 0G mainnet, Postgres, and env setup.
+
 ## What It Does
 
 - Builders create public Project Passports.
