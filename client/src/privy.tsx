@@ -2,11 +2,12 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import type { ReactNode } from "react";
 
 const privyAppId = import.meta.env.VITE_PRIVY_APP_ID as string | undefined;
+const privyFlag = import.meta.env.VITE_ENABLE_PRIVY === "true";
 
-export const privyEnabled = Boolean(privyAppId);
+export const privyEnabled = privyFlag && Boolean(privyAppId);
 
 export function ZeroScoutPrivyProvider({ children }: { children: ReactNode }) {
-  if (!privyAppId) return <>{children}</>;
+  if (!privyEnabled || !privyAppId) return <>{children}</>;
 
   return (
     <PrivyProvider
