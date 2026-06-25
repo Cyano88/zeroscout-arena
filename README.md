@@ -152,7 +152,7 @@ Use this when an external platform wants ZeroScout as a simple 0G integration la
 Default credit costs:
 
 ```txt
-Project Passport API create: 5 credits
+Project Passport API create: 20 credits
 Video scoring API call: 50 credits
 ```
 

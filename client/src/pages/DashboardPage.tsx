@@ -370,7 +370,7 @@ export function DashboardPage() {
         <div className="balance-secondary">
           <Metric label="Credited OG" value={balance.creditedOg} />
           <Metric label="Wallet OG" value={walletOgBalance || "-"} />
-          <Metric label="Passport API" value={`${pricing?.costs.capsule ?? 5} cr`} />
+          <Metric label="Passport API" value={`${pricing?.costs.capsule ?? 20} cr`} />
         </div>
       </section>
 
@@ -537,11 +537,11 @@ ZEROSCOUT_INTEGRATION_SECRET=zs_live_key_from_this_dashboard`}</pre>
             <p><b>Video scoring</b> is for platforms that already collect videos and need 0G-backed AI review.</p>
             <pre>{`POST /api/integrations/video-score
 multipart: video, platform, program, projectName, prompt
-cost: ${pricing?.costs.videoScore ?? 20} credits`}</pre>
+cost: ${pricing?.costs.videoScore ?? 50} credits`}</pre>
             <p><b>Passport creation</b> is for platforms that already collect project details and want a stored Project Passport.</p>
             <pre>{`POST /api/integrations/capsules
 json: projectName, teamName, repoUrl, demoUrl, description, ogUsageClaims...
-cost: ${pricing?.costs.capsule ?? 5} credits`}</pre>
+cost: ${pricing?.costs.capsule ?? 20} credits`}</pre>
           </div>
           <div>
             <h2>4. Read the response</h2>

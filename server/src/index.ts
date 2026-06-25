@@ -18,7 +18,7 @@ import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
 const app = express();
 const maxVideoBytes = 100 * 1024 * 1024;
 const integrationCosts = {
-  capsule: 5,
+  capsule: 20,
   videoScore: 50
 };
 const upload = multer({
