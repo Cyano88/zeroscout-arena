@@ -27,8 +27,8 @@ export function DashboardPage() {
   const [walletOgBalance, setWalletOgBalance] = useState("");
   const [revokeCandidate, setRevokeCandidate] = useState<PublicKey | null>(null);
 
-  const totalCredits = useMemo(() => keys.reduce((sum, key) => sum + (key.creditBalance ?? 0), 0), [keys]);
   const totalUsed = useMemo(() => keys.reduce((sum, key) => sum + (key.creditsUsed ?? 0), 0), [keys]);
+  const totalCredits = Math.max(0, balance.creditsPurchased - totalUsed);
   const usagePercent = balance.creditsPurchased > 0 ? Math.min(100, Math.round((totalUsed / balance.creditsPurchased) * 100)) : 0;
 
   useEffect(() => {
@@ -305,7 +305,7 @@ export function DashboardPage() {
         <div>
           <span className="status-tag"><Zap size={12} /> Credit gateway</span>
           <h2>{wallet ? short(wallet) : "Connect wallet"}</h2>
-          <p>Your wallet owns the keys. Credits cap usage, and every platform call spends from the key balance.</p>
+          <p>Your wallet owns the keys. Credits are shared across active keys, and every platform call spends from this wallet pool.</p>
         </div>
         <div className="wallet-actions">
           <button className="btn btn-primary" type="button" onClick={connectWallet} disabled={loading === "wallet"}>
@@ -439,7 +439,7 @@ export function DashboardPage() {
               </div>
               <div>
                 <b>{key.creditBalance ?? 0}</b>
-                <span>credits left</span>
+                <span>wallet credits</span>
               </div>
               <div>
                 <b>{key.requestCount ?? 0}</b>
@@ -514,7 +514,7 @@ cost: ${pricing?.costs.capsule ?? 5} credits`}</pre>
           </div>
           <div>
             <h2>4. Read the response</h2>
-            <p>Successful calls return the generated analysis plus 0G proof fields such as root, content hash, storage transaction, and the credits left on the key when available. If credits run out, top up here and the same key can continue working.</p>
+            <p>Successful calls return the generated analysis plus 0G proof fields such as root, content hash, and storage transaction. If credits run out, top up this wallet and every active key owned by the wallet can continue working.</p>
           </div>
         </div>
       </section>

@@ -242,31 +242,16 @@ export async function listIntegrationKeys(): Promise<Omit<IntegrationKeyRecord, 
 export async function listIntegrationKeysByWallet(wallet: string): Promise<Omit<IntegrationKeyRecord, "keyHash">[]> {
   const ownerWallet = wallet.toLowerCase();
   const store = await readStore();
+  const sharedBalance = walletCreditBalance(store, ownerWallet);
   return (store.integrationKeys ?? [])
     .filter((item) => item.ownerWallet?.toLowerCase() === ownerWallet)
-    .map(publicIntegrationKey)
+    .map((item) => publicIntegrationKey(withSharedWalletBalance(item, sharedBalance)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function saveIntegrationKey(record: IntegrationKeyRecord): Promise<void> {
   const store = await readStore();
-  const ownerWallet = record.ownerWallet?.toLowerCase();
-  const pendingCredits = ownerWallet
-    ? (store.integrationTopUps ?? [])
-      .filter((item) => item.wallet.toLowerCase() === ownerWallet)
-      .reduce((sum, item) => sum + Math.max(0, item.credits - (item.appliedCredits ?? 0)), 0)
-    : 0;
-  const normalized = { ...record, creditBalance: (record.creditBalance ?? 0) + pendingCredits };
-  if (ownerWallet && pendingCredits > 0) {
-    let remaining = pendingCredits;
-    for (const topUp of store.integrationTopUps ?? []) {
-      if (topUp.wallet.toLowerCase() !== ownerWallet || remaining <= 0) continue;
-      const unapplied = Math.max(0, topUp.credits - (topUp.appliedCredits ?? 0));
-      const applied = Math.min(unapplied, remaining);
-      topUp.appliedCredits = (topUp.appliedCredits ?? 0) + applied;
-      remaining -= applied;
-    }
-  }
+  const normalized = { ...record, creditBalance: record.creditBalance ?? 0, creditsUsed: record.creditsUsed ?? 0 };
   store.integrationKeys = [normalized, ...(store.integrationKeys ?? []).filter((item) => item.id !== record.id)];
   await writeStore(store);
 }
@@ -288,7 +273,7 @@ export async function claimIntegrationKeyByHash(keyHash: string, wallet: string,
   if (updates.name) target.name = updates.name;
   if (updates.partner) target.partner = updates.partner;
   await writeStore(store);
-  return publicIntegrationKey(target);
+  return publicIntegrationKey(withSharedWalletBalance(target, walletCreditBalance(store, ownerWallet)));
 }
 
 export async function touchIntegrationKey(id: string): Promise<void> {
@@ -305,6 +290,18 @@ export async function consumeIntegrationCredits(id: string, credits: number): Pr
   const store = await readStore();
   const target = (store.integrationKeys ?? []).find((item) => item.id === id && !item.revokedAt);
   if (!target) throw new Error("Integration key not found.");
+  const ownerWallet = target.ownerWallet?.toLowerCase();
+  if (ownerWallet) {
+    const sharedBalance = walletCreditBalance(store, ownerWallet);
+    if (sharedBalance < credits) {
+      throw new Error("Not enough ZeroScout credits. Top up the wallet that owns this integration key.");
+    }
+    target.creditsUsed = (target.creditsUsed ?? 0) + credits;
+    target.lastUsedAt = new Date().toISOString();
+    target.requestCount = (target.requestCount ?? 0) + 1;
+    await writeStore(store);
+    return withSharedWalletBalance(target, Math.max(0, sharedBalance - credits));
+  }
   if ((target.creditBalance ?? 0) < credits) {
     throw new Error("Not enough ZeroScout credits. Top up this integration key.");
   }
@@ -320,23 +317,9 @@ export async function addCreditsToWalletKeys(wallet: string, credits: number): P
   const ownerWallet = wallet.toLowerCase();
   const store = await readStore();
   const owned = (store.integrationKeys ?? []).filter((item) => item.ownerWallet?.toLowerCase() === ownerWallet && !item.revokedAt);
-  if (owned.length === 0) {
-    await writeStore(store);
-    return [];
-  }
-  for (const key of owned) {
-    key.creditBalance = (key.creditBalance ?? 0) + credits;
-  }
-  let remaining = credits;
-  for (const topUp of store.integrationTopUps ?? []) {
-    if (topUp.wallet.toLowerCase() !== ownerWallet || remaining <= 0) continue;
-    const unapplied = Math.max(0, topUp.credits - (topUp.appliedCredits ?? 0));
-    const applied = Math.min(unapplied, remaining);
-    topUp.appliedCredits = (topUp.appliedCredits ?? 0) + applied;
-    remaining -= applied;
-  }
   await writeStore(store);
-  return owned.map(publicIntegrationKey);
+  const sharedBalance = walletCreditBalance(store, ownerWallet);
+  return owned.map((item) => publicIntegrationKey(withSharedWalletBalance(item, sharedBalance)));
 }
 
 export async function saveIntegrationTopUp(record: IntegrationTopUpRecord): Promise<void> {
@@ -389,6 +372,23 @@ function publicIntegrationKey(record: IntegrationKeyRecord): Omit<IntegrationKey
     ...publicRecord,
     creditBalance: publicRecord.creditBalance ?? 0,
     creditsUsed: publicRecord.creditsUsed ?? 0
+  };
+}
+
+function walletCreditBalance(store: StoreFile, ownerWallet: string): number {
+  const purchased = (store.integrationTopUps ?? [])
+    .filter((item) => item.wallet.toLowerCase() === ownerWallet)
+    .reduce((sum, item) => sum + item.credits, 0);
+  const used = (store.integrationKeys ?? [])
+    .filter((item) => item.ownerWallet?.toLowerCase() === ownerWallet)
+    .reduce((sum, item) => sum + (item.creditsUsed ?? 0), 0);
+  return Math.max(0, purchased - used);
+}
+
+function withSharedWalletBalance(record: IntegrationKeyRecord, sharedBalance: number): IntegrationKeyRecord {
+  return {
+    ...record,
+    creditBalance: sharedBalance
   };
 }
 
