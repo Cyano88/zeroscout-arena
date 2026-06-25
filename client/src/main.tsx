@@ -9,12 +9,12 @@ import { MatchupPage } from "./pages/MatchupPage";
 import { DocsPage } from "./pages/DocsPage";
 import { EmbedPage } from "./pages/EmbedPage";
 import { IntegratePage } from "./pages/IntegratePage";
-import { DashboardPage } from "./pages/DashboardPage";
 import ogLogo from "./assets/og-logo.jpeg";
 import zeroScoutMark from "./assets/zeroscout-mark.png";
 import grailMark from "./assets/grail-mark.png";
-import { ZeroScoutPrivyProvider } from "./privy";
 import "./styles.css";
+
+const DashboardRoute = React.lazy(() => import("./pages/DashboardRoute"));
 
 function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("zeroscout-theme") ?? "dark");
@@ -63,7 +63,11 @@ function App() {
           <Route path="/projects" element={<LeaderboardPage />} />
           <Route path="/compare" element={<MatchupPage />} />
           <Route path="/integrate" element={<IntegratePage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/dashboard" element={
+            <React.Suspense fallback={<main className="page"><div className="surface">Loading API dashboard...</div></main>}>
+              <DashboardRoute />
+            </React.Suspense>
+          } />
           <Route path="/verify" element={<DocsPage />} />
           <Route path="/embed/:campaignId" element={<EmbedPage />} />
           <Route path="/capsules/:id" element={<CapsulePage />} />
@@ -90,8 +94,6 @@ function SiteFooter() {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <ZeroScoutPrivyProvider>
-      <App />
-    </ZeroScoutPrivyProvider>
+    <App />
   </React.StrictMode>
 );
