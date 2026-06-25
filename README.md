@@ -143,11 +143,10 @@ ZeroScout also includes a self-serve API dashboard at:
 
 Use this when an external platform wants ZeroScout as a simple 0G integration layer:
 
-- Connect a wallet.
+- Continue with Privy, or connect a browser wallet.
 - Create a capped API key.
 - Send native OG on 0G Chain to the configured treasury address.
-- Paste the transaction hash to verify the top-up.
-- ZeroScout adds credits to that wallet's keys.
+- ZeroScout verifies confirmed treasury transfers and adds credits to that wallet's keys.
 - API calls spend credits before ZeroScout uses 0G Storage or 0G Compute.
 
 Default credit costs:
@@ -163,9 +162,18 @@ Production env:
 DATABASE_URL=postgresql://...
 ZEROSCOUT_TREASURY_ADDRESS=0x...
 ZEROSCOUT_CREDITS_PER_OG=100
+VITE_PRIVY_APP_ID=your_privy_app_id
 ```
 
 `DATABASE_URL` is required for durable API keys, credits, top-ups, usage, and indexed Project Passports on Railway. The server still stores only hashed API keys; full secrets are shown once and can be rotated if lost.
+
+Privy is optional but recommended for public onboarding. In the Privy dashboard, configure:
+
+- App name: ZeroScout.
+- Login methods: email, Google, and wallet.
+- Embedded wallets: create for users without wallets.
+- Allowed origins: `https://zeroscout.app`, the Railway URL, and local dev URLs you use.
+- Theme: dark, with the ZeroScout mark and a restrained purple accent.
 
 Integration choice:
 

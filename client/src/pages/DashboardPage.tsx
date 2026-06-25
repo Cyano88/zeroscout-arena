@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatEther, parseEther, toBeHex } from "ethers";
+import { usePrivy, useWallets, type EIP1193Provider } from "@privy-io/react-auth";
 import { CheckCircle2, Copy, KeyRound, Loader2, LogOut, RefreshCw, Search, Trash2, Wallet, Zap } from "lucide-react";
 import { api } from "../api";
+import { privyEnabled } from "../privy";
 import type { IntegrationKeyRecord } from "../../../shared/types";
 
 type PublicKey = Omit<IntegrationKeyRecord, "keyHash">;
@@ -26,6 +28,7 @@ export function DashboardPage() {
   const [lastSyncedAt, setLastSyncedAt] = useState("");
   const [walletOgBalance, setWalletOgBalance] = useState("");
   const [revokeCandidate, setRevokeCandidate] = useState<PublicKey | null>(null);
+  const [privyProvider, setPrivyProvider] = useState<EIP1193Provider | null>(null);
 
   const totalUsed = useMemo(() => keys.reduce((sum, key) => sum + (key.creditsUsed ?? 0), 0), [keys]);
   const totalCredits = Math.max(0, balance.creditsPurchased - totalUsed);
@@ -62,7 +65,7 @@ export function DashboardPage() {
   }
 
   async function refreshWalletBalance(nextWallet = wallet) {
-    const ethereum = walletProvider();
+    const ethereum = activeWalletProvider(privyProvider);
     if (!ethereum || !nextWallet) return;
     const raw = String(await ethereum.request({ method: "eth_getBalance", params: [nextWallet, "latest"] }));
     const formatted = Number(formatEther(raw));
@@ -124,7 +127,7 @@ export function DashboardPage() {
       setStatus("Paste the full API key you already added to your platform.");
       return;
     }
-    const ethereum = walletProvider();
+    const ethereum = activeWalletProvider(privyProvider);
     if (!ethereum) {
       setStatus("Open this page in your wallet browser to attach an existing key.");
       return;
@@ -172,7 +175,7 @@ export function DashboardPage() {
       setStatus("Top-ups are not live yet. ZeroScout treasury is not configured.");
       return;
     }
-    const ethereum = walletProvider();
+    const ethereum = activeWalletProvider(privyProvider);
     if (!ethereum) {
       setStatus("Open this page in a browser wallet to fund credits.");
       return;
@@ -219,7 +222,7 @@ export function DashboardPage() {
 
   async function revokeKey(key: PublicKey) {
     if (!wallet) return;
-    const ethereum = walletProvider();
+    const ethereum = activeWalletProvider(privyProvider);
     if (!ethereum) {
       setStatus("Open this page in your wallet browser to revoke a key.");
       return;
@@ -308,14 +311,42 @@ export function DashboardPage() {
           <p>Your wallet owns the keys. Credits are shared across active keys, and every platform call spends from this wallet pool.</p>
         </div>
         <div className="wallet-actions">
-          <button className="btn btn-primary" type="button" onClick={connectWallet} disabled={loading === "wallet"}>
-            {loading === "wallet" ? <Loader2 size={14} className="spin" /> : <Wallet size={14} />}
-            {wallet ? "Connected" : "Connect wallet"}
-          </button>
-          {wallet && (
-            <button className="btn btn-ghost" type="button" onClick={disconnectWallet}>
-              <LogOut size={14} /> Disconnect
-            </button>
+          {privyEnabled ? (
+            <>
+              <PrivyWalletBridge
+                onConnected={(address, provider) => {
+                  setWallet(address);
+                  setPrivyProvider(provider);
+                }}
+                onDisconnected={() => {
+                  setPrivyProvider(null);
+                  disconnectWallet();
+                }}
+              />
+              {!wallet && (
+                <button className="btn btn-ghost" type="button" onClick={connectWallet} disabled={loading === "wallet"}>
+                  {loading === "wallet" ? <Loader2 size={14} className="spin" /> : <Wallet size={14} />}
+                  Browser wallet
+                </button>
+              )}
+              {wallet && !privyProvider && (
+                <button className="btn btn-ghost" type="button" onClick={disconnectWallet}>
+                  <LogOut size={14} /> Disconnect
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button className="btn btn-primary" type="button" onClick={connectWallet} disabled={loading === "wallet"}>
+                {loading === "wallet" ? <Loader2 size={14} className="spin" /> : <Wallet size={14} />}
+                {wallet ? "Connected" : "Connect wallet"}
+              </button>
+              {wallet && (
+                <button className="btn btn-ghost" type="button" onClick={disconnectWallet}>
+                  <LogOut size={14} /> Disconnect
+                </button>
+              )}
+            </>
           )}
         </div>
       </section>
@@ -581,6 +612,59 @@ function addDecimal(left: string, right: string) {
 
 function walletProvider() {
   return (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+}
+
+function activeWalletProvider(privyProvider: EIP1193Provider | null) {
+  return privyProvider ?? walletProvider();
+}
+
+function PrivyWalletBridge({ onConnected, onDisconnected }: { onConnected: (address: string, provider: EIP1193Provider) => void; onDisconnected: () => void }) {
+  const { ready, authenticated, login, logout } = usePrivy();
+  const { wallets, ready: walletsReady } = useWallets();
+  const wallet = wallets.find((item) => item.type === "ethereum");
+  const hadPrivyWallet = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!authenticated || !wallet?.address) {
+      if (hadPrivyWallet.current) {
+        hadPrivyWallet.current = false;
+        onDisconnected();
+      }
+      return;
+    }
+    wallet.getEthereumProvider().then((provider) => {
+      if (!cancelled) {
+        hadPrivyWallet.current = true;
+        onConnected(wallet.address, provider);
+      }
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated, wallet?.address]);
+
+  if (!ready) {
+    return (
+      <button className="btn btn-ghost" type="button" disabled>
+        <Loader2 size={14} className="spin" /> Privy
+      </button>
+    );
+  }
+
+  if (authenticated && wallet) {
+    return (
+      <button className="btn btn-ghost" type="button" onClick={() => logout()}>
+        <LogOut size={14} /> Sign out
+      </button>
+    );
+  }
+
+  return (
+    <button className="btn btn-primary" type="button" onClick={() => login()} disabled={!walletsReady && authenticated}>
+      <Wallet size={14} /> Continue with Privy
+    </button>
+  );
 }
 
 async function pollTopUpVerification(wallet: string, txHash: string, onStatus: (message: string) => void) {

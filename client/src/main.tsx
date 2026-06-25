@@ -13,6 +13,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import ogLogo from "./assets/og-logo.jpeg";
 import zeroScoutMark from "./assets/zeroscout-mark.png";
 import grailMark from "./assets/grail-mark.png";
+import { ZeroScoutPrivyProvider } from "./privy";
 import "./styles.css";
 
 function App() {
@@ -89,6 +90,8 @@ function SiteFooter() {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <ZeroScoutPrivyProvider>
+      <App />
+    </ZeroScoutPrivyProvider>
   </React.StrictMode>
 );

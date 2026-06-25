@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@0gfoundation/0g-storage-ts-sdk": "^1.2.6",
+    "@privy-io/react-auth": "^3.32.2",
     "@types/multer": "^2.1.0",
     "@types/pg": "^8.20.0",
     "@vitejs/plugin-react": "^4.3.4",
