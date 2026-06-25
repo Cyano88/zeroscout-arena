@@ -324,17 +324,6 @@ export function DashboardPage() {
                   disconnectWallet();
                 }}
               />
-              {!wallet && (
-                <button className="btn btn-ghost" type="button" onClick={connectWallet} disabled={loading === "wallet"}>
-                  {loading === "wallet" ? <Loader2 size={14} className="spin" /> : <Wallet size={14} />}
-                  Browser wallet
-                </button>
-              )}
-              {wallet && !privyProvider && (
-                <button className="btn btn-ghost" type="button" onClick={disconnectWallet}>
-                  <LogOut size={14} /> Disconnect
-                </button>
-              )}
             </>
           ) : (
             <>
