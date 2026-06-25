@@ -153,7 +153,7 @@ Default credit costs:
 
 ```txt
 Project Passport API create: 5 credits
-Video scoring API call: 20 credits
+Video scoring API call: 50 credits
 ```
 
 Production env:

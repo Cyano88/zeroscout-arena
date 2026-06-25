@@ -19,7 +19,7 @@ const app = express();
 const maxVideoBytes = 100 * 1024 * 1024;
 const integrationCosts = {
   capsule: 5,
-  videoScore: 20
+  videoScore: 50
 };
 const upload = multer({
   storage: multer.memoryStorage(),
