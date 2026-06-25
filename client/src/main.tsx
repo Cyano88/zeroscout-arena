@@ -87,6 +87,14 @@ function Topbar({ theme, setTheme }: { theme: string; setTheme: React.Dispatch<R
         <span>ZeroScout</span>
       </NavLink>
 
+      <nav className="top-nav" aria-label="Primary navigation">
+        {navItems.map((item) => (
+          <NavLink key={item.to} to={item.to} end={item.end}>
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
       <div className="top-actions">
         <a className="top-link" href="https://x.com/ZeroScoutApp" target="_blank" rel="noreferrer">
           X <ExternalLink size={12} />
