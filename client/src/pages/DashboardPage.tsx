@@ -33,6 +33,7 @@ export function DashboardPage() {
   const totalUsed = useMemo(() => keys.reduce((sum, key) => sum + (key.creditsUsed ?? 0), 0), [keys]);
   const totalCredits = Math.max(0, balance.creditsPurchased - totalUsed);
   const usagePercent = balance.creditsPurchased > 0 ? Math.min(100, Math.round((totalUsed / balance.creditsPurchased) * 100)) : 0;
+  const needsOgFunding = Boolean(wallet && walletOgBalance && Number(walletOgBalance) <= 0);
 
   useEffect(() => {
     api.integrationPricing().then(setPricing).catch((error) => setStatus(error.message));
@@ -373,6 +374,32 @@ export function DashboardPage() {
           <Metric label="Passport API" value={`${pricing?.costs.capsule ?? 20} cr`} />
         </div>
       </section>
+
+      {needsOgFunding && (
+        <section className="funding-notice surface">
+          <div>
+            <span className="eyebrow">Wallet funding</span>
+            <h2>Your ZeroScout wallet needs OG</h2>
+            <p>Send OG to this address or connect a wallet that already has OG.</p>
+            <div className="pricing-strip">
+              <span>1 OG = {pricing?.creditsPerOg ?? 100} credits</span>
+              <span>Passport = {pricing?.costs.capsule ?? 20} credits</span>
+              <span>Video review = {pricing?.costs.videoScore ?? 50} credits</span>
+            </div>
+          </div>
+          <div className="funding-actions">
+            <button className="btn btn-primary" type="button" onClick={() => copy(wallet)}>
+              <Copy size={14} /> Copy address
+            </button>
+            <button className="btn btn-ghost" type="button" onClick={() => refreshWalletBalance(wallet)} disabled={loading === "refresh"}>
+              <RefreshCw size={14} /> Refresh balance
+            </button>
+            <button className="btn btn-ghost" type="button" onClick={connectWallet} disabled={loading === "wallet"}>
+              <Wallet size={14} /> Use existing wallet
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="dashboard-grid">
         <div className="surface dashboard-panel">
