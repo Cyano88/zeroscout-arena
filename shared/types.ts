@@ -119,7 +119,7 @@ export interface ProjectCapsuleInput {
   mentorFocus?: string;
   helpNeeded?: string;
   visibility?: "public" | "unlisted";
-  source?: "hosted" | "deeplink" | "widget" | "api";
+  source?: "hosted" | "deeplink" | "embed" | "api";
   externalUserId?: string;
   externalOrgId?: string;
 }

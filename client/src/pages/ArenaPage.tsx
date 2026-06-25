@@ -53,7 +53,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
     builderWallet: searchParams.get("wallet") ?? undefined,
     helpNeeded: searchParams.get("help") ?? undefined,
     visibility: searchParams.get("visibility") === "unlisted" ? "unlisted" : "public",
-    source: forcedCampaignId ? "widget" : searchParams.toString() ? "deeplink" : "hosted"
+    source: forcedCampaignId ? "embed" : searchParams.toString() ? "deeplink" : "hosted"
   });
   const [selectedProgram, setSelectedProgram] = useState<string | null>(hasPresetCampaign ? initialCampaign.id : null);
   const [flow, setFlow] = useState<FlowState>({ kind: "idle" });

@@ -25,7 +25,7 @@ export const capsuleInputSchema = z.object({
   mentorFocus: z.string().max(2000).optional(),
   helpNeeded: z.string().max(240).optional(),
   visibility: z.enum(["public", "unlisted"]).optional(),
-  source: z.enum(["hosted", "deeplink", "widget", "api"]).optional(),
+  source: z.enum(["hosted", "deeplink", "embed", "api"]).optional(),
   externalUserId: z.string().max(160).optional(),
   externalOrgId: z.string().max(160).optional()
 });
