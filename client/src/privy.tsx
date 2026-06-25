@@ -16,6 +16,9 @@ export function ZeroScoutPrivyProvider({ children }: { children: ReactNode }) {
         appearance: {
           theme: "dark",
           accentColor: "#7c3aed",
+          logo: "/zeroscout-mark.png",
+          landingHeader: "ZeroScout",
+          loginMessage: "Team will never ask for this code.",
           walletChainType: "ethereum-only"
         },
         embeddedWallets: {
