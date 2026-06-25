@@ -301,15 +301,15 @@ export function DashboardPage() {
     <main className="page dashboard-page">
       <header className="page-heading compact-heading">
         <span className="eyebrow">API Dashboard</span>
-        <h1>Fund a key, call 0G through ZeroScout</h1>
-        <p>Create one capped server key for Project Passports and video scoring. Your app keeps its own user experience while ZeroScout handles 0G Storage and 0G Compute.</p>
+        <h1>Create a ZeroScout API key</h1>
+        <p>Use this when your platform already has a form or app and wants ZeroScout to create passports, review videos, and store proof records.</p>
       </header>
 
       <section className="dashboard-hero surface">
         <div>
           <span className="status-tag"><Zap size={12} /> Credit gateway</span>
           <h2>{wallet ? short(wallet) : "Connect wallet"}</h2>
-          <p>Your wallet owns the keys. Credits are shared across active keys, and every platform call spends from this wallet pool.</p>
+          <p>Your wallet owns the keys. Credits are shared across active keys, so usage stops automatically when credits run out.</p>
         </div>
         <div className="wallet-actions">
           {privyEnabled ? (
@@ -476,7 +476,7 @@ export function DashboardPage() {
           <span className="table-note">{keys.length} total</span>
         </div>
         {keys.length === 0 ? (
-          <p className="muted-copy">No keys yet. Create a key, fund it with credits, then use it from your backend.</p>
+          <p className="muted-copy">No keys yet. Create one key, add credits, then use it from your backend.</p>
         ) : (
           keys.map((key) => (
             <div className="key-row" key={key.id}>
@@ -538,30 +538,30 @@ export function DashboardPage() {
         <span className="eyebrow">Use the key</span>
         <div className="integration-guide">
           <div>
-            <h2>1. Store these on your backend</h2>
+            <h2>1. Add this to your backend</h2>
             <pre>{`ZEROSCOUT_API_URL=${API_ORIGIN}
 ZEROSCOUT_INTEGRATION_SECRET=zs_live_key_from_this_dashboard`}</pre>
-            <p>Use the full key you copied above. Do not use the preview shown in the key list.</p>
+            <p>Use the full key copied above. The preview in the key list is only for recognition.</p>
           </div>
           <div>
-            <h2>2. Call ZeroScout from your server</h2>
-            <p>The key must stay private. Never put it in browser JavaScript, a public Vercel variable, an iframe URL, or a mobile app bundle.</p>
+            <h2>2. Keep the key server-side</h2>
+            <p>Never put this key in browser JavaScript, a public Vercel variable, an iframe URL, or a mobile app bundle.</p>
             <pre>{`Authorization: Bearer $ZEROSCOUT_INTEGRATION_SECRET`}</pre>
           </div>
           <div>
-            <h2>3. Choose one endpoint</h2>
-            <p><b>Video scoring</b> is for platforms that already collect videos and need 0G-backed AI review.</p>
+            <h2>3. Pick what your app needs</h2>
+            <p><b>Video review</b> is for platforms that already collect videos and need AI scoring plus stored proof.</p>
             <pre>{`POST /api/integrations/video-score
 multipart: video, platform, program, projectName, prompt
 cost: ${pricing?.costs.videoScore ?? 50} credits`}</pre>
-            <p><b>Passport creation</b> is for platforms that already collect project details and want a stored Project Passport.</p>
+            <p><b>Project Passport</b> is for platforms that already collect builder details and want a stored proof page.</p>
             <pre>{`POST /api/integrations/capsules
 json: projectName, teamName, repoUrl, demoUrl, description, ogUsageClaims...
 cost: ${pricing?.costs.capsule ?? 20} credits`}</pre>
           </div>
           <div>
-            <h2>4. Read the response</h2>
-            <p>Successful calls return the generated analysis plus 0G proof fields such as root, content hash, and storage transaction. If credits run out, top up this wallet and every active key owned by the wallet can continue working.</p>
+            <h2>4. Use the response</h2>
+            <p>Successful calls return the analysis, score, proof root, content hash, and storage transaction. If credits run out, top up this wallet and all active keys can continue.</p>
           </div>
         </div>
       </section>

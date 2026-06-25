@@ -8,15 +8,15 @@ export function IntegratePage() {
     <main className="page">
       <header className="page-heading">
         <span className="eyebrow">Integrate</span>
-        <h1>Choose the simplest integration</h1>
-        <p>Use a hosted flow when builders should submit directly. Use an API key when your platform already has the user experience and wants ZeroScout proof, scoring, and 0G storage behind it.</p>
+        <h1>Bring ZeroScout into your program</h1>
+        <p>Share one hosted link today, or use an API key when your platform already collects builder projects or videos.</p>
       </header>
 
       <section className="integrate-primary">
         <div>
           <span className="status-tag"><span className="dot" />Live today</span>
-          <h2>Hosted link</h2>
-          <p>Start without engineering work. Share this URL with builders and review public Project Passports as they arrive.</p>
+          <h2>Hosted builder link</h2>
+          <p>Start without engineering work. Send this URL to builders and review Project Passports as they arrive.</p>
         </div>
         <div className="integrate-link-box">
           <code>{hostedLink}</code>
@@ -35,19 +35,19 @@ export function IntegratePage() {
       </section>
 
       <section className="integrate-steps">
-        <Step n="01" title="Hosted link" body="No env. Send one URL to builders, students, or applicants." />
-        <Step n="02" title="Embed widget" body="No env for public forms. Place ZeroScout inside a portal page." />
-        <Step n="03" title="API key" body="Backend env required. Best for native scoring, private records, and metered usage." />
+        <Step n="01" title="Hosted link" body="Fastest path. Send one URL to builders, students, or applicants." />
+        <Step n="02" title="Embedded form" body="Place the Project Passport form inside your portal or cohort page." />
+        <Step n="03" title="API key" body="Best when your backend uploads videos or creates passports directly." />
       </section>
 
       <section className="integrate-next">
         <div>
           <span>For platforms</span>
-          <h2>Fund a capped API key</h2>
+          <h2>Create a capped API key</h2>
         </div>
         <div className="integrate-next-list">
-          <NextItem title="Widget" body="Use this for university portals, cohort pages, and hackathon forms." />
-          <NextItem title="API key" body="Use this when your backend uploads videos, creates passports, or needs private program records." />
+          <NextItem title="Embedded form" body="Use this for university portals, cohort pages, and hackathon forms." />
+          <NextItem title="API key" body="Use this when your backend uploads videos or creates Project Passports." />
         </div>
         <Link className="btn btn-primary btn-sm" to="/dashboard">
           <KeyRound size={13} /> Open API dashboard

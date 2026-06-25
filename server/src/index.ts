@@ -115,19 +115,6 @@ app.get("/api/projects", async (_req, res, next) => {
   }
 });
 
-app.get("/api/capsules/:id", async (req, res, next) => {
-  try {
-    const capsule = await hydrateCapsuleOwnership(await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx));
-    if (!capsule) {
-      res.status(404).json({ error: "Capsule not found" });
-      return;
-    }
-    res.json(capsule);
-  } catch (error) {
-    next(error);
-  }
-});
-
 app.get("/api/capsules/:id.json", async (req, res, next) => {
   try {
     const capsule = await hydrateCapsuleOwnership(await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx));
@@ -136,6 +123,19 @@ app.get("/api/capsules/:id.json", async (req, res, next) => {
       return;
     }
     res.type("application/json").send(JSON.stringify(capsule, null, 2));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/capsules/:id", async (req, res, next) => {
+  try {
+    const capsule = await hydrateCapsuleOwnership(await getCapsule(req.params.id) ?? await recoverCapsuleFromRoot(req.params.id, req.query.root, req.query.tx));
+    if (!capsule) {
+      res.status(404).json({ error: "Capsule not found" });
+      return;
+    }
+    res.json(capsule);
   } catch (error) {
     next(error);
   }

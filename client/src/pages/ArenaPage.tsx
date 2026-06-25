@@ -112,7 +112,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
       ? "Proof page ready"
       : hasPreviousVersion
         ? "Publish checkpoint update"
-        : "Create Project Passport";
+        : "Create passport";
 
   function chooseProgram(id: string) {
     const campaign = findCampaignPreset(id);
@@ -137,8 +137,8 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
     <main className="page">
       <header className="page-heading">
         <span className="eyebrow">Create</span>
-        <h1>Create a verified project profile</h1>
-        <p>Create a new proof record or update an existing project without duplicating it.</p>
+        <h1>Create a Project Passport</h1>
+        <p>Paste your repo, demo, and build notes. ZeroScout creates a public proof page with AI feedback, next steps, and optional video review.</p>
       </header>
 
       {!selectedProgram && !compact && (
@@ -146,7 +146,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
           <div className="directory-head">
             <div>
               <p>Program</p>
-              <h2>Choose where this project belongs</h2>
+              <h2>Where are you building?</h2>
             </div>
           </div>
           <div className="directory-stack">
@@ -157,7 +157,7 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
                   <h2>{campaign.name}</h2>
                   <p>{programDescription(campaign)}</p>
                 </div>
-                <span className="directory-action">Create <ArrowRight size={14} /></span>
+                <span className="directory-action">Start <ArrowRight size={14} /></span>
               </button>
             ))}
           </div>
@@ -190,18 +190,18 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
             </div>
 
             <div className="field-row two">
-              <Field label="Project name" value={form.projectName} onChange={(v) => setForm({ ...form, projectName: v })} placeholder="Your product name, not the program" required maxLength={90} />
+              <Field label="Project name" value={form.projectName} onChange={(v) => setForm({ ...form, projectName: v })} placeholder="Your product name" required maxLength={90} />
               <Field label="Builder or team" value={form.teamName} onChange={(v) => setForm({ ...form, teamName: v })} placeholder="Your team" required maxLength={90} />
             </div>
 
-            <Field label="One-line outcome" value={form.tagline} onChange={(v) => setForm({ ...form, tagline: v })} placeholder="What should someone understand in one sentence?" required maxLength={140} />
+            <Field label="One-line promise" value={form.tagline} onChange={(v) => setForm({ ...form, tagline: v })} placeholder="What does this help people do?" required maxLength={140} />
 
             <div className="field-row two">
               <Field label="Repo URL" type="url" value={form.repoUrl} onChange={(v) => setForm({ ...form, repoUrl: v })} placeholder="https://github.com/..." required />
               <Field label="Live demo URL" type="url" value={form.demoUrl} onChange={(v) => setForm({ ...form, demoUrl: v })} placeholder="https://..." required />
             </div>
 
-            <Field label="Video walkthrough URL" type="url" value={form.videoDemoUrl ?? ""} onChange={(v) => setForm({ ...form, videoDemoUrl: v || undefined })} placeholder="YouTube or Loom link" />
+            <Field label="Demo video link" type="url" value={form.videoDemoUrl ?? ""} onChange={(v) => setForm({ ...form, videoDemoUrl: v || undefined })} placeholder="YouTube or Loom link" />
 
             <div className="field">
               <label>Checkpoint</label>
@@ -241,13 +241,13 @@ export function ArenaPage({ forcedCampaignId, compact = false }: { forcedCampaig
                     <option key={item.id} value={item.id}>v{item.versionNumber ?? 1} - {item.projectName} - {item.checkpointLabel ?? item.round}</option>
                   ))}
                 </select>
-                <span className="hint">Same repo and program become a version history, not duplicate listings.</span>
+                <span className="hint">Same repo and program become a version history, not a duplicate project.</span>
               </div>
             )}
 
             <Textarea label="What does the product do?" value={form.description} onChange={(v) => setForm({ ...form, description: v })} placeholder="Who is it for, and what do they get?" required maxLength={4000} />
             <Textarea label="What does 0G power?" value={form.ogUsageClaims} onChange={(v) => setForm({ ...form, ogUsageClaims: v })} placeholder="Example: stores the public proof record, runs AI analysis, or verifies progress." required maxLength={3000} />
-            <Textarea label="What should people remember?" value={form.pitchNotes ?? ""} onChange={(v) => setForm({ ...form, pitchNotes: v })} placeholder="Write the sentence you want users, mentors, or voters to repeat." maxLength={3000} />
+            <Textarea label="What should people remember?" value={form.pitchNotes ?? ""} onChange={(v) => setForm({ ...form, pitchNotes: v })} placeholder="The line you want users, mentors, or voters to repeat." maxLength={3000} />
             <Textarea label="What do you need next?" value={form.helpNeeded ?? ""} onChange={(v) => setForm({ ...form, helpNeeded: v })} placeholder="Example: pilots, users, funding, mentors, design partners." maxLength={240} />
 
             {errored && <div className="error-banner">{flow.message}</div>}

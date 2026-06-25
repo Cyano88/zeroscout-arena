@@ -27,7 +27,7 @@ export function DocsPage({ compact = false, programName }: { compact?: boolean; 
         <p>Open any Project Passport, click <code>Verify JSON</code> to fetch the artifact, and compare its <code>content hash</code> against the <code>root</code>. The transaction link opens the 0G explorer for that storage tx.</p>
 
         <h2>No fake claims</h2>
-        <p>If a profile shows the <code>Local</code> tag, the artifact was not stored on 0G. The success state, including the full-color proof badge, only appears for capsules that successfully landed on 0G.</p>
+        <p>If a profile shows the <code>Local</code> tag, the record was not stored on 0G. The success state, including the full-color proof badge, only appears for records that successfully landed on 0G.</p>
       </section>
     </main>
   );

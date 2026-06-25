@@ -72,8 +72,8 @@ export function CapsulePage() {
           <p className="profile-promise">{capsule.tagline}</p>
           <div className="profile-byline">
             <span>By <strong>{capsule.teamName}</strong></span>
-            <span>Root <strong>{shortHash(capsule.storageRoot)}</strong></span>
-            {capsule.storageTxHash && <span>Tx <strong>{shortHash(capsule.storageTxHash)}</strong></span>}
+            <span>Proof <strong>{shortHash(capsule.storageRoot)}</strong></span>
+            {capsule.storageTxHash && <span>Transaction <strong>{shortHash(capsule.storageTxHash)}</strong></span>}
           </div>
         </div>
         <div className="profile-proof">
@@ -187,7 +187,7 @@ function ProofActions({ capsule, shareUrl, txUrl, registryTxUrl }: { capsule: Pr
     <section className="surface section proof-summary">
       <div>
         <h2>Verify</h2>
-        <p>This is the current project snapshot. Updates create a new version; old 0G roots stay immutable.</p>
+        <p>This is the current project proof. Updates create a new version, while older proof roots stay unchanged.</p>
       </div>
       <div className="proof-facts">
         <span><b>{shortHash(capsule.storageRoot)}</b> storage root</span>
@@ -217,10 +217,10 @@ function UpdateProjectSection({ capsule }: { capsule: ProjectCapsule }) {
     <section className="surface section update-panel">
       <div>
         <h2>Update project</h2>
-        <p>Shipped something new? Publish an updated passport for the same repo. ZeroScout links it as version history instead of listing a duplicate project.</p>
+        <p>Shipped something new? Update this passport and get fresh feedback without creating a duplicate listing.</p>
       </div>
       <Link className="btn btn-primary btn-sm" to={updateUrl}>
-        Modify passport <ArrowRight size={13} />
+        Update passport <ArrowRight size={13} />
       </Link>
     </section>
   );
@@ -266,13 +266,13 @@ function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: Projec
 
   return (
     <section className="surface section">
-      <h2>Walkthrough review</h2>
-      <p>Use YouTube or Loom for a quick walkthrough review. Upload MP4, MOV, or WebM under 100 MB when you want ZeroScout to store the video on 0G and request deeper video analysis.</p>
+      <h2>Demo video review</h2>
+      <p>Review a YouTube or Loom walkthrough, or upload an MP4, MOV, or WebM under 100 MB for deeper 0G-backed video analysis.</p>
       {review ? (
         <>
           <p>{review.summary}</p>
           <div className="record-rows" style={{ marginTop: 14 }}>
-            <Row k="Review mode" value={review.reviewMode === "video" ? "Video analysis" : "Walkthrough link review"} disableCopy />
+            <Row k="Review mode" value={review.reviewMode === "video" ? "Uploaded video" : "Video link"} disableCopy />
             <Row k="AI provider" value={review.aiProvider} disableCopy />
             {review.videoStorageRoot && <Row k="Video root" value={review.videoStorageRoot} />}
             <Row k="Review root" value={review.storageRoot} />
@@ -290,7 +290,7 @@ function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: Projec
           {capsule.videoDemoUrl && (
             <button className="btn btn-primary btn-sm" type="button" onClick={runReview} disabled={state !== "idle"} style={{ width: "fit-content" }}>
               {state === "reviewing" ? <Loader2 className="spin" size={13} /> : <PlayCircle size={13} />}
-              Review link with 0G
+              Review video link
             </button>
           )}
           <div className="record-row" style={{ alignItems: "center" }}>
@@ -303,13 +303,13 @@ function VideoReviewSection({ capsule, root, tx, onReviewed }: { capsule: Projec
             />
             <button className="btn btn-ghost btn-sm" type="button" onClick={uploadReview} disabled={state !== "idle"} style={{ width: "fit-content" }}>
               {state === "uploading" ? <Loader2 className="spin" size={13} /> : <Upload size={13} />}
-              Upload
+              Review upload
             </button>
           </div>
           {state === "uploading" && (
             <div className="upload-progress" aria-label="Video upload progress">
               <div className="upload-progress-top">
-                <span>{uploadProgress < 99 ? "Uploading video" : "Storing on 0G and reviewing"}</span>
+                <span>{uploadProgress < 99 ? "Uploading video" : "Storing and reviewing"}</span>
                 <b>{uploadProgress}%</b>
               </div>
               <div className="upload-progress-track">
