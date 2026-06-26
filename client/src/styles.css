@@ -47,6 +47,8 @@
 html, body {
   margin: 0;
   padding: 0;
+  width: 100%;
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
@@ -59,7 +61,12 @@ a { color: inherit; text-decoration: none; }
 button, input, textarea, select { font: inherit; color: inherit; }
 button { background: none; border: 0; cursor: pointer; }
 
-.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
 
 /* === Topbar === */
 .topbar {
@@ -138,6 +145,7 @@ button { background: none; border: 0; cursor: pointer; }
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  flex-shrink: 0;
   min-width: 0;
 }
 
@@ -1587,6 +1595,10 @@ input:focus, textarea:focus, select:focus {
 /* === API Dashboard === */
 .dashboard-page { max-width: 1040px; }
 .compact-heading { max-width: 720px; }
+.dashboard-page,
+.dashboard-page * {
+  min-width: 0;
+}
 .dashboard-hero {
   display: flex;
   align-items: center;
@@ -1599,12 +1611,14 @@ input:focus, textarea:focus, select:focus {
   margin: 12px 0 6px;
   font-size: 28px;
   letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 .dashboard-hero p,
 .muted-copy {
   color: var(--text-2);
   font-size: 13px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 .wallet-actions {
   display: flex;
@@ -1630,6 +1644,7 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 .balance-primary span {
   color: var(--muted);
@@ -1644,6 +1659,7 @@ input:focus, textarea:focus, select:focus {
   font-family: var(--mono);
   font-size: 44px;
   line-height: 1;
+  overflow-wrap: anywhere;
 }
 .balance-primary p {
   margin: 0;
@@ -1709,6 +1725,7 @@ input:focus, textarea:focus, select:focus {
   background: var(--surface-2);
   color: var(--text-2);
   font-size: 11px;
+  max-width: 100%;
 }
 .funding-actions {
   display: flex;
@@ -1736,6 +1753,7 @@ input:focus, textarea:focus, select:focus {
   font-family: var(--mono);
   font-size: 22px;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 .dashboard-grid {
   display: grid;
@@ -1764,6 +1782,7 @@ input:focus, textarea:focus, select:focus {
 }
 .dashboard-panel input {
   width: 100%;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--bg);
@@ -1789,8 +1808,10 @@ input:focus, textarea:focus, select:focus {
 .treasury-box code {
   display: block;
   margin: 8px 0 12px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   font-family: var(--mono);
   font-size: 12px;
   color: var(--text);
@@ -1820,6 +1841,7 @@ input:focus, textarea:focus, select:focus {
   display: block;
   color: var(--text);
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 .pill {
   border: 1px solid color-mix(in srgb, var(--good) 35%, var(--line));
@@ -1840,6 +1862,7 @@ input:focus, textarea:focus, select:focus {
 }
 .key-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
@@ -1911,6 +1934,10 @@ input:focus, textarea:focus, select:focus {
 }
 .env-box pre {
   white-space: pre-wrap;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   color: var(--text);
   font-family: var(--mono);
   font-size: 12px;
@@ -1951,6 +1978,10 @@ input:focus, textarea:focus, select:focus {
   border-radius: 8px;
   background: var(--surface-2);
   padding: 12px;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .toast-line {
   position: fixed;
@@ -2000,10 +2031,10 @@ input:focus, textarea:focus, select:focus {
 }
 
 @media (max-width: 640px) {
-  .topbar { padding: 12px 16px; gap: 10px; }
+  .topbar { padding: 10px 12px; gap: 8px; }
   .brand span:last-child { display: none; }
-  .top-actions { gap: 6px; }
-  .top-link { height: 32px; padding: 0 9px; font-size: 12px; }
+  .top-actions { gap: 7px; }
+  .top-link { height: 30px; padding: 0 8px; font-size: 11.5px; border-radius: 9px; }
   .theme-toggle, .menu-toggle { width: 32px; height: 32px; border-radius: 9px; }
   .page, .page-narrow { padding: 36px 16px 72px; }
   .docs-shell { padding: 36px 16px 72px; }
@@ -2016,8 +2047,65 @@ input:focus, textarea:focus, select:focus {
   .campaign-row { grid-template-columns: 1fr auto; }
   .campaign-row .k { grid-column: 1 / -1; }
   .rows-head, .row { padding: 12px 14px; }
-  .dashboard-hero { align-items: stretch; flex-direction: column; }
+  .dashboard-page { padding-inline: 12px; }
+  .dashboard-page .page-heading h1 { font-size: clamp(31px, 11vw, 42px); }
+  .dashboard-page .page-heading p { font-size: 13px; line-height: 1.55; }
+  .dashboard-hero {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 16px;
+  }
+  .dashboard-hero h2 { font-size: 22px; }
+  .wallet-actions,
+  .balance-label-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .wallet-actions .btn,
+  .balance-label-row .btn,
+  .dashboard-panel .btn,
+  .key-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .balance-board,
+  .dashboard-panel,
+  .key-table,
+  .env-box {
+    padding: 14px;
+  }
+  .balance-primary { padding: 15px; }
+  .balance-primary strong { font-size: 38px; }
   .balance-secondary { grid-template-columns: 1fr; }
+  .metric-tile { padding: 13px; }
+  .treasury-box {
+    grid-template-columns: minmax(0, 1fr) 34px;
+    padding: 12px;
+  }
+  .pricing-strip { flex-direction: column; }
+  .pricing-strip span {
+    width: 100%;
+    border-radius: 8px;
+  }
   .funding-actions .btn { width: 100%; justify-content: center; }
   .key-row { grid-template-columns: 1fr; }
+  .key-actions { justify-content: stretch; }
+  .secret-box code,
+  .treasury-box code,
+  .confirm-meta code,
+  .env-box pre,
+  .integration-guide pre {
+    font-size: 11px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+  }
+  .toast-line {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    max-width: none;
+  }
 }
