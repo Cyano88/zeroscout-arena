@@ -522,7 +522,8 @@ app.post("/api/integrations/intelligence", async (req, res, next) => {
       objective: cleanBodyField(req.body?.objective, "Find useful, practical signals from the supplied data."),
       outputStyle: cleanBodyField(req.body?.outputStyle, "executive-brief"),
       data: req.body?.data,
-      includeClaudeReview: req.body?.includeClaudeReview === true
+      includeClaudeReview: req.body?.includeClaudeReview === true,
+      includeOpenAiReview: req.body?.includeOpenAiReview === true || req.body?.includeCodexReview === true
     };
 
     const result = await generateCustomIntelligence(input);

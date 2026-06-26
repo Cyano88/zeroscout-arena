@@ -52,6 +52,7 @@ export interface CustomIntelligenceInput {
   outputStyle: string;
   data: unknown;
   includeClaudeReview?: boolean;
+  includeOpenAiReview?: boolean;
 }
 
 export interface CustomIntelligenceResult {
@@ -66,6 +67,13 @@ export interface CustomIntelligenceResult {
   suggestedVisuals: string[];
   disclaimer: string;
   claudeReview?: {
+    provider: string;
+    intelligenceRating: number;
+    strengths: string[];
+    gaps: string[];
+    recommendation: string;
+  };
+  openAiReview?: {
     provider: string;
     intelligenceRating: number;
     strengths: string[];
@@ -158,6 +166,10 @@ Rules:
 
   if (input.includeClaudeReview && config.anthropicApiKey) {
     result.claudeReview = await reviewCustomIntelligenceWithClaude(input, result);
+  }
+
+  if (input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
+    result.openAiReview = await reviewCustomIntelligenceWithOpenAi(input, result);
   }
 
   return result;
@@ -631,6 +643,54 @@ Focus on whether this would be useful inside an institutional product. Do not ad
     strengths: list(parsed.strengths, ["The output is structured and product-facing."]),
     gaps: list(parsed.gaps, ["The partner should supply richer data for stronger analysis."]),
     recommendation: text(parsed.recommendation, "Use this as a second-opinion quality check before showing the intelligence module to users.")
+  };
+}
+
+async function reviewCustomIntelligenceWithOpenAi(
+  input: CustomIntelligenceInput,
+  result: CustomIntelligenceResult
+): Promise<NonNullable<CustomIntelligenceResult["openAiReview"]>> {
+  const client = new OpenAI({
+    apiKey: config.openAiEvaluatorApiKey,
+    baseURL: config.openAiEvaluatorBaseUrl
+  });
+  const content = await completeJson({ client, model: config.openAiEvaluatorModel }, [
+    {
+      role: "system",
+      content: "Return strict JSON only. Rate the usefulness of the supplied intelligence output. Do not add facts."
+    },
+    {
+      role: "user",
+      content: `Rate this ZeroScout custom intelligence output for product usefulness.
+
+Original request:
+${JSON.stringify({
+  partner: input.partner,
+  productType: input.productType,
+  analysisType: input.analysisType,
+  objective: input.objective,
+  outputStyle: input.outputStyle
+})}
+
+ZeroScout output:
+${JSON.stringify(result)}
+
+Return strict JSON with keys:
+intelligenceRating number 0-10,
+strengths array,
+gaps array,
+recommendation string.
+
+Focus on product usefulness, data honesty, and whether a partner could show this in a real dashboard.`
+    }
+  ]);
+  const parsed = parseJsonObject(content ?? "{}");
+  return {
+    provider: `OpenAI evaluator (${config.openAiEvaluatorModel})`,
+    intelligenceRating: clampScore(parsed.intelligenceRating, 10, 7),
+    strengths: list(parsed.strengths, ["The output is structured for a real product surface."]),
+    gaps: list(parsed.gaps, ["The partner should provide richer data before relying on the signal."]),
+    recommendation: text(parsed.recommendation, "Use this evaluator as a third opinion alongside 0G Compute and Claude when configured.")
   };
 }
 

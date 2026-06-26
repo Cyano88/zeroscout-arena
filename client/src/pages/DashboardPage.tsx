@@ -560,9 +560,9 @@ cost: ${pricing?.costs.videoScore ?? 50} credits`}</pre>
             <pre>{`POST /api/integrations/capsules
 json: projectName, teamName, repoUrl, demoUrl, description, ogUsageClaims...
 cost: ${pricing?.costs.capsule ?? 20} credits`}</pre>
-            <p><b>Custom intelligence</b> is for products that already have structured data and want ZeroScout to generate a stored operator brief.</p>
+            <p><b>Custom intelligence</b> is for products that already have structured data and want ZeroScout to generate a stored operator brief. Add Claude/OpenAI review flags only when those providers are configured on ZeroScout.</p>
             <pre>{`POST /api/integrations/intelligence
-json: partner, productType, analysisType, objective, data, outputStyle
+json: partner, productType, analysisType, objective, data, outputStyle, includeClaudeReview, includeOpenAiReview
 cost: ${pricing?.costs.intelligence ?? 40} credits`}</pre>
           </div>
           <div>

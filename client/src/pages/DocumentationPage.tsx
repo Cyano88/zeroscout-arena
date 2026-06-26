@@ -93,7 +93,8 @@ POST /api/integrations/intelligence`}</pre>
           <p>
             Platforms can send their own structured data to ZeroScout for an AI-generated operator brief. ZeroScout does
             not fetch live market data for you; it analyzes the data your backend supplies and stores the result as a
-            proof artifact.
+            proof artifact. When configured, the response can include Claude and OpenAI evaluator reviews as additional
+            opinions.
           </p>
           <pre>{`POST /api/integrations/intelligence
 {
@@ -101,7 +102,8 @@ POST /api/integrations/intelligence`}</pre>
   "analysisType": "lp-market-alpha",
   "objective": "Find useful LP signals from supplied market data",
   "data": { "markets": [], "liquidity": [], "volume": [] },
-  "includeClaudeReview": true
+  "includeClaudeReview": true,
+  "includeOpenAiReview": true
 }`}</pre>
         </DocCard>
 
