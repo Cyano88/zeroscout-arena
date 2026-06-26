@@ -242,6 +242,9 @@ export interface IntegrationKeyRecord {
   ownerWallet?: string;
   keyHash: string;
   keyPreview: string;
+  allowedEndpoints?: string[];
+  allowedAnalysisTypes?: string[];
+  allowedProofClasses?: string[];
   creditBalance: number;
   creditsUsed: number;
   createdAt: string;
@@ -257,5 +260,26 @@ export interface IntegrationTopUpRecord {
   amountOg: string;
   credits: number;
   appliedCredits?: number;
+  createdAt: string;
+}
+
+export interface SponsorshipProofRecord {
+  id: string;
+  integrationId?: string;
+  integrationName?: string;
+  integrationPartner?: string;
+  proofClass: string;
+  service: string;
+  action: string;
+  requestHash: string;
+  answerHash: string;
+  sourceProof?: unknown;
+  result?: unknown;
+  storageRoot: string;
+  storageUri: string;
+  contentHash: string;
+  storageTxHash?: string;
+  network: string;
+  storageMode: ProjectCapsule["storageMode"];
   createdAt: string;
 }

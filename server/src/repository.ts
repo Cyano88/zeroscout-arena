@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import pg from "pg";
 import { config } from "./config.js";
-import type { CapsuleIndexRecord, ClaimStartResponse, IntegrationKeyRecord, IntegrationTopUpRecord, MatchupReport, ProjectCapsule } from "../../shared/types.js";
+import type { CapsuleIndexRecord, ClaimStartResponse, IntegrationKeyRecord, IntegrationTopUpRecord, MatchupReport, ProjectCapsule, SponsorshipProofRecord } from "../../shared/types.js";
 import { findCampaignPreset } from "../../shared/campaigns.js";
 import { projectKeyFor } from "./services/project-key.js";
 
@@ -14,6 +14,7 @@ interface StoreFile {
   integrationKeys?: IntegrationKeyRecord[];
   integrationTopUps?: IntegrationTopUpRecord[];
   videoScoreSessions?: Record<string, VideoScoreSession>;
+  sponsorshipProofs?: SponsorshipProofRecord[];
 }
 
 interface PendingClaim extends ClaimStartResponse {
@@ -50,7 +51,8 @@ const emptyStore: StoreFile = {
   pendingClaims: {},
   integrationKeys: [],
   integrationTopUps: [],
-  videoScoreSessions: {}
+  videoScoreSessions: {},
+  sponsorshipProofs: []
 };
 
 async function ensureStore(): Promise<void> {
@@ -106,7 +108,8 @@ function normalizeStore(store: StoreFile): StoreFile {
     pendingClaims: store.pendingClaims ?? {},
     integrationKeys: store.integrationKeys ?? [],
     integrationTopUps: store.integrationTopUps ?? [],
-    videoScoreSessions: store.videoScoreSessions ?? {}
+    videoScoreSessions: store.videoScoreSessions ?? {},
+    sponsorshipProofs: store.sponsorshipProofs ?? []
   };
 }
 
@@ -311,6 +314,30 @@ export async function consumeIntegrationCredits(id: string, credits: number): Pr
   target.requestCount = (target.requestCount ?? 0) + 1;
   await writeStore(store);
   return target;
+}
+
+export async function findSponsorshipProof(input: {
+  integrationId?: string;
+  proofClass: string;
+  requestHash: string;
+  answerHash: string;
+}): Promise<SponsorshipProofRecord | undefined> {
+  const store = await readStore();
+  return (store.sponsorshipProofs ?? []).find((item) =>
+    (item.integrationId ?? "") === (input.integrationId ?? "")
+    && item.proofClass === input.proofClass
+    && item.requestHash === input.requestHash
+    && item.answerHash === input.answerHash
+  );
+}
+
+export async function saveSponsorshipProof(record: SponsorshipProofRecord): Promise<void> {
+  const store = await readStore();
+  store.sponsorshipProofs = [
+    record,
+    ...(store.sponsorshipProofs ?? []).filter((item) => item.id !== record.id)
+  ];
+  await writeStore(store);
 }
 
 export async function addCreditsToWalletKeys(wallet: string, credits: number): Promise<Omit<IntegrationKeyRecord, "keyHash">[]> {

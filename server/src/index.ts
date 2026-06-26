@@ -7,7 +7,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ethers } from "ethers";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
-import { addCreditsToWalletKeys, claimIntegrationKeyByHash, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, getVideoScoreSession, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, markVideoScoreSessionUsed, revokeIntegrationKey, revokeIntegrationKeyForWallet, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim, saveVideoScoreSession } from "./repository.js";
+import { addCreditsToWalletKeys, claimIntegrationKeyByHash, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, findSponsorshipProof, getCapsule, getPendingClaim, getVideoScoreSession, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, markVideoScoreSessionUsed, revokeIntegrationKey, revokeIntegrationKeyForWallet, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim, saveSponsorshipProof, saveVideoScoreSession } from "./repository.js";
 import { checkAiHealth, generateCustomIntelligence, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
 import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryCapsuleRoot, getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
@@ -20,8 +20,17 @@ const maxVideoBytes = 100 * 1024 * 1024;
 const integrationCosts = {
   capsule: 20,
   videoScore: 50,
-  intelligence: 40
+  intelligence: 40,
+  sponsorshipProof: 5
 };
+type IntegrationEndpointScope = "capsules" | "video-score" | "video-score-session" | "intelligence" | "sponsorship-proof";
+type IntegrationAccess = { id: string; name: string; partner?: string };
+type IntegrationScopeRequest = {
+  endpoint: IntegrationEndpointScope;
+  analysisType?: string;
+  proofClass?: string;
+};
+const defaultKeyEndpoints: IntegrationEndpointScope[] = ["capsules", "video-score", "video-score-session", "intelligence", "sponsorship-proof"];
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: maxVideoBytes },
@@ -397,7 +406,7 @@ app.post("/api/integrations/video-score", upload.single("video"), async (req, re
   try {
     let integration: { id: string; name: string; partner?: string } | undefined;
     try {
-      integration = await assertIntegrationAccess(req, integrationCosts.videoScore);
+      integration = await assertIntegrationAccess(req, integrationCosts.videoScore, { endpoint: "video-score" });
     } catch (error) {
       res.status(errorStatus(error)).json({ error: stageError("API key", error) });
       return;
@@ -420,7 +429,7 @@ app.post("/api/integrations/video-score", upload.single("video"), async (req, re
 
 app.post("/api/integrations/video-score/session", async (req, res, next) => {
   try {
-    const integration = await assertIntegrationIdentity(req);
+    const integration = await assertIntegrationIdentity(req, { endpoint: "video-score-session" });
     const token = randomBytes(24).toString("base64url");
     const now = Date.now();
     const expiresAt = new Date(now + 15 * 60 * 1000).toISOString();
@@ -494,7 +503,7 @@ app.post("/api/integrations/video-score/session/:token", upload.single("video"),
 
 app.post("/api/integrations/capsules", async (req, res, next) => {
   try {
-    await assertIntegrationAccess(req, integrationCosts.capsule);
+    await assertIntegrationAccess(req, integrationCosts.capsule, { endpoint: "capsules" });
     const capsule = await createProjectCapsule(capsuleInputSchema.parse({ ...req.body, source: "api" }));
     res.status(201).json({
       id: capsule.id,
@@ -512,13 +521,19 @@ app.post("/api/integrations/capsules", async (req, res, next) => {
 
 app.post("/api/integrations/intelligence", async (req, res, next) => {
   try {
-    const integration = await assertIntegrationAccess(req, integrationCosts.intelligence);
+    const requestedAnalysisType = cleanBodyField(req.body?.analysisType, "custom-intelligence");
+    const requestedProofClass = bodyProofClass(req);
+    const integration = await assertIntegrationAccess(req, integrationCosts.intelligence, {
+      endpoint: "intelligence",
+      analysisType: requestedAnalysisType,
+      proofClass: requestedProofClass
+    });
     const id = nanoid(10);
     const now = new Date().toISOString();
     const input = {
       partner: cleanBodyField(req.body?.partner, integration?.partner ?? "External platform"),
       productType: cleanBodyField(req.body?.productType, "custom-platform"),
-      analysisType: cleanBodyField(req.body?.analysisType, "custom-intelligence"),
+      analysisType: requestedAnalysisType,
       objective: cleanBodyField(req.body?.objective, "Find useful, practical signals from the supplied data."),
       outputStyle: cleanBodyField(req.body?.outputStyle, "executive-brief"),
       data: req.body?.data,
@@ -559,6 +574,90 @@ app.post("/api/integrations/intelligence", async (req, res, next) => {
   }
 });
 
+app.post("/api/integrations/sponsorship-proof", async (req, res, next) => {
+  try {
+    const proofClass = cleanBodyField(req.body?.proofClass ?? req.body?.data?.proofClass, "zeroscout_sponsored_action").slice(0, 120);
+    const service = cleanBodyField(req.body?.service ?? req.body?.data?.service, "External service").slice(0, 160);
+    const action = cleanBodyField(req.body?.action ?? req.body?.data?.action, "sponsored-action").slice(0, 160);
+    const requestHash = cleanBodyField(req.body?.requestHash ?? req.body?.data?.requestHash, "").slice(0, 180);
+    const answerHash = cleanBodyField(req.body?.answerHash ?? req.body?.data?.answerHash ?? req.body?.result?.answerHash ?? req.body?.data?.result?.answerHash, "").slice(0, 180);
+    const analysisType = cleanBodyField(req.body?.analysisType, "zeroscout-sponsored-action").slice(0, 160);
+
+    if (!requestHash || !answerHash) {
+      res.status(400).json({ error: "requestHash and answerHash are required for sponsorship proof." });
+      return;
+    }
+
+    const integration = await assertIntegrationIdentity(req, {
+      endpoint: "sponsorship-proof",
+      analysisType,
+      proofClass
+    });
+    if (!integration) {
+      res.status(401).json({ error: "Unauthorized integration request." });
+      return;
+    }
+
+    const existing = integration.id !== "legacy-env"
+      ? await findSponsorshipProof({ integrationId: integration.id, proofClass, requestHash, answerHash })
+      : undefined;
+    if (existing) {
+      res.status(200).json(sponsorshipProofResponse(existing, integration, true));
+      return;
+    }
+
+    let charged = integration;
+    if (integration.id !== "legacy-env") {
+      const record = await consumeIntegrationCredits(integration.id, integrationCosts.sponsorshipProof);
+      charged = { id: record.id, name: record.name, partner: record.partner };
+    }
+
+    const id = nanoid(10);
+    const now = new Date().toISOString();
+    const artifactWithoutProof = {
+      id,
+      artifactType: "zeroscout.sponsorship-proof",
+      artifactVersion: "1.0.0",
+      integrationId: charged.id,
+      integrationName: charged.name,
+      integrationPartner: charged.partner,
+      proofClass,
+      service,
+      action,
+      requestHash,
+      answerHash,
+      sourceProof: req.body?.sourceProof ?? req.body?.data?.sourceProof,
+      result: req.body?.result ?? req.body?.data?.result,
+      createdAt: now
+    };
+    const proof = await storeCanonicalArtifact("intelligence", id, artifactWithoutProof);
+    const record = {
+      id,
+      integrationId: charged.id,
+      integrationName: charged.name,
+      integrationPartner: charged.partner,
+      proofClass,
+      service,
+      action,
+      requestHash,
+      answerHash,
+      sourceProof: artifactWithoutProof.sourceProof,
+      result: artifactWithoutProof.result,
+      storageRoot: proof.storageRoot,
+      storageUri: proof.storageUri,
+      contentHash: proof.capsuleHash,
+      storageTxHash: proof.storageTxHash,
+      network: proof.network,
+      storageMode: proof.storageMode,
+      createdAt: now
+    };
+    await saveSponsorshipProof(record);
+    res.status(201).json(sponsorshipProofResponse(record, charged, false));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/dashboard/keys", async (req, res, next) => {
   try {
     const wallet = walletParam(req.query.wallet);
@@ -587,6 +686,9 @@ app.post("/api/dashboard/keys", async (req, res, next) => {
       ownerWallet: wallet,
       keyHash: hashSecret(key),
       keyPreview: `${key.slice(0, 16)}...${key.slice(-4)}`,
+      allowedEndpoints: parseStringList(req.body?.allowedEndpoints, defaultKeyEndpoints),
+      allowedAnalysisTypes: parseStringList(req.body?.allowedAnalysisTypes),
+      allowedProofClasses: parseStringList(req.body?.allowedProofClasses),
       creditBalance: 0,
       creditsUsed: 0,
       createdAt: new Date().toISOString(),
@@ -798,6 +900,9 @@ app.post("/api/admin/integration-keys", async (req, res, next) => {
       partner,
       keyHash: hashSecret(key),
       keyPreview: `${key.slice(0, 16)}...${key.slice(-4)}`,
+      allowedEndpoints: parseStringList(req.body?.allowedEndpoints, defaultKeyEndpoints),
+      allowedAnalysisTypes: parseStringList(req.body?.allowedAnalysisTypes),
+      allowedProofClasses: parseStringList(req.body?.allowedProofClasses),
       creditBalance: Number(req.body?.creditBalance ?? 0),
       creditsUsed: 0,
       createdAt: new Date().toISOString(),
@@ -1068,6 +1173,92 @@ function bearerToken(req: express.Request): string {
   return header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
 }
 
+function bodyProofClass(req: express.Request): string | undefined {
+  const source = req.body?.proofClass ?? req.body?.data?.proofClass;
+  const value = typeof source === "string" ? source.trim() : "";
+  return value ? value.slice(0, 160) : undefined;
+}
+
+function parseStringList(value: unknown, fallback: string[] = []): string[] | undefined {
+  if (Array.isArray(value)) {
+    const list = value
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean)
+      .slice(0, 40);
+    return list.length > 0 ? list : fallback;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const list = value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 40);
+    return list.length > 0 ? list : fallback;
+  }
+  return fallback.length > 0 ? fallback : undefined;
+}
+
+function assertIntegrationScope(record: { allowedEndpoints?: string[]; allowedAnalysisTypes?: string[]; allowedProofClasses?: string[] }, scope?: IntegrationScopeRequest): void {
+  if (!scope) return;
+  if (record.allowedEndpoints?.length && !record.allowedEndpoints.includes(scope.endpoint)) {
+    throw new Error(`Unauthorized integration request. Key cannot use ${scope.endpoint}.`);
+  }
+  if (scope.analysisType && record.allowedAnalysisTypes?.length && !record.allowedAnalysisTypes.includes(scope.analysisType)) {
+    throw new Error(`Unauthorized integration request. Key cannot use analysis type ${scope.analysisType}.`);
+  }
+  if (scope.proofClass && record.allowedProofClasses?.length && !record.allowedProofClasses.includes(scope.proofClass)) {
+    throw new Error(`Unauthorized integration request. Key cannot use proof class ${scope.proofClass}.`);
+  }
+}
+
+function sponsorshipProofResponse(
+  record: {
+    id: string;
+    proofClass: string;
+    service: string;
+    action: string;
+    requestHash: string;
+    answerHash: string;
+    storageRoot: string;
+    storageUri: string;
+    contentHash: string;
+    storageTxHash?: string;
+    network: string;
+    storageMode: string;
+    createdAt: string;
+  },
+  integration: IntegrationAccess,
+  idempotentReplay: boolean
+) {
+  return {
+    id: record.id,
+    aiProvider: "deterministic-sponsorship-proof",
+    intelligenceScore: 100,
+    confidence: 100,
+    summary: `${record.service} ${record.action} was sponsored by ZeroScout with stored proof metadata.`,
+    signals: ["Integration key authorized.", "Request hash and answer hash recorded.", "Compact sponsorship proof stored."],
+    riskFlags: ["This is sponsorship proof, not LP Scout paid proof or market intelligence."],
+    recommendedActions: ["Show as ZeroScout-sponsored only with this returned proof metadata."],
+    dataGaps: [],
+    suggestedVisuals: ["Show ZeroScout-sponsored status, proof hash, and storage transaction."],
+    disclaimer: "This sponsorship proof records supplied hashes and source metadata. It does not verify claims outside the supplied proof data.",
+    proofClass: record.proofClass,
+    requestHash: record.requestHash,
+    answerHash: record.answerHash,
+    proof: {
+      storageRoot: record.storageRoot,
+      storageUri: record.storageUri,
+      contentHash: record.contentHash,
+      storageTxHash: record.storageTxHash
+    },
+    network: record.network,
+    storageMode: record.storageMode,
+    integration,
+    idempotentReplay,
+    createdAt: record.createdAt
+  };
+}
+
 function assertAdminAccess(req: express.Request): void {
   if (!config.adminToken) {
     throw new Error("Admin API is not configured. Set ZEROSCOUT_ADMIN_TOKEN.");
@@ -1178,11 +1369,12 @@ async function respondWithPlatformVideoScore(
   });
 }
 
-async function assertIntegrationAccess(req: express.Request, requiredCredits: number): Promise<{ id: string; name: string; partner?: string } | undefined> {
+async function assertIntegrationAccess(req: express.Request, requiredCredits: number, scope?: IntegrationScopeRequest): Promise<IntegrationAccess | undefined> {
   const token = bearerToken(req);
   if (token) {
     const record = await findActiveIntegrationKeyByHash(hashSecret(token));
     if (record) {
+      assertIntegrationScope(record, scope);
       const charged = await consumeIntegrationCredits(record.id, requiredCredits);
       return { id: charged.id, name: charged.name, partner: charged.partner };
     }
@@ -1203,11 +1395,12 @@ async function assertIntegrationAccess(req: express.Request, requiredCredits: nu
   return undefined;
 }
 
-async function assertIntegrationIdentity(req: express.Request): Promise<{ id: string; name: string; partner?: string } | undefined> {
+async function assertIntegrationIdentity(req: express.Request, scope?: IntegrationScopeRequest): Promise<IntegrationAccess | undefined> {
   const token = bearerToken(req);
   if (token) {
     const record = await findActiveIntegrationKeyByHash(hashSecret(token));
     if (record) {
+      assertIntegrationScope(record, scope);
       return { id: record.id, name: record.name, partner: record.partner };
     }
   }
