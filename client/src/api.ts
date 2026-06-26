@@ -106,7 +106,7 @@ export const api = {
     request<{ costs: { capsule: number; videoScore: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string }>("/api/integrations/pricing"),
   dashboardKeys: (wallet: string) =>
     request<{ keys: Omit<IntegrationKeyRecord, "keyHash">[]; balance: { creditedOg: string; creditsPurchased: number; topUpCount: number } }>(`/api/dashboard/keys?wallet=${encodeURIComponent(wallet)}`),
-  createDashboardKey: (input: { wallet: string; name: string; partner: string }) =>
+  createDashboardKey: (input: { wallet: string; name: string; partner: string; allowedEndpoints?: string[]; allowedAnalysisTypes?: string[]; allowedProofClasses?: string[] }) =>
     request<Omit<IntegrationKeyRecord, "keyHash"> & { key: string }>("/api/dashboard/keys", { method: "POST", body: JSON.stringify(input) }),
   importDashboardKey: (input: { wallet: string; key: string; name: string; partner: string; message: string; signature: string }) =>
     request<Omit<IntegrationKeyRecord, "keyHash">>("/api/dashboard/keys/import", { method: "POST", body: JSON.stringify(input) }),

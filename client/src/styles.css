@@ -1816,6 +1816,36 @@ input:focus, textarea:focus, select:focus {
   font-size: 12px;
   color: var(--text);
 }
+.preset-picker {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.preset-option {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+}
+.preset-option strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.preset-option span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.preset-option.on {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
 .treasury-box {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

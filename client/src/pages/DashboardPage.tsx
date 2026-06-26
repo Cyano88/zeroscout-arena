@@ -7,6 +7,49 @@ import { privyEnabled } from "../privy";
 import type { IntegrationKeyRecord } from "../../../shared/types";
 
 type PublicKey = Omit<IntegrationKeyRecord, "keyHash">;
+type KeyPresetId = "helper-sponsorship" | "video-scoring" | "lp-intelligence" | "full-platform";
+
+const keyPresets: Array<{
+  id: KeyPresetId;
+  label: string;
+  description: string;
+  endpoints: string[];
+  analysisTypes: string[];
+  proofClasses: string[];
+}> = [
+  {
+    id: "helper-sponsorship",
+    label: "Helper Sponsorship",
+    description: "Sponsor a customer app's own chat or helper responses with stored ZeroScout proof.",
+    endpoints: ["sponsorship-proof", "intelligence"],
+    analysisTypes: ["zeroscout-sponsored-action", "zeroscout-helper-context-guidance"],
+    proofClasses: ["zeroscout_sponsored_action", "zeroscout_helper_context_guidance"]
+  },
+  {
+    id: "video-scoring",
+    label: "Video Scoring",
+    description: "Score submitted videos and create project passports from an external platform.",
+    endpoints: ["video-score", "video-score-session", "capsules"],
+    analysisTypes: [],
+    proofClasses: []
+  },
+  {
+    id: "lp-intelligence",
+    label: "LP Intelligence",
+    description: "Generate prediction-market, portfolio, and LP operator intelligence briefs.",
+    endpoints: ["intelligence"],
+    analysisTypes: ["lp-market-intelligence", "portfolio-risk-summary", "prediction-market-brief"],
+    proofClasses: ["generic_market_analysis", "paid_lp_scout_proof"]
+  },
+  {
+    id: "full-platform",
+    label: "Full Platform API",
+    description: "Use all current ZeroScout API lanes for a trusted platform integration.",
+    endpoints: ["capsules", "video-score", "video-score-session", "intelligence", "sponsorship-proof"],
+    analysisTypes: ["custom-intelligence", "zeroscout-helper-context-guidance", "zeroscout-sponsored-action", "lp-market-intelligence", "portfolio-risk-summary", "prediction-market-brief"],
+    proofClasses: ["zeroscout_helper_context_guidance", "zeroscout_sponsored_action", "generic_market_analysis", "paid_lp_scout_proof"]
+  }
+];
 
 const API_ORIGIN = window.location.origin;
 
@@ -17,6 +60,7 @@ export function DashboardPage() {
   const [pricing, setPricing] = useState<{ costs: { capsule: number; videoScore: number; intelligence?: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string } | null>(null);
   const [keyName, setKeyName] = useState("production");
   const [partner, setPartner] = useState("My platform");
+  const [keyPresetId, setKeyPresetId] = useState<KeyPresetId>("helper-sponsorship");
   const [newKey, setNewKey] = useState("");
   const [existingKey, setExistingKey] = useState("");
   const [rememberedKeys, setRememberedKeys] = useState<Record<string, string>>({});
@@ -108,7 +152,15 @@ export function DashboardPage() {
     setStatus("");
     setLoading("key");
     try {
-      const created = await api.createDashboardKey({ wallet, name: keyName, partner });
+      const preset = keyPresets.find((item) => item.id === keyPresetId) ?? keyPresets[0];
+      const created = await api.createDashboardKey({
+        wallet,
+        name: keyName,
+        partner,
+        allowedEndpoints: preset.endpoints,
+        allowedAnalysisTypes: preset.analysisTypes,
+        allowedProofClasses: preset.proofClasses
+      });
       setNewKey(created.key);
       rememberKey(wallet, created.id, created.key);
       setRememberedKeys((current) => ({ ...current, [created.id]: created.key }));
@@ -406,6 +458,20 @@ export function DashboardPage() {
             Platform
             <input value={partner} onChange={(event) => setPartner(event.target.value)} placeholder="Grail, university, hackathon..." />
           </label>
+          <div className="preset-picker" role="radiogroup" aria-label="API key preset">
+            {keyPresets.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className={preset.id === keyPresetId ? "preset-option on" : "preset-option"}
+                onClick={() => setKeyPresetId(preset.id)}
+                aria-pressed={preset.id === keyPresetId}
+              >
+                <strong>{preset.label}</strong>
+                <span>{preset.description}</span>
+              </button>
+            ))}
+          </div>
           <button className="btn btn-primary" type="button" onClick={createKey} disabled={loading === "key"}>
             {loading === "key" ? <Loader2 size={14} className="spin" /> : <KeyRound size={14} />}
             Create API key
@@ -485,6 +551,7 @@ export function DashboardPage() {
               <div>
                 <strong>{key.name}</strong>
                 <span>{key.partner ?? "External platform"} - {key.keyPreview}</span>
+                <span>{scopeLabel(key)}</span>
               </div>
               <div>
                 <b>{key.creditBalance ?? 0}</b>
@@ -588,6 +655,11 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function short(value: string) {
   return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function scopeLabel(key: PublicKey) {
+  const endpoints = key.allowedEndpoints?.length ? key.allowedEndpoints.join(", ") : "all API lanes";
+  return `Scopes: ${endpoints}`;
 }
 
 function pendingTxKey(wallet: string) {
