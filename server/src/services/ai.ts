@@ -44,6 +44,36 @@ export interface PlatformVideoScoreResult {
   suggestedFeedback: string;
 }
 
+export interface CustomIntelligenceInput {
+  partner: string;
+  productType: string;
+  analysisType: string;
+  objective: string;
+  outputStyle: string;
+  data: unknown;
+  includeClaudeReview?: boolean;
+}
+
+export interface CustomIntelligenceResult {
+  aiProvider: string;
+  intelligenceScore: number;
+  confidence: number;
+  summary: string;
+  signals: string[];
+  riskFlags: string[];
+  recommendedActions: string[];
+  dataGaps: string[];
+  suggestedVisuals: string[];
+  disclaimer: string;
+  claudeReview?: {
+    provider: string;
+    intelligenceRating: number;
+    strengths: string[];
+    gaps: string[];
+    recommendation: string;
+  };
+}
+
 export async function generateScout(input: ProjectCapsuleInput, previous?: ProjectCapsule): Promise<ScoutResult> {
   const prompt = scoutPrompt(input, previous);
   const ai = getAiClient();
@@ -67,6 +97,70 @@ export async function generateScout(input: ProjectCapsuleInput, previous?: Proje
   }
 
   return deterministicScout(input, previous);
+}
+
+export async function generateCustomIntelligence(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
+  assertCustomIntelligenceInput(input);
+  const ai = getAiClient();
+  if (!ai) {
+    throw new Error("0G Compute or OpenAI-compatible AI is not configured for custom intelligence.");
+  }
+
+  const prompt = `Create a structured ZeroScout intelligence brief for an external platform.
+
+Partner: ${input.partner}
+Product type: ${input.productType}
+Analysis type: ${input.analysisType}
+Objective: ${input.objective}
+Output style: ${input.outputStyle}
+
+Supplied partner data:
+${JSON.stringify(input.data ?? {}).slice(0, 18000)}
+
+Return strict JSON with keys:
+intelligenceScore number 0-100,
+confidence number 0-100,
+summary string,
+signals array,
+riskFlags array,
+recommendedActions array,
+dataGaps array,
+suggestedVisuals array,
+disclaimer string.
+
+Rules:
+- Be practical and specific to the supplied data.
+- Do not invent live market data, prices, liquidity, users, volume, or performance.
+- If the request is about markets, LPs, grants, or trading, frame this as an intelligence signal, not financial advice.
+- If the data is thin, say exactly what is missing instead of pretending certainty.
+- Make the output useful for a real product UI or internal operator dashboard.`;
+
+  const content = await completeJson(ai, [
+    {
+      role: "system",
+      content: "You are ZeroScout's custom intelligence agent for partner platforms. Return strict JSON only. Never fabricate data."
+    },
+    { role: "user", content: prompt }
+  ]);
+  const parsed = parseJsonObject(content ?? "{}");
+  const result: CustomIntelligenceResult = {
+    aiProvider: ai.label,
+    intelligenceScore: clampScore(parsed.intelligenceScore, 100, 62),
+    confidence: clampScore(parsed.confidence, 100, 55),
+    summary: text(parsed.summary, "ZeroScout generated a custom intelligence brief from the supplied partner data."),
+    signals: list(parsed.signals, ["The supplied data was accepted for structured analysis."]),
+    riskFlags: list(parsed.riskFlags, ["Add richer source data before relying on this signal for decisions."]),
+    recommendedActions: list(parsed.recommendedActions, ["Add more recent, structured partner data and rerun the analysis."]),
+    dataGaps: list(parsed.dataGaps, ["No live external data was fetched by ZeroScout for this request."]),
+    suggestedVisuals: list(parsed.suggestedVisuals, ["Show score, key signals, risk flags, and proof root in the product UI."]),
+    disclaimer: text(parsed.disclaimer, "This is an AI intelligence signal generated from supplied data. It is not financial, legal, or investment advice.")
+  };
+
+  if (input.includeClaudeReview && config.anthropicApiKey) {
+    result.claudeReview = await reviewCustomIntelligenceWithClaude(input, result);
+  }
+
+  return result;
 }
 
 export async function checkAiHealth(): Promise<AiHealthResponse> {
@@ -503,12 +597,86 @@ function computeHeaders(): Record<string, string> | undefined {
   return { "X-0G-Provider-Trust-Mode": config.computeTrustMode };
 }
 
+async function reviewCustomIntelligenceWithClaude(
+  input: CustomIntelligenceInput,
+  result: CustomIntelligenceResult
+): Promise<NonNullable<CustomIntelligenceResult["claudeReview"]>> {
+  const prompt = `Rate this ZeroScout custom intelligence output for real platform usefulness.
+
+Original request:
+${JSON.stringify({
+  partner: input.partner,
+  productType: input.productType,
+  analysisType: input.analysisType,
+  objective: input.objective,
+  outputStyle: input.outputStyle
+})}
+
+ZeroScout output:
+${JSON.stringify(result)}
+
+Return strict JSON with keys:
+intelligenceRating number 0-10,
+strengths array,
+gaps array,
+recommendation string.
+
+Focus on whether this would be useful inside an institutional product. Do not add new facts.`;
+
+  const content = await completeClaudeJson(prompt);
+  const parsed = parseJsonObject(content);
+  return {
+    provider: `Claude API (${config.anthropicModel})`,
+    intelligenceRating: clampScore(parsed.intelligenceRating, 10, 7),
+    strengths: list(parsed.strengths, ["The output is structured and product-facing."]),
+    gaps: list(parsed.gaps, ["The partner should supply richer data for stronger analysis."]),
+    recommendation: text(parsed.recommendation, "Use this as a second-opinion quality check before showing the intelligence module to users.")
+  };
+}
+
+async function completeClaudeJson(prompt: string): Promise<string> {
+  if (!config.anthropicApiKey) throw new Error("Claude API is not configured. Set ANTHROPIC_API_KEY.");
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": config.anthropicApiKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: config.anthropicModel,
+      max_tokens: 1200,
+      temperature: 0.2,
+      system: "Return strict JSON only. Do not wrap the response in Markdown.",
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Claude API request failed: ${response.status} ${body.slice(0, 180)}`);
+  }
+  const data = await response.json() as { content?: Array<{ type: string; text?: string }> };
+  const textBlock = data.content?.find((item) => item.type === "text" && item.text);
+  if (!textBlock?.text) throw new Error("Claude API returned no text content.");
+  return textBlock.text;
+}
+
 function sanitizeAiError(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
   return raw
     .replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]")
     .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [redacted]")
     .slice(0, 280);
+}
+
+function assertCustomIntelligenceInput(input: CustomIntelligenceInput): void {
+  const serialized = JSON.stringify(input.data ?? {});
+  if (serialized.length > 120_000) {
+    throw new Error("Custom intelligence data is too large. Send summarized data under 120 KB.");
+  }
+  if (!input.productType || !input.analysisType) {
+    throw new Error("productType and analysisType are required.");
+  }
 }
 
 async function completeJson(ai: { client: OpenAI; model: string }, messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): Promise<string | undefined> {

@@ -14,7 +14,7 @@ export function DashboardPage() {
   const [wallet, setWallet] = useState("");
   const [keys, setKeys] = useState<PublicKey[]>([]);
   const [balance, setBalance] = useState({ creditedOg: "0", creditsPurchased: 0, topUpCount: 0 });
-  const [pricing, setPricing] = useState<{ costs: { capsule: number; videoScore: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string } | null>(null);
+  const [pricing, setPricing] = useState<{ costs: { capsule: number; videoScore: number; intelligence?: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string } | null>(null);
   const [keyName, setKeyName] = useState("production");
   const [partner, setPartner] = useState("My platform");
   const [newKey, setNewKey] = useState("");
@@ -361,6 +361,7 @@ export function DashboardPage() {
           <Metric label="Credited OG" value={balance.creditedOg} />
           <Metric label="Wallet OG" value={walletOgBalance || "-"} />
           <Metric label="Passport API" value={`${pricing?.costs.capsule ?? 20} cr`} />
+          <Metric label="Intelligence API" value={`${pricing?.costs.intelligence ?? 40} cr`} />
         </div>
       </section>
 
@@ -374,6 +375,7 @@ export function DashboardPage() {
               <span>1 OG = {pricing?.creditsPerOg ?? 100} credits</span>
               <span>Passport = {pricing?.costs.capsule ?? 20} credits</span>
               <span>Video review = {pricing?.costs.videoScore ?? 50} credits</span>
+              <span>Intelligence = {pricing?.costs.intelligence ?? 40} credits</span>
             </div>
           </div>
           <div className="funding-actions">
@@ -558,6 +560,10 @@ cost: ${pricing?.costs.videoScore ?? 50} credits`}</pre>
             <pre>{`POST /api/integrations/capsules
 json: projectName, teamName, repoUrl, demoUrl, description, ogUsageClaims...
 cost: ${pricing?.costs.capsule ?? 20} credits`}</pre>
+            <p><b>Custom intelligence</b> is for products that already have structured data and want ZeroScout to generate a stored operator brief.</p>
+            <pre>{`POST /api/integrations/intelligence
+json: partner, productType, analysisType, objective, data, outputStyle
+cost: ${pricing?.costs.intelligence ?? 40} credits`}</pre>
           </div>
           <div>
             <h2>4. Use the response</h2>

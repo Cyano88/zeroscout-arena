@@ -43,6 +43,8 @@ export const config = {
   openAiApiKey: process.env.OPENAI_API_KEY,
   openAiBaseUrl: process.env.OPENAI_BASE_URL,
   openAiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
+  anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5",
   devStorageFallback: process.env.DEV_STORAGE_FALLBACK === "true",
   dataDir: process.env.DATA_DIR ?? "server/data"
 };

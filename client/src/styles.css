@@ -1687,7 +1687,7 @@ input:focus, textarea:focus, select:focus {
 }
 .balance-secondary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 .funding-notice {
@@ -2020,7 +2020,7 @@ input:focus, textarea:focus, select:focus {
   .update-panel { align-items: flex-start; flex-direction: column; }
   .dashboard-grid { grid-template-columns: 1fr; }
   .balance-board { grid-template-columns: 1fr; }
-  .balance-secondary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .balance-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .funding-notice { align-items: flex-start; flex-direction: column; }
   .funding-actions { justify-content: flex-start; }
   .key-row { grid-template-columns: minmax(0, 1fr) auto; }

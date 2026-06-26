@@ -75,8 +75,8 @@ Embedded form
 
         <DocCard eyebrow="API" title="Server-side integrations" id="api">
           <p>
-            Use the API when your platform already collects builder data or user videos. API keys must stay on your
-            backend and are funded with capped credits so usage cannot run forever.
+            Use the API when your platform already collects builder data, user videos, or structured product data. API
+            keys must stay on your backend and are funded with capped credits so usage cannot run forever.
           </p>
           <pre>{`ZEROSCOUT_API_URL=https://zeroscout.app
 ZEROSCOUT_INTEGRATION_SECRET=zs_live_key_from_dashboard
@@ -84,8 +84,25 @@ ZEROSCOUT_INTEGRATION_SECRET=zs_live_key_from_dashboard
 Authorization: Bearer $ZEROSCOUT_INTEGRATION_SECRET
 
 POST /api/integrations/capsules
-POST /api/integrations/video-score`}</pre>
+POST /api/integrations/video-score
+POST /api/integrations/intelligence`}</pre>
           <Link className="docs-inline-link" to="/dashboard">Open API dashboard <ArrowRight size={13} /></Link>
+        </DocCard>
+
+        <DocCard eyebrow="Custom intelligence" title="Bring your own data">
+          <p>
+            Platforms can send their own structured data to ZeroScout for an AI-generated operator brief. ZeroScout does
+            not fetch live market data for you; it analyzes the data your backend supplies and stores the result as a
+            proof artifact.
+          </p>
+          <pre>{`POST /api/integrations/intelligence
+{
+  "productType": "prediction-market",
+  "analysisType": "lp-market-alpha",
+  "objective": "Find useful LP signals from supplied market data",
+  "data": { "markets": [], "liquidity": [], "volume": [] },
+  "includeClaudeReview": true
+}`}</pre>
         </DocCard>
 
         <DocCard eyebrow="Milestones" title="What is live now">
@@ -94,7 +111,7 @@ POST /api/integrations/video-score`}</pre>
             <li>Project update/version history for the same repo and program.</li>
             <li>Video walkthrough review through link review or upload.</li>
             <li>Compare mode for public Project Passports.</li>
-            <li>Hosted, embedded, and server API integration paths.</li>
+            <li>Hosted, embedded, server API, and custom intelligence integration paths.</li>
             <li>Credit dashboard for capped platform usage.</li>
           </ul>
         </DocCard>

@@ -8,7 +8,7 @@ import { ethers } from "ethers";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
 import { addCreditsToWalletKeys, claimIntegrationKeyByHash, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, getCapsule, getPendingClaim, getVideoScoreSession, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, markVideoScoreSessionUsed, revokeIntegrationKey, revokeIntegrationKeyForWallet, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim, saveVideoScoreSession } from "./repository.js";
-import { checkAiHealth, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
+import { checkAiHealth, generateCustomIntelligence, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
 import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryCapsuleRoot, getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
 import { parseGitHubRepo, projectKeyFor } from "./services/project-key.js";
@@ -19,7 +19,8 @@ const app = express();
 const maxVideoBytes = 100 * 1024 * 1024;
 const integrationCosts = {
   capsule: 20,
-  videoScore: 50
+  videoScore: 50,
+  intelligence: 40
 };
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -503,6 +504,54 @@ app.post("/api/integrations/capsules", async (req, res, next) => {
       capsuleHash: capsule.capsuleHash,
       storageTxHash: capsule.storageTxHash,
       readinessSignal: capsule.scores.total
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/integrations/intelligence", async (req, res, next) => {
+  try {
+    const integration = await assertIntegrationAccess(req, integrationCosts.intelligence);
+    const id = nanoid(10);
+    const now = new Date().toISOString();
+    const input = {
+      partner: cleanBodyField(req.body?.partner, integration?.partner ?? "External platform"),
+      productType: cleanBodyField(req.body?.productType, "custom-platform"),
+      analysisType: cleanBodyField(req.body?.analysisType, "custom-intelligence"),
+      objective: cleanBodyField(req.body?.objective, "Find useful, practical signals from the supplied data."),
+      outputStyle: cleanBodyField(req.body?.outputStyle, "executive-brief"),
+      data: req.body?.data,
+      includeClaudeReview: req.body?.includeClaudeReview === true
+    };
+
+    const result = await generateCustomIntelligence(input);
+    const artifactWithoutProof = {
+      id,
+      artifactType: "zeroscout.custom-intelligence",
+      artifactVersion: "1.0.0",
+      integrationId: integration?.id,
+      integrationName: integration?.name,
+      integrationPartner: integration?.partner,
+      input,
+      ...result,
+      createdAt: now
+    };
+    const proof = await storeCanonicalArtifact("intelligence", id, artifactWithoutProof);
+
+    res.status(201).json({
+      id,
+      ...result,
+      proof: {
+        storageRoot: proof.storageRoot,
+        storageUri: proof.storageUri,
+        contentHash: proof.capsuleHash,
+        storageTxHash: proof.storageTxHash
+      },
+      network: proof.network,
+      storageMode: proof.storageMode,
+      integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined,
+      createdAt: now
     });
   } catch (error) {
     next(error);
