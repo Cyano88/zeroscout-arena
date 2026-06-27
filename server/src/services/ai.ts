@@ -115,13 +115,13 @@ export async function generateScout(input: ProjectCapsuleInput, previous?: Proje
 
 export async function generateCustomIntelligence(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
   assertCustomIntelligenceInput(input);
+  if (isHelperGuidanceRequest(input)) {
+    return generateHelperGuidance(input);
+  }
+
   const ai = getAiClient();
   if (!ai) {
     throw new Error("0G Compute or OpenAI-compatible AI is not configured for custom intelligence.");
-  }
-
-  if (isHelperGuidanceRequest(input)) {
-    return generateHelperGuidance(input, ai);
   }
 
   const prompt = `Create a structured ZeroScout intelligence brief for an external platform.
@@ -191,10 +191,10 @@ function isHelperGuidanceRequest(input: CustomIntelligenceInput): boolean {
     || readString((input.data as Record<string, unknown> | undefined)?.proofClass) === "zeroscout_helper_context_guidance";
 }
 
-async function generateHelperGuidance(
-  input: CustomIntelligenceInput,
-  ai: { client: OpenAI; model: string; label: string }
-): Promise<CustomIntelligenceResult> {
+type AiChatClient = { client: OpenAI; model: string; label: string };
+type HelperProviderLane = "0g-compute" | "openai" | "anthropic";
+
+async function generateHelperGuidance(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
   const compactData = compactHelperData(input.data);
   const prompt = `Create a consumer-ready Ask Hash helper response plan for Hash PayLink.
 
@@ -234,26 +234,48 @@ Rules:
 - Never infer balances, payment status, wallet ownership, x402 activation, LP Scout proof, live market data, or receipt confirmation unless verified state is supplied.
 - Keep privacy: use only sanitized summaries, identifiers, hashes, profile hints, and app-state metadata supplied in the compact context.`;
 
-  const content = await completeJson(ai, [
-    {
-      role: "system",
-      content: "You are ZeroScout's consumer helper intelligence layer for Hash PayLink. Return strict JSON only. Be concise, human, privacy-safe, and proof-aware."
-    },
-    { role: "user", content: prompt }
-  ]);
-  const parsed = parseJsonObject(content ?? "{}");
+  const routing = helperProviderRouting(compactData);
+  let parsed: Record<string, unknown> = {};
+  let providerLabel = "";
+  const errors: string[] = [];
+
+  for (const lane of routing.fallbackOrder) {
+    try {
+      const laneResult = await completeHelperGuidanceForLane(lane, prompt);
+      parsed = laneResult.parsed;
+      providerLabel = laneResult.providerLabel;
+      break;
+    } catch (error) {
+      errors.push(`${lane}: ${sanitizeAiError(error)}`);
+    }
+  }
+
+  if (!providerLabel) {
+    throw new Error(`No configured helper refinement provider succeeded. ${errors.join(" | ")}`);
+  }
+
   let suggestedAnswer = text(parsed.suggestedAnswer, text(parsed.summary, "I can help with that. Send the detail you want me to use next."));
 
-  if (input.includeClaudeReview && config.anthropicApiKey) {
+  if (routing.multiStack && config.anthropicApiKey && providerLabel !== `Claude API (${config.anthropicModel})`) {
     try {
       suggestedAnswer = await polishHelperAnswerWithClaude(input, compactData, suggestedAnswer);
+      providerLabel = `${providerLabel} + Claude polish`;
     } catch (error) {
-      console.warn("Claude helper polish failed, using 0G guidance:", sanitizeAiError(error));
+      console.warn("Claude helper polish failed, keeping prior helper guidance:", sanitizeAiError(error));
+    }
+  }
+
+  if (routing.multiStack && config.openAiEvaluatorApiKey && !providerLabel.includes("OpenAI")) {
+    try {
+      suggestedAnswer = await polishHelperAnswerWithOpenAi(input, compactData, suggestedAnswer);
+      providerLabel = `${providerLabel} + OpenAI polish`;
+    } catch (error) {
+      console.warn("OpenAI helper polish failed, keeping prior helper guidance:", sanitizeAiError(error));
     }
   }
 
   const result: CustomIntelligenceResult = {
-    aiProvider: input.includeClaudeReview && config.anthropicApiKey ? `${ai.label} + Claude polish` : ai.label,
+    aiProvider: providerLabel,
     intelligenceScore: clampScore(parsed.intelligenceScore, 100, 78),
     confidence: clampScore(parsed.confidence, 100, 72),
     summary: suggestedAnswer,
@@ -272,11 +294,14 @@ Rules:
     ]),
     proofMetadata: objectOrUndefined(parsed.proofMetadata) ?? {
       proofClass: readString((compactData as Record<string, unknown>).proofClass),
-      requestHash: readString((compactData as Record<string, unknown>).requestHash)
+      requestHash: readString((compactData as Record<string, unknown>).requestHash),
+      requestedRefinementLane: routing.requestedLane,
+      fallbackOrder: routing.fallbackOrder,
+      refinementPolicy: routing.refinementPolicy
     }
   };
 
-  if (input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
+  if (routing.multiStack && input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
     result.openAiReview = await reviewCustomIntelligenceWithOpenAi(input, result);
     result.aiProvider = `${result.aiProvider} + OpenAI evaluator`;
   }
@@ -756,9 +781,116 @@ function compactHelperData(data: unknown): Record<string, unknown> {
       hasRootHash: Boolean(readString(sourceProof.rootHash)),
       hasOgTxHash: Boolean(readString(sourceProof.ogTxHash))
     },
+    refinementPolicy: readString(input.refinementPolicy).slice(0, 120),
+    requestedRefinementLane: readString(input.requestedRefinementLane).slice(0, 80),
+    fallbackOrder: Array.isArray(input.fallbackOrder)
+      ? input.fallbackOrder.map(readString).filter(Boolean).slice(0, 6)
+      : [],
     separationRules: Array.isArray(input.separationRules)
       ? input.separationRules.map(readString).filter(Boolean).slice(0, 12)
       : []
+  };
+}
+
+function helperProviderRouting(compactData: Record<string, unknown>): {
+  requestedLane: string;
+  refinementPolicy: string;
+  fallbackOrder: HelperProviderLane[];
+  multiStack: boolean;
+} {
+  const requestedLane = readString(compactData.requestedRefinementLane).toLowerCase();
+  const refinementPolicy = readString(compactData.refinementPolicy).toLowerCase();
+  const multiStack = requestedLane === "multi-stack" || refinementPolicy.includes("multi-stack");
+  const rawFallbackOrder = Array.isArray(compactData.fallbackOrder)
+    ? compactData.fallbackOrder.map(readString)
+    : [];
+  const fallbackOrder = normalizeHelperFallbackOrder(rawFallbackOrder.length ? rawFallbackOrder : [requestedLane]);
+  return {
+    requestedLane: requestedLane || (multiStack ? "multi-stack" : "0g-compute"),
+    refinementPolicy: refinementPolicy || (multiStack ? "deep-multi-stack-0g-anthropic-openai" : "single-lane-short-refinement"),
+    fallbackOrder: multiStack ? normalizeHelperFallbackOrder(["0g-compute", "openai", "anthropic"]) : fallbackOrder,
+    multiStack
+  };
+}
+
+function normalizeHelperFallbackOrder(values: string[]): HelperProviderLane[] {
+  const normalized: HelperProviderLane[] = [];
+  for (const value of values) {
+    const lane = normalizeHelperLane(value);
+    if (lane && !normalized.includes(lane)) normalized.push(lane);
+  }
+  for (const lane of ["0g-compute", "openai", "anthropic"] as HelperProviderLane[]) {
+    if (!normalized.includes(lane)) normalized.push(lane);
+  }
+  return normalized;
+}
+
+function normalizeHelperLane(value: string): HelperProviderLane | undefined {
+  const clean = value.toLowerCase().trim();
+  if (["0g", "og", "0g-compute", "og-compute", "compute"].includes(clean)) return "0g-compute";
+  if (["openai", "open-ai", "gpt"].includes(clean)) return "openai";
+  if (["anthropic", "claude"].includes(clean)) return "anthropic";
+  return undefined;
+}
+
+export const __testAiRouting = {
+  compactHelperData,
+  helperProviderRouting,
+  normalizeHelperFallbackOrder
+};
+
+async function completeHelperGuidanceForLane(
+  lane: HelperProviderLane,
+  prompt: string
+): Promise<{ parsed: Record<string, unknown>; providerLabel: string }> {
+  if (lane === "anthropic") {
+    const content = await completeClaudeJson(prompt);
+    return {
+      parsed: parseJsonObject(content),
+      providerLabel: `Claude API (${config.anthropicModel})`
+    };
+  }
+
+  const ai = lane === "openai" ? getOpenAiHelperClient() : getComputeAiClient();
+  if (!ai) {
+    throw new Error(`${lane} is not configured.`);
+  }
+  const content = await completeJson(ai, [
+    {
+      role: "system",
+      content: "You are ZeroScout's consumer helper intelligence layer for Hash PayLink. Return strict JSON only. Be concise, human, privacy-safe, and proof-aware."
+    },
+    { role: "user", content: prompt }
+  ]);
+  return {
+    parsed: parseJsonObject(content ?? "{}"),
+    providerLabel: ai.label
+  };
+}
+
+function getComputeAiClient(): AiChatClient | undefined {
+  if (!config.computeApiKey) return undefined;
+  return {
+    client: new OpenAI({
+      apiKey: config.computeApiKey,
+      baseURL: config.computeBaseUrl,
+      defaultHeaders: computeHeaders()
+    }),
+    model: config.computeModel,
+    label: `0G Compute Router (${config.computeModel})`
+  };
+}
+
+function getOpenAiHelperClient(): AiChatClient | undefined {
+  const apiKey = config.openAiEvaluatorApiKey ?? config.openAiApiKey;
+  if (!apiKey) return undefined;
+  return {
+    client: new OpenAI({
+      apiKey,
+      baseURL: config.openAiEvaluatorBaseUrl ?? config.openAiBaseUrl
+    }),
+    model: config.openAiEvaluatorModel ?? config.openAiModel,
+    label: `OpenAI helper (${config.openAiEvaluatorModel ?? config.openAiModel})`
   };
 }
 
@@ -794,6 +926,49 @@ Rules:
 
   const content = await completeClaudeJson(prompt);
   const parsed = parseJsonObject(content);
+  return text(parsed.suggestedAnswer, suggestedAnswer).slice(0, 1200);
+}
+
+async function polishHelperAnswerWithOpenAi(
+  input: CustomIntelligenceInput,
+  compactData: Record<string, unknown>,
+  suggestedAnswer: string
+): Promise<string> {
+  const ai = getOpenAiHelperClient();
+  if (!ai) throw new Error("OpenAI helper polish is not configured.");
+  const prompt = `Polish this Ask Hash helper answer for a premium consumer chat.
+
+Context:
+${JSON.stringify({
+  partner: input.partner,
+  analysisType: input.analysisType,
+  outputStyle: input.outputStyle,
+  compactData
+}).slice(0, 12000)}
+
+Draft answer:
+${suggestedAnswer}
+
+Return strict JSON:
+{
+  "suggestedAnswer": "short polished chat answer"
+}
+
+Rules:
+- Human, concise, direct.
+- No generic strategy boilerplate unless the user asked for strategy.
+- No sponsorship, API, proof-generation, backend, or model-routing language.
+- Do not invent payment status, wallet ownership, balances, receipts, LP Scout proof, x402 activation, or live data.
+- If the user's name or memory is unknown, say that naturally.`;
+
+  const content = await completeJson(ai, [
+    {
+      role: "system",
+      content: "Return strict JSON only. Polish the supplied helper answer without adding unsupported facts."
+    },
+    { role: "user", content: prompt }
+  ]);
+  const parsed = parseJsonObject(content ?? "{}");
   return text(parsed.suggestedAnswer, suggestedAnswer).slice(0, 1200);
 }
 
