@@ -244,7 +244,7 @@ Rules:
   const parsed = parseJsonObject(content ?? "{}");
   let suggestedAnswer = text(parsed.suggestedAnswer, text(parsed.summary, "I can help with that. Send the detail you want me to use next."));
 
-  if (config.anthropicApiKey) {
+  if (input.includeClaudeReview && config.anthropicApiKey) {
     try {
       suggestedAnswer = await polishHelperAnswerWithClaude(input, compactData, suggestedAnswer);
     } catch (error) {
@@ -253,7 +253,7 @@ Rules:
   }
 
   const result: CustomIntelligenceResult = {
-    aiProvider: config.anthropicApiKey ? `${ai.label} + Claude polish` : ai.label,
+    aiProvider: input.includeClaudeReview && config.anthropicApiKey ? `${ai.label} + Claude polish` : ai.label,
     intelligenceScore: clampScore(parsed.intelligenceScore, 100, 78),
     confidence: clampScore(parsed.confidence, 100, 72),
     summary: suggestedAnswer,
