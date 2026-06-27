@@ -66,6 +66,12 @@ export interface CustomIntelligenceResult {
   dataGaps: string[];
   suggestedVisuals: string[];
   disclaimer: string;
+  suggestedAnswer?: string;
+  reasoningSummary?: string;
+  intent?: string;
+  missingFields?: string[];
+  safetyBoundaries?: string[];
+  proofMetadata?: Record<string, unknown>;
   claudeReview?: {
     provider: string;
     intelligenceRating: number;
@@ -112,6 +118,10 @@ export async function generateCustomIntelligence(input: CustomIntelligenceInput)
   const ai = getAiClient();
   if (!ai) {
     throw new Error("0G Compute or OpenAI-compatible AI is not configured for custom intelligence.");
+  }
+
+  if (isHelperGuidanceRequest(input)) {
+    return generateHelperGuidance(input, ai);
   }
 
   const prompt = `Create a structured ZeroScout intelligence brief for an external platform.
@@ -170,6 +180,105 @@ Rules:
 
   if (input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
     result.openAiReview = await reviewCustomIntelligenceWithOpenAi(input, result);
+  }
+
+  return result;
+}
+
+function isHelperGuidanceRequest(input: CustomIntelligenceInput): boolean {
+  return input.analysisType === "zeroscout-helper-context-guidance"
+    || input.outputStyle === "consumer-helper-answer-guidance"
+    || readString((input.data as Record<string, unknown> | undefined)?.proofClass) === "zeroscout_helper_context_guidance";
+}
+
+async function generateHelperGuidance(
+  input: CustomIntelligenceInput,
+  ai: { client: OpenAI; model: string; label: string }
+): Promise<CustomIntelligenceResult> {
+  const compactData = compactHelperData(input.data);
+  const prompt = `Create a consumer-ready Ask Hash helper response plan for Hash PayLink.
+
+Use case:
+- Hash PayLink performs exact deterministic app actions locally, such as amount parsing, wallet parsing, network parsing, PayLink creation, receipt state, and proof checks.
+- ZeroScout provides AI intelligence, answer polish, lightweight research guidance, and proof-aware boundaries.
+
+Partner objective:
+${input.objective}
+
+Compact helper context:
+${JSON.stringify(compactData).slice(0, 18000)}
+
+Return strict JSON with keys:
+suggestedAnswer string,
+reasoningSummary string,
+intent string,
+missingFields array,
+safetyBoundaries array,
+signals array,
+riskFlags array,
+recommendedActions array,
+dataGaps array,
+suggestedVisuals array,
+disclaimer string,
+intelligenceScore number 0-100,
+confidence number 0-100,
+proofMetadata object.
+
+Rules:
+- The suggestedAnswer must be short, human, direct, and ready for a chat bubble.
+- Do not mention ZeroScout sponsorship requirements, proof creation steps, API calls, model routing, internal process, or backend state in suggestedAnswer.
+- Do not return generic product strategy unless the user actually asked for strategy or research.
+- For personal memory questions, answer only from supplied profile or memory context. If unknown, say you do not know yet and can remember once told.
+- For payment requests, be practical and minimal. If deterministic app state says a PayLink is ready, polish that result instead of re-asking for fields.
+- For x402, receipts, wallets, setup, or research, answer at a helpful consumer level without inventing verified state.
+- Never infer balances, payment status, wallet ownership, x402 activation, LP Scout proof, live market data, or receipt confirmation unless verified state is supplied.
+- Keep privacy: use only sanitized summaries, identifiers, hashes, profile hints, and app-state metadata supplied in the compact context.`;
+
+  const content = await completeJson(ai, [
+    {
+      role: "system",
+      content: "You are ZeroScout's consumer helper intelligence layer for Hash PayLink. Return strict JSON only. Be concise, human, privacy-safe, and proof-aware."
+    },
+    { role: "user", content: prompt }
+  ]);
+  const parsed = parseJsonObject(content ?? "{}");
+  let suggestedAnswer = text(parsed.suggestedAnswer, text(parsed.summary, "I can help with that. Send the detail you want me to use next."));
+
+  if (config.anthropicApiKey) {
+    try {
+      suggestedAnswer = await polishHelperAnswerWithClaude(input, compactData, suggestedAnswer);
+    } catch (error) {
+      console.warn("Claude helper polish failed, using 0G guidance:", sanitizeAiError(error));
+    }
+  }
+
+  const result: CustomIntelligenceResult = {
+    aiProvider: config.anthropicApiKey ? `${ai.label} + Claude polish` : ai.label,
+    intelligenceScore: clampScore(parsed.intelligenceScore, 100, 78),
+    confidence: clampScore(parsed.confidence, 100, 72),
+    summary: suggestedAnswer,
+    signals: list(parsed.signals, [suggestedAnswer]),
+    riskFlags: list(parsed.riskFlags, ["Do not claim payment, wallet, x402, receipt, or LP Scout state unless verified app state supplied it."]),
+    recommendedActions: list(parsed.recommendedActions, ["Use the suggested answer as chat copy and keep proof metadata subtle in the UI."]),
+    dataGaps: list(parsed.dataGaps, []),
+    suggestedVisuals: list(parsed.suggestedVisuals, ["Show a compact ZeroScout-powered header badge, not a noisy badge on every message."]),
+    disclaimer: text(parsed.disclaimer, "This helper guidance is generated from supplied, privacy-safe context and does not verify facts outside that context."),
+    suggestedAnswer,
+    reasoningSummary: text(parsed.reasoningSummary, "ZeroScout prepared a concise helper response from the supplied context."),
+    intent: text(parsed.intent, "general-helper"),
+    missingFields: list(parsed.missingFields, []),
+    safetyBoundaries: list(parsed.safetyBoundaries, [
+      "Do not infer balances, payment status, wallet ownership, x402 activation, LP Scout proof, or live market data without verified app state."
+    ]),
+    proofMetadata: objectOrUndefined(parsed.proofMetadata) ?? {
+      proofClass: readString((compactData as Record<string, unknown>).proofClass),
+      requestHash: readString((compactData as Record<string, unknown>).requestHash)
+    }
+  };
+
+  if (input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
+    result.openAiReview = await reviewCustomIntelligenceWithOpenAi(input, result);
+    result.aiProvider = `${result.aiProvider} + OpenAI evaluator`;
   }
 
   return result;
@@ -607,6 +716,85 @@ function getVideoAiClient(): { client: OpenAI; model: string; label: string } | 
 function computeHeaders(): Record<string, string> | undefined {
   if (!config.computeTrustMode || config.computeTrustMode === "default") return undefined;
   return { "X-0G-Provider-Trust-Mode": config.computeTrustMode };
+}
+
+function readString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function objectOrUndefined(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function compactHelperData(data: unknown): Record<string, unknown> {
+  const input = objectOrUndefined(data) ?? {};
+  const request = objectOrUndefined(input.request) ?? {};
+  const user = objectOrUndefined(input.user) ?? {};
+  const sourceProof = objectOrUndefined(input.sourceProof) ?? {};
+  return {
+    proofClass: readString(input.proofClass),
+    service: readString(input.service).slice(0, 120),
+    action: readString(input.action).slice(0, 120),
+    requestHash: readString(input.requestHash).slice(0, 180),
+    user: {
+      payer: readString(user.payer).slice(0, 120),
+      emailPresent: Boolean(readString(user.email)),
+      walletPresent: Boolean(readString(user.wallet))
+    },
+    request: {
+      eventId: readString(request.eventId).slice(0, 120),
+      accessMode: readString(request.accessMode).slice(0, 60),
+      question: readString(request.question).slice(0, 1000),
+      memorySummary: readString(request.memorySummary).slice(0, 900),
+      memorySummaryHash: readString(request.memorySummaryHash).slice(0, 180)
+    },
+    sourceProof: {
+      type: readString(sourceProof.type).slice(0, 100),
+      network: readString(sourceProof.network).slice(0, 120),
+      hasRootHash: Boolean(readString(sourceProof.rootHash)),
+      hasOgTxHash: Boolean(readString(sourceProof.ogTxHash))
+    },
+    separationRules: Array.isArray(input.separationRules)
+      ? input.separationRules.map(readString).filter(Boolean).slice(0, 12)
+      : []
+  };
+}
+
+async function polishHelperAnswerWithClaude(
+  input: CustomIntelligenceInput,
+  compactData: Record<string, unknown>,
+  suggestedAnswer: string
+): Promise<string> {
+  const prompt = `Polish this Ask Hash helper answer for a premium consumer chat.
+
+Context:
+${JSON.stringify({
+  partner: input.partner,
+  analysisType: input.analysisType,
+  outputStyle: input.outputStyle,
+  compactData
+}).slice(0, 12000)}
+
+Draft answer:
+${suggestedAnswer}
+
+Return strict JSON:
+{
+  "suggestedAnswer": "short polished chat answer"
+}
+
+Rules:
+- Human, concise, direct.
+- No generic strategy boilerplate unless the user asked for strategy.
+- No sponsorship, API, proof-generation, backend, or model-routing language.
+- Do not invent payment status, wallet ownership, balances, receipts, LP Scout proof, x402 activation, or live data.
+- If the user's name or memory is unknown, say that naturally.`;
+
+  const content = await completeClaudeJson(prompt);
+  const parsed = parseJsonObject(content);
+  return text(parsed.suggestedAnswer, suggestedAnswer).slice(0, 1200);
 }
 
 async function reviewCustomIntelligenceWithClaude(
