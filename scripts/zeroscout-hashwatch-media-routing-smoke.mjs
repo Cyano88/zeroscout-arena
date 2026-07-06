@@ -18,6 +18,7 @@ assert.equal(topLevel.mediaUrl, "https://youtu.be/mYSVSs33ZgE?si=5eumS_SNzXDnzZY
 assert.equal(topLevel.source, "data.mediaUrl");
 assert.equal(topLevel.requiredProvider, "qwen-vl");
 assert.equal(topLevel.requiredModel, "Qwen/Qwen2.5-VL-72B-Instruct");
+assert.ok(topLevel.candidateModels.includes("qwen3.7-plus"));
 
 const nested = __testAiRouting.extractHashWatchMediaRequest({
   mediaInspection: {
@@ -75,6 +76,7 @@ assert.deepEqual(compact.hashWatchMedia, {
   title: "",
   requiredProvider: "qwen-vl",
   requiredModel: "Qwen/Qwen2.5-VL-72B-Instruct",
+  candidateModels: ["qwen3.7-plus"],
   source: "data.mediaUrl",
 });
 
@@ -87,9 +89,9 @@ const normal = __testAiRouting.extractHashWatchMediaRequest({
 assert.equal(normal.requested, false);
 assert.equal(normal.mediaUrl, "");
 
-assert.equal(
-  __testAiRouting.resolveHashWatchMediaModel("Qwen/Qwen2.5-VL-72B-Instruct"),
-  "Qwen/Qwen2.5-VL-72B-Instruct",
-);
+assert.deepEqual(__testAiRouting.resolveHashWatchMediaModels({
+  requiredModel: "Qwen/Qwen2.5-VL-72B-Instruct",
+  candidateModels: ["qwen3.7-plus"],
+}), ["Qwen/Qwen2.5-VL-72B-Instruct", "qwen3.7-plus"]);
 
 console.log("zeroscout hashwatch media routing smoke ok");

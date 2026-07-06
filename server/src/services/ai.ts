@@ -201,6 +201,7 @@ interface HashWatchMediaRequest {
   question: string;
   requiredModel: string;
   requiredProvider: string;
+  candidateModels: string[];
   source: string;
 }
 
@@ -333,8 +334,8 @@ async function generateHashWatchMediaGuidance(
     throw new Error("HashWatch media inspection was requested, but no unlocked media URL was supplied.");
   }
 
-  const ai = getHashWatchMediaAiClient(mediaRequest.requiredModel);
-  if (!ai) {
+  const modelCandidates = resolveHashWatchMediaModels(mediaRequest);
+  if (!config.computeApiKey) {
     throw new Error("0G Compute Router is not configured for HashWatch media inspection.");
   }
 
@@ -375,9 +376,14 @@ Rules:
 - Make suggestedAnswer a user-facing video breakdown with clear learning points.
 - Keep internal API keys, routing details, and backend implementation out of suggestedAnswer.`;
 
-  let parsed: Record<string, unknown>;
-  try {
-    const content = await completeJson(ai, [
+  let parsed: Record<string, unknown> = {};
+  let selectedAi: AiChatClient | undefined;
+  const errors: string[] = [];
+  for (const model of modelCandidates) {
+    const ai = getHashWatchMediaAiClient(model);
+    if (!ai) continue;
+    try {
+      const content = await completeJson(ai, [
       {
         role: "system",
         content: "You are ZeroScout's HashWatch video inspection worker for Agent Hash. Return strict JSON only. Use the attached video_url content and never fabricate unseen frames."
@@ -389,19 +395,26 @@ Rules:
           { type: "video_url", video_url: { url: mediaRequest.mediaUrl } }
         ]
       }
-    ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[]);
-    parsed = parseJsonObject(content ?? "{}");
-  } catch (error) {
-    throw new Error(`ZeroScout/0G compute could not inspect the HashWatch media URL with ${ai.model}: ${sanitizeAiError(error)}`);
+      ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[]);
+      parsed = parseJsonObject(content ?? "{}");
+      selectedAi = ai;
+      break;
+    } catch (error) {
+      errors.push(`${ai.model}: ${sanitizeAiError(error)}`);
+    }
+  }
+
+  if (!selectedAi) {
+    throw new Error(`ZeroScout/0G compute could not inspect the HashWatch media URL with available media models. ${errors.join(" | ")}`);
   }
 
   const suggestedAnswer = text(parsed.suggestedAnswer, text(parsed.summary, ""));
   if (!suggestedAnswer) {
-    throw new Error(`ZeroScout/0G compute inspected the HashWatch media URL with ${ai.model}, but returned no usable analysis.`);
+    throw new Error(`ZeroScout/0G compute inspected the HashWatch media URL with ${selectedAi.model}, but returned no usable analysis.`);
   }
 
   return {
-    aiProvider: ai.label,
+    aiProvider: selectedAi.label,
     intelligenceScore: clampScore(parsed.intelligenceScore, 100, 82),
     confidence: clampScore(parsed.confidence, 100, 70),
     summary: suggestedAnswer,
@@ -425,7 +438,9 @@ Rules:
       mediaUrlPresent: true,
       mediaUrlSource: mediaRequest.source,
       requiredProvider: mediaRequest.requiredProvider,
-      requiredModel: mediaRequest.requiredModel || ai.model
+      requiredModel: mediaRequest.requiredModel || selectedAi.model,
+      selectedModel: selectedAi.model,
+      attemptedModels: modelCandidates
     }
   };
 }
@@ -861,7 +876,7 @@ function getVideoAiClient(): { client: OpenAI; model: string; label: string } | 
 
 function getHashWatchMediaAiClient(modelOverride: string): { client: OpenAI; model: string; label: string } | undefined {
   if (!config.computeApiKey) return undefined;
-  const model = resolveHashWatchMediaModel(modelOverride);
+  const model = readString(modelOverride) || config.computeVideoModel || "qwen3.7-plus";
   return {
     client: new OpenAI({
       apiKey: config.computeApiKey,
@@ -873,16 +888,26 @@ function getHashWatchMediaAiClient(modelOverride: string): { client: OpenAI; mod
   };
 }
 
-function resolveHashWatchMediaModel(modelOverride: string): string {
-  const requested = readString(modelOverride);
-  if (isQwenVideoModel(requested)) return requested;
-  if (isQwenVideoModel(config.computeVideoModel)) return config.computeVideoModel;
-  return requested || config.computeVideoModel;
+function resolveHashWatchMediaModels(mediaRequest: Pick<HashWatchMediaRequest, "requiredModel" | "candidateModels">): string[] {
+  return uniqueStrings([
+    mediaRequest.requiredModel,
+    ...mediaRequest.candidateModels,
+    config.computeVideoModel,
+    "qwen3.7-plus"
+  ]);
 }
 
-function isQwenVideoModel(value: string): boolean {
-  const clean = value.toLowerCase();
-  return clean.includes("qwen") && (clean.includes("vl") || clean.includes("video"));
+function uniqueStrings(values: unknown[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const clean = readString(value);
+    const key = clean.toLowerCase();
+    if (!clean || seen.has(key)) continue;
+    seen.add(key);
+    result.push(clean);
+  }
+  return result;
 }
 
 function computeHeaders(): Record<string, string> | undefined {
@@ -936,6 +961,7 @@ function compactHelperData(data: unknown): Record<string, unknown> {
           title: mediaRequest.title.slice(0, 180),
           requiredProvider: mediaRequest.requiredProvider.slice(0, 80),
           requiredModel: mediaRequest.requiredModel.slice(0, 160),
+          candidateModels: mediaRequest.candidateModels.slice(0, 8),
           source: mediaRequest.source
         }
       : undefined,
@@ -1008,6 +1034,15 @@ function extractHashWatchMediaRequest(data: unknown): HashWatchMediaRequest {
     objectOrUndefined(mediaInspection.modelHints)?.preferredModel,
     config.computeVideoModel
   ]);
+  const candidateModels = uniqueStrings([
+    ...stringArray(input.allowedModels),
+    ...stringArray(mediaRouting.allowedModels),
+    ...stringArray(mediaInspection.allowedModels),
+    ...stringArray(objectOrUndefined(input.modelHints)?.candidateModels),
+    ...stringArray(objectOrUndefined(mediaInspection.modelHints)?.candidateModels),
+    config.computeVideoModel,
+    "qwen3.7-plus"
+  ]);
   const explicitModelHint = firstNonEmptyString([
     input.requiredProvider,
     mediaRouting.requiredProvider,
@@ -1050,8 +1085,13 @@ function extractHashWatchMediaRequest(data: unknown): HashWatchMediaRequest {
     question,
     requiredModel,
     requiredProvider,
+    candidateModels,
     source: mediaUrlResult.source
   };
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(readString).filter(Boolean) : [];
 }
 
 function firstMediaUrl(entries: Array<[string, unknown]>): { url: string; source: string } {
@@ -1126,7 +1166,7 @@ export const __testAiRouting = {
   extractHashWatchMediaRequest,
   helperProviderRouting,
   normalizeHelperFallbackOrder,
-  resolveHashWatchMediaModel
+  resolveHashWatchMediaModels
 };
 
 async function completeHelperGuidanceForLane(
