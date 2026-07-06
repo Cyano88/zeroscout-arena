@@ -194,8 +194,23 @@ function isHelperGuidanceRequest(input: CustomIntelligenceInput): boolean {
 type AiChatClient = { client: OpenAI; model: string; label: string };
 type HelperProviderLane = "0g-compute" | "openai" | "anthropic";
 
+interface HashWatchMediaRequest {
+  requested: boolean;
+  mediaUrl: string;
+  title: string;
+  question: string;
+  requiredModel: string;
+  requiredProvider: string;
+  source: string;
+}
+
 async function generateHelperGuidance(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
   const compactData = compactHelperData(input.data);
+  const mediaRequest = extractHashWatchMediaRequest(input.data);
+  if (mediaRequest.requested) {
+    return generateHashWatchMediaGuidance(input, compactData, mediaRequest);
+  }
+
   const prompt = `Create a consumer-ready Ask Hash helper response plan for Hash PayLink.
 
 Use case:
@@ -307,6 +322,112 @@ Rules:
   }
 
   return result;
+}
+
+async function generateHashWatchMediaGuidance(
+  input: CustomIntelligenceInput,
+  compactData: Record<string, unknown>,
+  mediaRequest: HashWatchMediaRequest
+): Promise<CustomIntelligenceResult> {
+  if (!mediaRequest.mediaUrl) {
+    throw new Error("HashWatch media inspection was requested, but no unlocked media URL was supplied.");
+  }
+
+  const ai = getHashWatchMediaAiClient(mediaRequest.requiredModel);
+  if (!ai) {
+    throw new Error("0G Compute Router is not configured for HashWatch media inspection.");
+  }
+
+  const prompt = `Analyze this unlocked HashWatch video for Agent Hash.
+
+Partner: ${input.partner}
+Product type: ${input.productType}
+Analysis type: ${input.analysisType}
+Objective: ${input.objective}
+
+HashWatch title: ${mediaRequest.title || "unknown"}
+User question: ${mediaRequest.question || readString((compactData.request as Record<string, unknown> | undefined)?.question)}
+Media URL source: ${mediaRequest.source}
+
+Compact verified context:
+${JSON.stringify(compactData).slice(0, 12000)}
+
+Return strict JSON with keys:
+suggestedAnswer string,
+reasoningSummary string,
+intent string,
+missingFields array,
+safetyBoundaries array,
+signals array,
+riskFlags array,
+recommendedActions array,
+dataGaps array,
+suggestedVisuals array,
+disclaimer string,
+intelligenceScore number 0-100,
+confidence number 0-100,
+proofMetadata object.
+
+Rules:
+- Inspect the supplied video URL. Do not answer from metadata only.
+- If the video URL cannot be inspected, say that in dataGaps and do not invent frame-level details.
+- Do not ask the user to unlock again when verified HashWatch context is supplied.
+- Make suggestedAnswer a user-facing video breakdown with clear learning points.
+- Keep internal API keys, routing details, and backend implementation out of suggestedAnswer.`;
+
+  let parsed: Record<string, unknown>;
+  try {
+    const content = await completeJson(ai, [
+      {
+        role: "system",
+        content: "You are ZeroScout's HashWatch video inspection worker for Agent Hash. Return strict JSON only. Use the attached video_url content and never fabricate unseen frames."
+      },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "video_url", video_url: { url: mediaRequest.mediaUrl } }
+        ]
+      }
+    ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[]);
+    parsed = parseJsonObject(content ?? "{}");
+  } catch (error) {
+    throw new Error(`ZeroScout/0G compute could not inspect the HashWatch media URL with ${ai.model}: ${sanitizeAiError(error)}`);
+  }
+
+  const suggestedAnswer = text(parsed.suggestedAnswer, text(parsed.summary, ""));
+  if (!suggestedAnswer) {
+    throw new Error(`ZeroScout/0G compute inspected the HashWatch media URL with ${ai.model}, but returned no usable analysis.`);
+  }
+
+  return {
+    aiProvider: ai.label,
+    intelligenceScore: clampScore(parsed.intelligenceScore, 100, 82),
+    confidence: clampScore(parsed.confidence, 100, 70),
+    summary: suggestedAnswer,
+    signals: list(parsed.signals, [suggestedAnswer]),
+    riskFlags: list(parsed.riskFlags, []),
+    recommendedActions: list(parsed.recommendedActions, ["Show this breakdown only for the verified unlocked viewer session."]),
+    dataGaps: list(parsed.dataGaps, []),
+    suggestedVisuals: list(parsed.suggestedVisuals, []),
+    disclaimer: text(parsed.disclaimer, "This HashWatch analysis is generated from the supplied unlocked media URL and verified app context."),
+    suggestedAnswer,
+    reasoningSummary: text(parsed.reasoningSummary, "ZeroScout inspected the unlocked HashWatch media URL for Agent Hash."),
+    intent: text(parsed.intent, "hashwatch-media-analysis"),
+    missingFields: list(parsed.missingFields, []),
+    safetyBoundaries: list(parsed.safetyBoundaries, [
+      "Do not provide private HashWatch media analysis unless verified unlock context supplied the media URL."
+    ]),
+    proofMetadata: objectOrUndefined(parsed.proofMetadata) ?? {
+      proofClass: readString((compactData as Record<string, unknown>).proofClass),
+      requestHash: readString((compactData as Record<string, unknown>).requestHash),
+      mediaTask: "video-url-analysis",
+      mediaUrlPresent: true,
+      mediaUrlSource: mediaRequest.source,
+      requiredProvider: mediaRequest.requiredProvider,
+      requiredModel: mediaRequest.requiredModel || ai.model
+    }
+  };
 }
 
 export async function checkAiHealth(): Promise<AiHealthResponse> {
@@ -738,6 +859,32 @@ function getVideoAiClient(): { client: OpenAI; model: string; label: string } | 
   };
 }
 
+function getHashWatchMediaAiClient(modelOverride: string): { client: OpenAI; model: string; label: string } | undefined {
+  if (!config.computeApiKey) return undefined;
+  const model = resolveHashWatchMediaModel(modelOverride);
+  return {
+    client: new OpenAI({
+      apiKey: config.computeApiKey,
+      baseURL: config.computeBaseUrl,
+      defaultHeaders: computeHeaders()
+    }),
+    model,
+    label: `0G Compute Router HashWatch media (${model})`
+  };
+}
+
+function resolveHashWatchMediaModel(modelOverride: string): string {
+  const requested = readString(modelOverride);
+  if (isQwenVideoModel(requested)) return requested;
+  if (isQwenVideoModel(config.computeVideoModel)) return config.computeVideoModel;
+  return requested || config.computeVideoModel;
+}
+
+function isQwenVideoModel(value: string): boolean {
+  const clean = value.toLowerCase();
+  return clean.includes("qwen") && (clean.includes("vl") || clean.includes("video"));
+}
+
 function computeHeaders(): Record<string, string> | undefined {
   if (!config.computeTrustMode || config.computeTrustMode === "default") return undefined;
   return { "X-0G-Provider-Trust-Mode": config.computeTrustMode };
@@ -758,6 +905,7 @@ function compactHelperData(data: unknown): Record<string, unknown> {
   const request = objectOrUndefined(input.request) ?? {};
   const user = objectOrUndefined(input.user) ?? {};
   const sourceProof = objectOrUndefined(input.sourceProof) ?? {};
+  const mediaRequest = extractHashWatchMediaRequest(input);
   return {
     proofClass: readString(input.proofClass),
     service: readString(input.service).slice(0, 120),
@@ -781,6 +929,16 @@ function compactHelperData(data: unknown): Record<string, unknown> {
       hasRootHash: Boolean(readString(sourceProof.rootHash)),
       hasOgTxHash: Boolean(readString(sourceProof.ogTxHash))
     },
+    hashWatchMedia: mediaRequest.requested
+      ? {
+          requested: true,
+          mediaUrlPresent: Boolean(mediaRequest.mediaUrl),
+          title: mediaRequest.title.slice(0, 180),
+          requiredProvider: mediaRequest.requiredProvider.slice(0, 80),
+          requiredModel: mediaRequest.requiredModel.slice(0, 160),
+          source: mediaRequest.source
+        }
+      : undefined,
     refinementPolicy: readString(input.refinementPolicy).slice(0, 120),
     requestedRefinementLane: readString(input.requestedRefinementLane).slice(0, 80),
     fallbackOrder: Array.isArray(input.fallbackOrder)
@@ -790,6 +948,136 @@ function compactHelperData(data: unknown): Record<string, unknown> {
       ? input.separationRules.map(readString).filter(Boolean).slice(0, 12)
       : []
   };
+}
+
+function extractHashWatchMediaRequest(data: unknown): HashWatchMediaRequest {
+  const input = objectOrUndefined(data) ?? {};
+  const request = objectOrUndefined(input.request) ?? {};
+  const mediaInspection = objectOrUndefined(input.mediaInspection)
+    ?? objectOrUndefined(request.mediaInspection)
+    ?? {};
+  const mediaRouting = objectOrUndefined(input.mediaRouting)
+    ?? objectOrUndefined(request.mediaRouting)
+    ?? {};
+  const activeContent = objectOrUndefined(input.activeContent)
+    ?? objectOrUndefined(request.activeContent)
+    ?? objectOrUndefined(objectOrUndefined(request.hashpayStreamContext)?.activeContent)
+    ?? objectOrUndefined(objectOrUndefined(input.hashpayStreamContext)?.activeContent)
+    ?? {};
+  const unlockedContent = objectOrUndefined(activeContent.unlockedContent) ?? {};
+  const question = readString(request.question);
+  const title = firstNonEmptyString([
+    input.title,
+    mediaInspection.title,
+    mediaRouting.title,
+    activeContent.title,
+    unlockedContent.title,
+    request.title
+  ]);
+  const mediaUrlResult = firstMediaUrl([
+    ["data.mediaUrl", input.mediaUrl],
+    ["data.videoUrl", input.videoUrl],
+    ["data.url", input.url],
+    ["data.mediaInspection.mediaUrl", mediaInspection.mediaUrl],
+    ["data.mediaInspection.videoUrl", mediaInspection.videoUrl],
+    ["data.mediaInspection.url", mediaInspection.url],
+    ["data.mediaRouting.mediaUrl", mediaRouting.mediaUrl],
+    ["data.mediaRouting.videoUrl", mediaRouting.videoUrl],
+    ["data.request.mediaUrl", request.mediaUrl],
+    ["data.request.videoUrl", request.videoUrl],
+    ["data.request.url", request.url],
+    ["data.request.hashpayStreamContext.activeContent.videoUrl", activeContent.videoUrl],
+    ["data.request.hashpayStreamContext.activeContent.mediaUrl", activeContent.mediaUrl],
+    ["data.request.hashpayStreamContext.activeContent.unlockedContent.videoUrl", unlockedContent.videoUrl],
+    ["data.request.hashpayStreamContext.activeContent.unlockedContent.mediaUrl", unlockedContent.mediaUrl],
+    ["data.request.hashpayStreamContext.activeContent.unlockedContent.url", unlockedContent.url]
+  ]);
+  const requiredProvider = firstNonEmptyString([
+    input.requiredProvider,
+    mediaRouting.requiredProvider,
+    mediaInspection.requiredProvider,
+    input.mediaProviderPreference,
+    "qwen-vl"
+  ]);
+  const requiredModel = firstNonEmptyString([
+    input.requiredModel,
+    mediaRouting.requiredModel,
+    mediaInspection.requiredModel,
+    input.mediaModelPreference,
+    objectOrUndefined(input.modelHints)?.preferredModel,
+    objectOrUndefined(mediaInspection.modelHints)?.preferredModel,
+    config.computeVideoModel
+  ]);
+  const explicitModelHint = firstNonEmptyString([
+    input.requiredProvider,
+    mediaRouting.requiredProvider,
+    mediaInspection.requiredProvider,
+    input.mediaProviderPreference,
+    input.requiredModel,
+    mediaRouting.requiredModel,
+    mediaInspection.requiredModel,
+    input.mediaModelPreference,
+    input.requiredModelFamily,
+    mediaRouting.requiredModelFamily,
+    mediaInspection.requiredModelFamily,
+    objectOrUndefined(input.modelHints)?.preferredModel,
+    objectOrUndefined(mediaInspection.modelHints)?.preferredModel
+  ]);
+  const task = firstNonEmptyString([
+    input.mediaTask,
+    request.mediaTask,
+    mediaRouting.task,
+    mediaInspection.task
+  ]).toLowerCase();
+  const providerModelText = [
+    requiredProvider,
+    requiredModel,
+    firstNonEmptyString([input.requiredModelFamily, mediaRouting.requiredModelFamily, mediaInspection.requiredModelFamily])
+  ].join(" ").toLowerCase();
+  const questionText = `${question} ${input.objective ?? ""} ${title}`.toLowerCase();
+  const explicitRequest = task === "video-url-analysis"
+    || Boolean(input.forceMediaInspection)
+    || Boolean(request.forceMediaInspection)
+    || Boolean(mediaInspection.requested)
+    || Boolean(mediaInspection.allowed)
+    || Boolean(explicitModelHint && (providerModelText.includes("qwen") || providerModelText.includes("vl")))
+    || (questionText.includes("hashwatch") && /\b(video|media|url)\b/.test(questionText) && /\b(analy|inspect|breakdown|explain|frame)\b/.test(questionText));
+
+  return {
+    requested: explicitRequest,
+    mediaUrl: mediaUrlResult.url,
+    title,
+    question,
+    requiredModel,
+    requiredProvider,
+    source: mediaUrlResult.source
+  };
+}
+
+function firstMediaUrl(entries: Array<[string, unknown]>): { url: string; source: string } {
+  for (const [source, value] of entries) {
+    const raw = readString(value);
+    if (isHttpUrl(raw)) return { url: raw, source };
+  }
+  return { url: "", source: "" };
+}
+
+function firstNonEmptyString(values: unknown[]): string {
+  for (const value of values) {
+    const clean = readString(value);
+    if (clean) return clean;
+  }
+  return "";
+}
+
+function isHttpUrl(value: string): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function helperProviderRouting(compactData: Record<string, unknown>): {
@@ -835,8 +1123,10 @@ function normalizeHelperLane(value: string): HelperProviderLane | undefined {
 
 export const __testAiRouting = {
   compactHelperData,
+  extractHashWatchMediaRequest,
   helperProviderRouting,
-  normalizeHelperFallbackOrder
+  normalizeHelperFallbackOrder,
+  resolveHashWatchMediaModel
 };
 
 async function completeHelperGuidanceForLane(

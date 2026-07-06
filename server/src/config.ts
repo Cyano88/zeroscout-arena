@@ -32,7 +32,7 @@ export const config = {
   computeApiKey: process.env.ZG_COMPUTE_API_KEY,
   computeBaseUrl: process.env.ZG_COMPUTE_BASE_URL ?? (isMainnet ? "https://router-api.0g.ai/v1" : "https://router-api-testnet.integratenetwork.work/v1"),
   computeModel: process.env.ZG_COMPUTE_MODEL ?? "zai-org/GLM-5-FP8",
-  computeVideoModel: process.env.ZG_COMPUTE_VIDEO_MODEL ?? "qwen3.7-plus",
+  computeVideoModel: process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL ?? process.env.ZG_COMPUTE_VIDEO_MODEL ?? "qwen3.7-plus",
   computeTrustMode: process.env.ZG_COMPUTE_TRUST_MODE ?? "verified",
   integrationSecret: process.env.ZEROSCOUT_INTEGRATION_SECRET,
   adminToken: process.env.ZEROSCOUT_ADMIN_TOKEN,
