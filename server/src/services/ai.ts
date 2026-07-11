@@ -118,6 +118,9 @@ export async function generateCustomIntelligence(input: CustomIntelligenceInput)
   if (isHelperGuidanceRequest(input)) {
     return generateHelperGuidance(input);
   }
+  if (isLpMarketIntelligenceRequest(input)) {
+    return generateLpMarketIntelligence(input);
+  }
 
   const ai = getAiClient();
   if (!ai) {
@@ -189,6 +192,96 @@ function isHelperGuidanceRequest(input: CustomIntelligenceInput): boolean {
   return input.analysisType === "zeroscout-helper-context-guidance"
     || input.outputStyle === "consumer-helper-answer-guidance"
     || readString((input.data as Record<string, unknown> | undefined)?.proofClass) === "zeroscout_helper_context_guidance";
+}
+
+function isLpMarketIntelligenceRequest(input: CustomIntelligenceInput): boolean {
+  const proofClass = readString((input.data as Record<string, unknown> | undefined)?.proofClass);
+  return input.analysisType === "lp-market-intelligence"
+    || input.analysisType === "prediction-market-brief"
+    || proofClass === "paid_lp_scout_proof";
+}
+
+async function generateLpMarketIntelligence(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
+  const ai = getAiClient();
+  if (!ai) {
+    throw new Error("0G Compute or OpenAI-compatible AI is not configured for LP intelligence.");
+  }
+
+  const prompt = `Create a ZeroScout LP Intelligence brief for a paid prediction-market agent service.
+
+Partner: ${input.partner}
+Product type: ${input.productType}
+Analysis type: ${input.analysisType}
+Objective: ${input.objective}
+Output style: ${input.outputStyle}
+
+Supplied paid scout data:
+${JSON.stringify(input.data ?? {}).slice(0, 18000)}
+
+Return strict JSON with keys:
+intelligenceScore number 0-100,
+confidence number 0-100,
+summary string,
+signals array,
+riskFlags array,
+recommendedActions array,
+dataGaps array,
+suggestedVisuals array,
+disclaimer string,
+suggestedAnswer string,
+reasoningSummary string,
+intent string,
+missingFields array,
+safetyBoundaries array,
+proofMetadata object.
+
+Rules:
+- Treat this as paid LP operator intelligence, not a prediction, trade instruction, or guaranteed-profit signal.
+- Use only supplied Polymarket scout data, x402 payment proof, order-book fields, request context, and stored proof metadata.
+- Do not invent live odds, market prices, order depth, balances, fills, outcomes, rewards, or transaction status.
+- If one opportunity is supplied, explain it as the best available clean setup from the provided scan; do not pretend there were three.
+- If zero opportunities are supplied, clearly say no clean LP setup passed the current screen and recommend checking back later.
+- If multiple opportunities are supplied, rank them by reward, spread, liquidity/depth, time-to-resolution, and execution risk.
+- Always include a plain-language execution checklist: reopen Polymarket, verify the live book, confirm spread/depth, quote small, avoid market orders.
+- Always include risk flags for stale data, shallow books, headline/news risk, thin liquidity, and changing rewards when present or unknown.
+- The result must be useful to Agent Hash or another buyer agent that may resell the brief, but must preserve safety boundaries.`;
+
+  const content = await completeJson(ai, [
+    {
+      role: "system",
+      content: "You are ZeroScout's LP Intelligence verifier for paid prediction-market agent services. Return strict JSON only. Never fabricate market data."
+    },
+    { role: "user", content: prompt }
+  ]);
+  const parsed = parseJsonObject(content ?? "{}");
+  const result: CustomIntelligenceResult = {
+    aiProvider: ai.label,
+    intelligenceScore: clampScore(parsed.intelligenceScore, 100, 68),
+    confidence: clampScore(parsed.confidence, 100, 58),
+    summary: text(parsed.summary, "ZeroScout reviewed the supplied paid LP Scout data and produced a prediction-market operator brief."),
+    signals: list(parsed.signals, ["Review the supplied LP Scout result against the live Polymarket order book before quoting."]),
+    riskFlags: list(parsed.riskFlags, ["Live order books and reward conditions can change after the paid scout result is generated."]),
+    recommendedActions: list(parsed.recommendedActions, ["Reopen the Polymarket market, confirm the live spread and depth, then consider a small maker quote only after human review."]),
+    dataGaps: list(parsed.dataGaps, ["ZeroScout did not fetch additional live market data beyond the supplied paid scout payload."]),
+    suggestedVisuals: list(parsed.suggestedVisuals, ["Show the market title, reward/spread/depth fields, risk flags, and proof metadata."]),
+    disclaimer: text(parsed.disclaimer, "Educational LP intelligence for human review only. Not financial advice, not a trading instruction, and not a guarantee of rewards."),
+    suggestedAnswer: text(parsed.suggestedAnswer, ""),
+    reasoningSummary: text(parsed.reasoningSummary, ""),
+    intent: text(parsed.intent, "lp-market-intelligence"),
+    missingFields: list(parsed.missingFields, []),
+    safetyBoundaries: list(parsed.safetyBoundaries, ["No financial advice.", "No auto-trading instruction.", "No guaranteed rewards.", "Verify the live Polymarket book before quoting."]),
+    proofMetadata: typeof parsed.proofMetadata === "object" && parsed.proofMetadata !== null ? parsed.proofMetadata as Record<string, unknown> : undefined
+  };
+
+  if (input.includeClaudeReview && config.anthropicApiKey) {
+    result.claudeReview = await reviewCustomIntelligenceWithClaude(input, result);
+  }
+
+  if (input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
+    result.openAiReview = await reviewCustomIntelligenceWithOpenAi(input, result);
+  }
+
+  return result;
 }
 
 type AiChatClient = { client: OpenAI; model: string; label: string };
