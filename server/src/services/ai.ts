@@ -1302,7 +1302,12 @@ function assertCustomIntelligenceInput(input: CustomIntelligenceInput): void {
 }
 
 async function completeJson(ai: AiChatClient, messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): Promise<string | undefined> {
-  const run = async (client: OpenAI, enforceJson: boolean, useDefaultTrustMode = false) => {
+  const run = async (
+    client: OpenAI,
+    enforceJson: boolean,
+    useDefaultTrustMode = false,
+    formatOverride?: ComputeApiFormat
+  ) => {
     const finalMessages = enforceJson
       ? messages
       : [
@@ -1312,7 +1317,8 @@ async function completeJson(ai: AiChatClient, messages: OpenAI.Chat.Completions.
             content: "Important: return only valid JSON. Do not wrap it in Markdown."
           }
         ];
-    if (ai.format === "anthropic") {
+    const format = formatOverride ?? ai.format;
+    if (format === "anthropic") {
       return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode);
     }
     const response = await client.chat.completions.create({
@@ -1327,6 +1333,19 @@ async function completeJson(ai: AiChatClient, messages: OpenAI.Chat.Completions.
   try {
     return await run(ai.client, true);
   } catch (firstError) {
+    const formatRetry = alternateFormatForError(firstError, ai.format);
+    if (formatRetry) {
+      try {
+        const content = await run(ai.client, true, false, formatRetry);
+        if (content) return content;
+      } catch (formatError) {
+        const retryFormatWithoutTrustMode = shouldRetryWithoutTrustMode(formatError);
+        if (!retryFormatWithoutTrustMode) throw formatError;
+        const content = await run(getDefaultTrustComputeClient(), true, true, formatRetry);
+        if (!content) throw formatError;
+        return content;
+      }
+    }
     const retryWithoutTrustMode = shouldRetryWithoutTrustMode(firstError);
     const client = retryWithoutTrustMode ? getDefaultTrustComputeClient() : ai.client;
     try {
@@ -1410,6 +1429,13 @@ function messageContentToText(content: OpenAI.Chat.Completions.ChatCompletionMes
 
 function computeApiFormatForModel(model: string): ComputeApiFormat {
   return model.toLowerCase().startsWith("claude-") ? "anthropic" : "openai";
+}
+
+function alternateFormatForError(error: unknown, currentFormat: ComputeApiFormat): ComputeApiFormat | undefined {
+  const message = sanitizeAiError(error).toLowerCase();
+  if (currentFormat !== "anthropic" && message.includes("supported: [anthropic]")) return "anthropic";
+  if (currentFormat !== "openai" && message.includes("supported: [openai]")) return "openai";
+  return undefined;
 }
 
 function shouldRetryWithoutTrustMode(error: unknown): boolean {
