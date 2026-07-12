@@ -185,8 +185,15 @@ function isLpMarketIntelligenceRequest(input: CustomIntelligenceInput): boolean 
 }
 
 async function generateLpMarketIntelligence(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
-  const ai = getLpAiClient();
-  if (!ai) {
+  const modelCandidates = uniqueStrings([
+    config.computeLpModel,
+    config.computeModel,
+    config.computeHelperModel,
+    config.computeLpVerifierModel,
+    "deepseek-v4-pro",
+    "glm-5.2"
+  ]);
+  if (!config.computeApiKey) {
     throw new Error("0G Compute Router is not configured for LP intelligence.");
   }
 
@@ -229,16 +236,32 @@ Rules:
 - Always include risk flags for stale data, shallow books, headline/news risk, thin liquidity, and changing rewards when present or unknown.
 - The result must be useful to Agent Hash or another buyer agent that may resell the brief, but must preserve safety boundaries.`;
 
-  const content = await completeJson(ai, [
-    {
-      role: "system",
-      content: "You are ZeroScout's LP Intelligence verifier for paid prediction-market agent services. Return strict JSON only. Never fabricate market data."
-    },
-    { role: "user", content: prompt }
-  ]);
-  const parsed = parseJsonObject(content ?? "{}");
+  let parsed: Record<string, unknown> = {};
+  let selectedAi: AiChatClient | undefined;
+  const errors: string[] = [];
+  for (const model of modelCandidates) {
+    const ai = getComputeAiClientForModel(model, "LP Intelligence");
+    try {
+      const content = await completeJson(ai, [
+        {
+          role: "system",
+          content: "You are ZeroScout's LP Intelligence verifier for paid prediction-market agent services. Return strict JSON only. Never fabricate market data."
+        },
+        { role: "user", content: prompt }
+      ]);
+      parsed = parseJsonObject(content ?? "{}");
+      selectedAi = ai;
+      break;
+    } catch (error) {
+      errors.push(`${ai.model}: ${sanitizeAiError(error)}`);
+    }
+  }
+
+  if (!selectedAi) {
+    throw new Error(`ZeroScout/0G compute could not finalize the paid LP Scout result with available LP models. ${errors.join(" | ")}`);
+  }
   const result: CustomIntelligenceResult = {
-    aiProvider: ai.label,
+    aiProvider: selectedAi.label,
     intelligenceScore: clampScore(parsed.intelligenceScore, 100, 68),
     confidence: clampScore(parsed.confidence, 100, 58),
     summary: text(parsed.summary, "ZeroScout reviewed the supplied paid LP Scout data and produced a prediction-market operator brief."),
