@@ -31,9 +31,14 @@ export const config = {
   registryFromBlock: Number(process.env.ZG_REGISTRY_FROM_BLOCK ?? (isMainnet ? 36938000 : 0)),
   computeApiKey: process.env.ZG_COMPUTE_API_KEY,
   computeBaseUrl: process.env.ZG_COMPUTE_BASE_URL ?? (isMainnet ? "https://router-api.0g.ai/v1" : "https://router-api-testnet.integratenetwork.work/v1"),
-  computeModel: process.env.ZG_COMPUTE_MODEL ?? "zai-org/GLM-5-FP8",
-  computeVideoModel: process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL ?? process.env.ZG_COMPUTE_VIDEO_MODEL ?? "qwen3.7-plus",
+  computeModel: process.env.ZEROSCOUT_FULL_PLATFORM_MODEL ?? process.env.ZG_COMPUTE_MODEL ?? "glm-5.2",
+  computeHelperModel: process.env.ZEROSCOUT_HELPER_MODEL ?? process.env.ZG_COMPUTE_HELPER_MODEL ?? "claude-fable-5",
+  computeLpModel: process.env.ZEROSCOUT_LP_MODEL ?? process.env.ZG_COMPUTE_LP_MODEL ?? "claude-fable-5",
+  computeLpVerifierModel: process.env.ZEROSCOUT_LP_VERIFIER_MODEL ?? process.env.ZG_COMPUTE_LP_VERIFIER_MODEL ?? "glm-5.2",
+  computeVideoModel: process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL ?? process.env.ZG_COMPUTE_VIDEO_MODEL ?? "qwen3-vl-30b",
   computeTrustMode: process.env.ZG_COMPUTE_TRUST_MODE ?? "verified",
+  lpVerifierEnabled: process.env.ZEROSCOUT_LP_VERIFIER_ENABLED === "true",
+  externalReviewersEnabled: process.env.ZEROSCOUT_ENABLE_EXTERNAL_REVIEWERS === "true",
   integrationSecret: process.env.ZEROSCOUT_INTEGRATION_SECRET,
   adminToken: process.env.ZEROSCOUT_ADMIN_TOKEN,
   treasuryAddress: process.env.ZEROSCOUT_TREASURY_ADDRESS,
@@ -64,6 +69,15 @@ export function publicConfig() {
     storageExplorerUrl: config.storageExplorerUrl,
     registryContract: config.registryContract,
     computeMode: has0gCompute ? "0G Compute Router" : config.openAiApiKey ? "OpenAI-compatible fallback" : "deterministic local scout fallback",
+    computeModels: has0gCompute
+      ? {
+          helper: config.computeHelperModel,
+          lpIntelligence: config.computeLpModel,
+          lpVerifier: config.lpVerifierEnabled ? config.computeLpVerifierModel : undefined,
+          videoScoring: config.computeVideoModel,
+          fullPlatform: config.computeModel
+        }
+      : undefined,
     storageMode: has0gStorage ? `0G ${config.network}` : config.devStorageFallback ? "local dev fallback" : "not configured"
   };
 }

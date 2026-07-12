@@ -86,6 +86,13 @@ export interface CustomIntelligenceResult {
     gaps: string[];
     recommendation: string;
   };
+  modelReview?: {
+    provider: string;
+    intelligenceRating: number;
+    strengths: string[];
+    gaps: string[];
+    recommendation: string;
+  };
 }
 
 export async function generateScout(input: ProjectCapsuleInput, previous?: ProjectCapsule): Promise<ScoutResult> {
@@ -122,9 +129,9 @@ export async function generateCustomIntelligence(input: CustomIntelligenceInput)
     return generateLpMarketIntelligence(input);
   }
 
-  const ai = getAiClient();
+  const ai = getFullPlatformAiClient();
   if (!ai) {
-    throw new Error("0G Compute or OpenAI-compatible AI is not configured for custom intelligence.");
+    throw new Error("0G Compute Router is not configured for custom intelligence.");
   }
 
   const prompt = `Create a structured ZeroScout intelligence brief for an external platform.
@@ -177,11 +184,11 @@ Rules:
     disclaimer: text(parsed.disclaimer, "This is an AI intelligence signal generated from supplied data. It is not financial, legal, or investment advice.")
   };
 
-  if (input.includeClaudeReview && config.anthropicApiKey) {
+  if (config.externalReviewersEnabled && input.includeClaudeReview && config.anthropicApiKey) {
     result.claudeReview = await reviewCustomIntelligenceWithClaude(input, result);
   }
 
-  if (input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
+  if (config.externalReviewersEnabled && input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
     result.openAiReview = await reviewCustomIntelligenceWithOpenAi(input, result);
   }
 
@@ -202,9 +209,9 @@ function isLpMarketIntelligenceRequest(input: CustomIntelligenceInput): boolean 
 }
 
 async function generateLpMarketIntelligence(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
-  const ai = getAiClient();
+  const ai = getLpAiClient();
   if (!ai) {
-    throw new Error("0G Compute or OpenAI-compatible AI is not configured for LP intelligence.");
+    throw new Error("0G Compute Router is not configured for LP intelligence.");
   }
 
   const prompt = `Create a ZeroScout LP Intelligence brief for a paid prediction-market agent service.
@@ -273,11 +280,15 @@ Rules:
     proofMetadata: typeof parsed.proofMetadata === "object" && parsed.proofMetadata !== null ? parsed.proofMetadata as Record<string, unknown> : undefined
   };
 
-  if (input.includeClaudeReview && config.anthropicApiKey) {
+  if (config.lpVerifierEnabled) {
+    result.modelReview = await reviewCustomIntelligenceWithCompute(input, result, config.computeLpVerifierModel, "LP verifier");
+  }
+
+  if (config.externalReviewersEnabled && input.includeClaudeReview && config.anthropicApiKey) {
     result.claudeReview = await reviewCustomIntelligenceWithClaude(input, result);
   }
 
-  if (input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
+  if (config.externalReviewersEnabled && input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
     result.openAiReview = await reviewCustomIntelligenceWithOpenAi(input, result);
   }
 
@@ -365,7 +376,7 @@ Rules:
 
   let suggestedAnswer = text(parsed.suggestedAnswer, text(parsed.summary, "I can help with that. Send the detail you want me to use next."));
 
-  if (routing.multiStack && config.anthropicApiKey && providerLabel !== `Claude API (${config.anthropicModel})`) {
+  if (config.externalReviewersEnabled && routing.multiStack && config.anthropicApiKey && providerLabel !== `Claude API (${config.anthropicModel})`) {
     try {
       suggestedAnswer = await polishHelperAnswerWithClaude(input, compactData, suggestedAnswer);
       providerLabel = `${providerLabel} + Claude polish`;
@@ -374,7 +385,7 @@ Rules:
     }
   }
 
-  if (routing.multiStack && config.openAiEvaluatorApiKey && !providerLabel.includes("OpenAI")) {
+  if (config.externalReviewersEnabled && routing.multiStack && config.openAiEvaluatorApiKey && !providerLabel.includes("OpenAI")) {
     try {
       suggestedAnswer = await polishHelperAnswerWithOpenAi(input, compactData, suggestedAnswer);
       providerLabel = `${providerLabel} + OpenAI polish`;
@@ -410,7 +421,7 @@ Rules:
     }
   };
 
-  if (routing.multiStack && input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
+  if (config.externalReviewersEnabled && routing.multiStack && input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
     result.openAiReview = await reviewCustomIntelligenceWithOpenAi(input, result);
     result.aiProvider = `${result.aiProvider} + OpenAI evaluator`;
   }
@@ -956,29 +967,13 @@ function getAiClient(): { client: OpenAI; model: string; label: string } | undef
 
 function getVideoAiClient(): { client: OpenAI; model: string; label: string } | undefined {
   if (!config.computeApiKey) return undefined;
-  return {
-    client: new OpenAI({
-      apiKey: config.computeApiKey,
-      baseURL: config.computeBaseUrl,
-      defaultHeaders: computeHeaders()
-    }),
-    model: config.computeVideoModel,
-    label: `0G Compute Router video (${config.computeVideoModel})`
-  };
+  return getComputeAiClientForModel(config.computeVideoModel, "video");
 }
 
 function getHashWatchMediaAiClient(modelOverride: string): { client: OpenAI; model: string; label: string } | undefined {
   if (!config.computeApiKey) return undefined;
-  const model = readString(modelOverride) || config.computeVideoModel || "qwen3.7-plus";
-  return {
-    client: new OpenAI({
-      apiKey: config.computeApiKey,
-      baseURL: config.computeBaseUrl,
-      defaultHeaders: computeHeaders()
-    }),
-    model,
-    label: `0G Compute Router HashWatch media (${model})`
-  };
+  const model = readString(modelOverride) || config.computeVideoModel || "qwen3-vl-30b";
+  return getComputeAiClientForModel(model, "HashWatch media");
 }
 
 function resolveHashWatchMediaModels(mediaRequest: Pick<HashWatchMediaRequest, "requiredModel" | "candidateModels">): string[] {
@@ -986,7 +981,7 @@ function resolveHashWatchMediaModels(mediaRequest: Pick<HashWatchMediaRequest, "
     mediaRequest.requiredModel,
     ...mediaRequest.candidateModels,
     config.computeVideoModel,
-    "qwen3.7-plus"
+    "qwen3-vl-30b"
   ]);
 }
 
@@ -1228,8 +1223,8 @@ function helperProviderRouting(compactData: Record<string, unknown>): {
   const fallbackOrder = normalizeHelperFallbackOrder(rawFallbackOrder.length ? rawFallbackOrder : [requestedLane]);
   return {
     requestedLane: requestedLane || (multiStack ? "multi-stack" : "0g-compute"),
-    refinementPolicy: refinementPolicy || (multiStack ? "deep-multi-stack-0g-anthropic-openai" : "single-lane-short-refinement"),
-    fallbackOrder: multiStack ? normalizeHelperFallbackOrder(["0g-compute", "openai", "anthropic"]) : fallbackOrder,
+    refinementPolicy: refinementPolicy || (multiStack ? "deep-0g-compute-refinement" : "single-lane-short-refinement"),
+    fallbackOrder: multiStack && config.externalReviewersEnabled ? normalizeHelperFallbackOrder(["0g-compute", "openai", "anthropic"]) : fallbackOrder,
     multiStack
   };
 }
@@ -1240,7 +1235,10 @@ function normalizeHelperFallbackOrder(values: string[]): HelperProviderLane[] {
     const lane = normalizeHelperLane(value);
     if (lane && !normalized.includes(lane)) normalized.push(lane);
   }
-  for (const lane of ["0g-compute", "openai", "anthropic"] as HelperProviderLane[]) {
+  const allowedLanes = config.externalReviewersEnabled
+    ? (["0g-compute", "openai", "anthropic"] as HelperProviderLane[])
+    : (["0g-compute"] as HelperProviderLane[]);
+  for (const lane of allowedLanes) {
     if (!normalized.includes(lane)) normalized.push(lane);
   }
   return normalized;
@@ -1267,6 +1265,7 @@ async function completeHelperGuidanceForLane(
   prompt: string
 ): Promise<{ parsed: Record<string, unknown>; providerLabel: string }> {
   if (lane === "anthropic") {
+    if (!config.externalReviewersEnabled) throw new Error("External Anthropic reviewer is disabled.");
     const content = await completeClaudeJson(prompt);
     return {
       parsed: parseJsonObject(content),
@@ -1274,6 +1273,7 @@ async function completeHelperGuidanceForLane(
     };
   }
 
+  if (lane === "openai" && !config.externalReviewersEnabled) throw new Error("External OpenAI helper is disabled.");
   const ai = lane === "openai" ? getOpenAiHelperClient() : getComputeAiClient();
   if (!ai) {
     throw new Error(`${lane} is not configured.`);
@@ -1293,14 +1293,29 @@ async function completeHelperGuidanceForLane(
 
 function getComputeAiClient(): AiChatClient | undefined {
   if (!config.computeApiKey) return undefined;
+  return getComputeAiClientForModel(config.computeHelperModel, "helper");
+}
+
+function getFullPlatformAiClient(): AiChatClient | undefined {
+  if (!config.computeApiKey) return undefined;
+  return getComputeAiClientForModel(config.computeModel, "full platform");
+}
+
+function getLpAiClient(): AiChatClient | undefined {
+  if (!config.computeApiKey) return undefined;
+  return getComputeAiClientForModel(config.computeLpModel, "LP Intelligence");
+}
+
+function getComputeAiClientForModel(modelInput: string, laneLabel: string): AiChatClient {
+  const model = readString(modelInput) || config.computeModel;
   return {
     client: new OpenAI({
-      apiKey: config.computeApiKey,
+      apiKey: config.computeApiKey ?? "",
       baseURL: config.computeBaseUrl,
       defaultHeaders: computeHeaders()
     }),
-    model: config.computeModel,
-    label: `0G Compute Router (${config.computeModel})`
+    model,
+    label: `0G Compute Router ${laneLabel} (${model})`
   };
 }
 
@@ -1429,6 +1444,56 @@ Focus on whether this would be useful inside an institutional product. Do not ad
     strengths: list(parsed.strengths, ["The output is structured and product-facing."]),
     gaps: list(parsed.gaps, ["The partner should supply richer data for stronger analysis."]),
     recommendation: text(parsed.recommendation, "Use this as a second-opinion quality check before showing the intelligence module to users.")
+  };
+}
+
+async function reviewCustomIntelligenceWithCompute(
+  input: CustomIntelligenceInput,
+  result: CustomIntelligenceResult,
+  model: string,
+  label: string
+): Promise<NonNullable<CustomIntelligenceResult["modelReview"]>> {
+  const ai = getComputeAiClientForModel(model, label);
+  const content = await completeJson(ai, [
+    {
+      role: "system",
+      content: "Return strict JSON only. Rate the supplied LP intelligence output for usefulness, safety, and source discipline. Do not add market facts."
+    },
+    {
+      role: "user",
+      content: `Rate this ZeroScout LP intelligence output.
+
+Original request:
+${JSON.stringify({
+  partner: input.partner,
+  productType: input.productType,
+  analysisType: input.analysisType,
+  objective: input.objective,
+  outputStyle: input.outputStyle
+}).slice(0, 6000)}
+
+Output:
+${JSON.stringify(result).slice(0, 12000)}
+
+Return JSON:
+intelligenceRating number 0-10,
+strengths array,
+gaps array,
+recommendation string.
+
+Rules:
+- Check whether the answer stays inside supplied Polymarket data.
+- Reward clear maker-quote safety, stale-book warnings, and no-guarantee language.
+- Penalize fabricated prices, overconfident profit claims, market-order encouragement, and missing human verification steps.`
+    }
+  ]);
+  const parsed = parseJsonObject(content ?? "{}");
+  return {
+    provider: `0G Compute Router ${label} (${readString(model) || config.computeModel})`,
+    intelligenceRating: clampScore(parsed.intelligenceRating, 10, 7),
+    strengths: list(parsed.strengths, ["The LP intelligence stayed within supplied market context."]),
+    gaps: list(parsed.gaps, []),
+    recommendation: text(parsed.recommendation, "Use this as a second 0G model quality check before promoting the LP brief.")
   };
 }
 
