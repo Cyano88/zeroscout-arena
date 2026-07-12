@@ -51,8 +51,6 @@ export interface CustomIntelligenceInput {
   objective: string;
   outputStyle: string;
   data: unknown;
-  includeClaudeReview?: boolean;
-  includeOpenAiReview?: boolean;
 }
 
 export interface CustomIntelligenceResult {
@@ -72,20 +70,6 @@ export interface CustomIntelligenceResult {
   missingFields?: string[];
   safetyBoundaries?: string[];
   proofMetadata?: Record<string, unknown>;
-  claudeReview?: {
-    provider: string;
-    intelligenceRating: number;
-    strengths: string[];
-    gaps: string[];
-    recommendation: string;
-  };
-  openAiReview?: {
-    provider: string;
-    intelligenceRating: number;
-    strengths: string[];
-    gaps: string[];
-    recommendation: string;
-  };
   modelReview?: {
     provider: string;
     intelligenceRating: number;
@@ -184,14 +168,6 @@ Rules:
     disclaimer: text(parsed.disclaimer, "This is an AI intelligence signal generated from supplied data. It is not financial, legal, or investment advice.")
   };
 
-  if (config.externalReviewersEnabled && input.includeClaudeReview && config.anthropicApiKey) {
-    result.claudeReview = await reviewCustomIntelligenceWithClaude(input, result);
-  }
-
-  if (config.externalReviewersEnabled && input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
-    result.openAiReview = await reviewCustomIntelligenceWithOpenAi(input, result);
-  }
-
   return result;
 }
 
@@ -284,19 +260,11 @@ Rules:
     result.modelReview = await reviewCustomIntelligenceWithCompute(input, result, config.computeLpVerifierModel, "LP verifier");
   }
 
-  if (config.externalReviewersEnabled && input.includeClaudeReview && config.anthropicApiKey) {
-    result.claudeReview = await reviewCustomIntelligenceWithClaude(input, result);
-  }
-
-  if (config.externalReviewersEnabled && input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
-    result.openAiReview = await reviewCustomIntelligenceWithOpenAi(input, result);
-  }
-
   return result;
 }
 
 type AiChatClient = { client: OpenAI; model: string; label: string };
-type HelperProviderLane = "0g-compute" | "openai" | "anthropic";
+type HelperProviderLane = "0g-compute";
 
 interface HashWatchMediaRequest {
   requested: boolean;
@@ -376,24 +344,6 @@ Rules:
 
   let suggestedAnswer = text(parsed.suggestedAnswer, text(parsed.summary, "I can help with that. Send the detail you want me to use next."));
 
-  if (config.externalReviewersEnabled && routing.multiStack && config.anthropicApiKey && providerLabel !== `Claude API (${config.anthropicModel})`) {
-    try {
-      suggestedAnswer = await polishHelperAnswerWithClaude(input, compactData, suggestedAnswer);
-      providerLabel = `${providerLabel} + Claude polish`;
-    } catch (error) {
-      console.warn("Claude helper polish failed, keeping prior helper guidance:", sanitizeAiError(error));
-    }
-  }
-
-  if (config.externalReviewersEnabled && routing.multiStack && config.openAiEvaluatorApiKey && !providerLabel.includes("OpenAI")) {
-    try {
-      suggestedAnswer = await polishHelperAnswerWithOpenAi(input, compactData, suggestedAnswer);
-      providerLabel = `${providerLabel} + OpenAI polish`;
-    } catch (error) {
-      console.warn("OpenAI helper polish failed, keeping prior helper guidance:", sanitizeAiError(error));
-    }
-  }
-
   const result: CustomIntelligenceResult = {
     aiProvider: providerLabel,
     intelligenceScore: clampScore(parsed.intelligenceScore, 100, 78),
@@ -420,11 +370,6 @@ Rules:
       refinementPolicy: routing.refinementPolicy
     }
   };
-
-  if (config.externalReviewersEnabled && routing.multiStack && input.includeOpenAiReview && config.openAiEvaluatorApiKey) {
-    result.openAiReview = await reviewCustomIntelligenceWithOpenAi(input, result);
-    result.aiProvider = `${result.aiProvider} + OpenAI evaluator`;
-  }
 
   return result;
 }
@@ -556,7 +501,7 @@ export async function checkAiHealth(): Promise<AiHealthResponse> {
       configured: false,
       ok: false,
       provider: "deterministic local scout fallback",
-      error: "No 0G Compute or OpenAI-compatible key is configured."
+      error: "0G Compute Router is not configured."
     };
   }
 
@@ -942,27 +887,8 @@ function decodeHtml(value: string): string {
 }
 
 function getAiClient(): { client: OpenAI; model: string; label: string } | undefined {
-  if (config.computeApiKey) {
-    return {
-      client: new OpenAI({
-        apiKey: config.computeApiKey,
-        baseURL: config.computeBaseUrl,
-        defaultHeaders: computeHeaders()
-      }),
-      model: config.computeModel,
-      label: `0G Compute Router (${config.computeModel})`
-    };
-  }
-
-  if (config.openAiApiKey) {
-    return {
-      client: new OpenAI({ apiKey: config.openAiApiKey, baseURL: config.openAiBaseUrl }),
-      model: config.openAiModel,
-      label: `OpenAI-compatible fallback (${config.openAiModel})`
-    };
-  }
-
-  return undefined;
+  if (!config.computeApiKey) return undefined;
+  return getComputeAiClientForModel(config.computeModel, "default");
 }
 
 function getVideoAiClient(): { client: OpenAI; model: string; label: string } | undefined {
@@ -1224,7 +1150,7 @@ function helperProviderRouting(compactData: Record<string, unknown>): {
   return {
     requestedLane: requestedLane || (multiStack ? "multi-stack" : "0g-compute"),
     refinementPolicy: refinementPolicy || (multiStack ? "deep-0g-compute-refinement" : "single-lane-short-refinement"),
-    fallbackOrder: multiStack && config.externalReviewersEnabled ? normalizeHelperFallbackOrder(["0g-compute", "openai", "anthropic"]) : fallbackOrder,
+    fallbackOrder,
     multiStack
   };
 }
@@ -1235,10 +1161,7 @@ function normalizeHelperFallbackOrder(values: string[]): HelperProviderLane[] {
     const lane = normalizeHelperLane(value);
     if (lane && !normalized.includes(lane)) normalized.push(lane);
   }
-  const allowedLanes = config.externalReviewersEnabled
-    ? (["0g-compute", "openai", "anthropic"] as HelperProviderLane[])
-    : (["0g-compute"] as HelperProviderLane[]);
-  for (const lane of allowedLanes) {
+  for (const lane of ["0g-compute"] as HelperProviderLane[]) {
     if (!normalized.includes(lane)) normalized.push(lane);
   }
   return normalized;
@@ -1247,8 +1170,6 @@ function normalizeHelperFallbackOrder(values: string[]): HelperProviderLane[] {
 function normalizeHelperLane(value: string): HelperProviderLane | undefined {
   const clean = value.toLowerCase().trim();
   if (["0g", "og", "0g-compute", "og-compute", "compute"].includes(clean)) return "0g-compute";
-  if (["openai", "open-ai", "gpt"].includes(clean)) return "openai";
-  if (["anthropic", "claude"].includes(clean)) return "anthropic";
   return undefined;
 }
 
@@ -1264,17 +1185,7 @@ async function completeHelperGuidanceForLane(
   lane: HelperProviderLane,
   prompt: string
 ): Promise<{ parsed: Record<string, unknown>; providerLabel: string }> {
-  if (lane === "anthropic") {
-    if (!config.externalReviewersEnabled) throw new Error("External Anthropic reviewer is disabled.");
-    const content = await completeClaudeJson(prompt);
-    return {
-      parsed: parseJsonObject(content),
-      providerLabel: `Claude API (${config.anthropicModel})`
-    };
-  }
-
-  if (lane === "openai" && !config.externalReviewersEnabled) throw new Error("External OpenAI helper is disabled.");
-  const ai = lane === "openai" ? getOpenAiHelperClient() : getComputeAiClient();
+  const ai = getComputeAiClient();
   if (!ai) {
     throw new Error(`${lane} is not configured.`);
   }
@@ -1316,134 +1227,6 @@ function getComputeAiClientForModel(modelInput: string, laneLabel: string): AiCh
     }),
     model,
     label: `0G Compute Router ${laneLabel} (${model})`
-  };
-}
-
-function getOpenAiHelperClient(): AiChatClient | undefined {
-  const apiKey = config.openAiEvaluatorApiKey ?? config.openAiApiKey;
-  if (!apiKey) return undefined;
-  return {
-    client: new OpenAI({
-      apiKey,
-      baseURL: config.openAiEvaluatorBaseUrl ?? config.openAiBaseUrl
-    }),
-    model: config.openAiEvaluatorModel ?? config.openAiModel,
-    label: `OpenAI helper (${config.openAiEvaluatorModel ?? config.openAiModel})`
-  };
-}
-
-async function polishHelperAnswerWithClaude(
-  input: CustomIntelligenceInput,
-  compactData: Record<string, unknown>,
-  suggestedAnswer: string
-): Promise<string> {
-  const prompt = `Polish this Ask Hash helper answer for a premium consumer chat.
-
-Context:
-${JSON.stringify({
-  partner: input.partner,
-  analysisType: input.analysisType,
-  outputStyle: input.outputStyle,
-  compactData
-}).slice(0, 12000)}
-
-Draft answer:
-${suggestedAnswer}
-
-Return strict JSON:
-{
-  "suggestedAnswer": "short polished chat answer"
-}
-
-Rules:
-- Human, concise, direct.
-- No generic strategy boilerplate unless the user asked for strategy.
-- No sponsorship, API, proof-generation, backend, or model-routing language.
-- Do not invent payment status, wallet ownership, balances, receipts, LP Scout proof, x402 activation, or live data.
-- If the user's name or memory is unknown, say that naturally.`;
-
-  const content = await completeClaudeJson(prompt);
-  const parsed = parseJsonObject(content);
-  return text(parsed.suggestedAnswer, suggestedAnswer).slice(0, 1200);
-}
-
-async function polishHelperAnswerWithOpenAi(
-  input: CustomIntelligenceInput,
-  compactData: Record<string, unknown>,
-  suggestedAnswer: string
-): Promise<string> {
-  const ai = getOpenAiHelperClient();
-  if (!ai) throw new Error("OpenAI helper polish is not configured.");
-  const prompt = `Polish this Ask Hash helper answer for a premium consumer chat.
-
-Context:
-${JSON.stringify({
-  partner: input.partner,
-  analysisType: input.analysisType,
-  outputStyle: input.outputStyle,
-  compactData
-}).slice(0, 12000)}
-
-Draft answer:
-${suggestedAnswer}
-
-Return strict JSON:
-{
-  "suggestedAnswer": "short polished chat answer"
-}
-
-Rules:
-- Human, concise, direct.
-- No generic strategy boilerplate unless the user asked for strategy.
-- No sponsorship, API, proof-generation, backend, or model-routing language.
-- Do not invent payment status, wallet ownership, balances, receipts, LP Scout proof, x402 activation, or live data.
-- If the user's name or memory is unknown, say that naturally.`;
-
-  const content = await completeJson(ai, [
-    {
-      role: "system",
-      content: "Return strict JSON only. Polish the supplied helper answer without adding unsupported facts."
-    },
-    { role: "user", content: prompt }
-  ]);
-  const parsed = parseJsonObject(content ?? "{}");
-  return text(parsed.suggestedAnswer, suggestedAnswer).slice(0, 1200);
-}
-
-async function reviewCustomIntelligenceWithClaude(
-  input: CustomIntelligenceInput,
-  result: CustomIntelligenceResult
-): Promise<NonNullable<CustomIntelligenceResult["claudeReview"]>> {
-  const prompt = `Rate this ZeroScout custom intelligence output for real platform usefulness.
-
-Original request:
-${JSON.stringify({
-  partner: input.partner,
-  productType: input.productType,
-  analysisType: input.analysisType,
-  objective: input.objective,
-  outputStyle: input.outputStyle
-})}
-
-ZeroScout output:
-${JSON.stringify(result)}
-
-Return strict JSON with keys:
-intelligenceRating number 0-10,
-strengths array,
-gaps array,
-recommendation string.
-
-Focus on whether this would be useful inside an institutional product. Do not add new facts.`;
-
-  const content = await completeClaudeJson(prompt);
-  const parsed = parseJsonObject(content);
-  return {
-    provider: `Claude API (${config.anthropicModel})`,
-    intelligenceRating: clampScore(parsed.intelligenceRating, 10, 7),
-    strengths: list(parsed.strengths, ["The output is structured and product-facing."]),
-    gaps: list(parsed.gaps, ["The partner should supply richer data for stronger analysis."]),
-    recommendation: text(parsed.recommendation, "Use this as a second-opinion quality check before showing the intelligence module to users.")
   };
 }
 
@@ -1495,81 +1278,6 @@ Rules:
     gaps: list(parsed.gaps, []),
     recommendation: text(parsed.recommendation, "Use this as a second 0G model quality check before promoting the LP brief.")
   };
-}
-
-async function reviewCustomIntelligenceWithOpenAi(
-  input: CustomIntelligenceInput,
-  result: CustomIntelligenceResult
-): Promise<NonNullable<CustomIntelligenceResult["openAiReview"]>> {
-  const client = new OpenAI({
-    apiKey: config.openAiEvaluatorApiKey,
-    baseURL: config.openAiEvaluatorBaseUrl
-  });
-  const content = await completeJson({ client, model: config.openAiEvaluatorModel }, [
-    {
-      role: "system",
-      content: "Return strict JSON only. Rate the usefulness of the supplied intelligence output. Do not add facts."
-    },
-    {
-      role: "user",
-      content: `Rate this ZeroScout custom intelligence output for product usefulness.
-
-Original request:
-${JSON.stringify({
-  partner: input.partner,
-  productType: input.productType,
-  analysisType: input.analysisType,
-  objective: input.objective,
-  outputStyle: input.outputStyle
-})}
-
-ZeroScout output:
-${JSON.stringify(result)}
-
-Return strict JSON with keys:
-intelligenceRating number 0-10,
-strengths array,
-gaps array,
-recommendation string.
-
-Focus on product usefulness, data honesty, and whether a partner could show this in a real dashboard.`
-    }
-  ]);
-  const parsed = parseJsonObject(content ?? "{}");
-  return {
-    provider: `OpenAI evaluator (${config.openAiEvaluatorModel})`,
-    intelligenceRating: clampScore(parsed.intelligenceRating, 10, 7),
-    strengths: list(parsed.strengths, ["The output is structured for a real product surface."]),
-    gaps: list(parsed.gaps, ["The partner should provide richer data before relying on the signal."]),
-    recommendation: text(parsed.recommendation, "Use this evaluator as a third opinion alongside 0G Compute and Claude when configured.")
-  };
-}
-
-async function completeClaudeJson(prompt: string): Promise<string> {
-  if (!config.anthropicApiKey) throw new Error("Claude API is not configured. Set ANTHROPIC_API_KEY.");
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": config.anthropicApiKey,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: config.anthropicModel,
-      max_tokens: 1200,
-      temperature: 0.2,
-      system: "Return strict JSON only. Do not wrap the response in Markdown.",
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Claude API request failed: ${response.status} ${body.slice(0, 180)}`);
-  }
-  const data = await response.json() as { content?: Array<{ type: string; text?: string }> };
-  const textBlock = data.content?.find((item) => item.type === "text" && item.text);
-  if (!textBlock?.text) throw new Error("Claude API returned no text content.");
-  return textBlock.text;
 }
 
 function sanitizeAiError(error: unknown): string {

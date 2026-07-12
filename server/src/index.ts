@@ -52,7 +52,7 @@ app.get("/api/health", (_req, res) => {
     service: "zeroscout-arena-api",
     network: config.network,
     storageConfigured: Boolean(config.privateKey),
-    aiConfigured: Boolean(config.computeApiKey || config.openAiApiKey)
+    aiConfigured: Boolean(config.computeApiKey)
   };
   res.json(body);
 });
@@ -536,9 +536,7 @@ app.post("/api/integrations/intelligence", async (req, res, next) => {
       analysisType: requestedAnalysisType,
       objective: cleanBodyField(req.body?.objective, "Find useful, practical signals from the supplied data."),
       outputStyle: cleanBodyField(req.body?.outputStyle, "executive-brief"),
-      data: req.body?.data,
-      includeClaudeReview: req.body?.includeClaudeReview === true,
-      includeOpenAiReview: req.body?.includeOpenAiReview === true || req.body?.includeCodexReview === true
+      data: req.body?.data
     };
 
     const result = await generateCustomIntelligence(input);

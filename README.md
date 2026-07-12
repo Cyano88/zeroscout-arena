@@ -192,7 +192,7 @@ Integration choice:
 - Frontend: Vite, React, TypeScript
 - Backend: Node, Express, TypeScript
 - Storage: `@0gfoundation/0g-storage-ts-sdk`, `ethers`
-- AI: 0G Compute Router first, OpenAI-compatible fallback if configured
+- AI: 0G Compute Router with lane-specific model routing
 - Deployment: Railway full-stack deployment
 
 ## Setup

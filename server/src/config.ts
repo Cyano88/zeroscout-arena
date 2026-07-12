@@ -38,21 +38,12 @@ export const config = {
   computeVideoModel: process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL ?? process.env.ZG_COMPUTE_VIDEO_MODEL ?? "qwen3-vl-30b",
   computeTrustMode: process.env.ZG_COMPUTE_TRUST_MODE ?? "verified",
   lpVerifierEnabled: process.env.ZEROSCOUT_LP_VERIFIER_ENABLED === "true",
-  externalReviewersEnabled: process.env.ZEROSCOUT_ENABLE_EXTERNAL_REVIEWERS === "true",
   integrationSecret: process.env.ZEROSCOUT_INTEGRATION_SECRET,
   adminToken: process.env.ZEROSCOUT_ADMIN_TOKEN,
   treasuryAddress: process.env.ZEROSCOUT_TREASURY_ADDRESS,
   creditsPerOg: Number(process.env.ZEROSCOUT_CREDITS_PER_OG ?? 100),
   topUpScanBlocks: Number(process.env.ZEROSCOUT_TOPUP_SCAN_BLOCKS ?? 1500),
   databaseUrl: process.env.DATABASE_URL,
-  openAiApiKey: process.env.OPENAI_API_KEY,
-  openAiBaseUrl: process.env.OPENAI_BASE_URL,
-  openAiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-  openAiEvaluatorApiKey: process.env.OPENAI_EVALUATOR_API_KEY ?? process.env.OPENAI_API_KEY,
-  openAiEvaluatorBaseUrl: process.env.OPENAI_EVALUATOR_BASE_URL ?? process.env.OPENAI_BASE_URL,
-  openAiEvaluatorModel: process.env.OPENAI_EVALUATOR_MODEL ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-  anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5",
   devStorageFallback: process.env.DEV_STORAGE_FALLBACK === "true",
   dataDir: process.env.DATA_DIR ?? "server/data"
 };
@@ -68,7 +59,7 @@ export function publicConfig() {
     explorerUrl: config.explorerUrl,
     storageExplorerUrl: config.storageExplorerUrl,
     registryContract: config.registryContract,
-    computeMode: has0gCompute ? "0G Compute Router" : config.openAiApiKey ? "OpenAI-compatible fallback" : "deterministic local scout fallback",
+    computeMode: has0gCompute ? "0G Compute Router" : "deterministic local scout fallback",
     computeModels: has0gCompute
       ? {
           helper: config.computeHelperModel,
