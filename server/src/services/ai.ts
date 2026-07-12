@@ -1299,30 +1299,59 @@ function assertCustomIntelligenceInput(input: CustomIntelligenceInput): void {
 }
 
 async function completeJson(ai: { client: OpenAI; model: string }, messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): Promise<string | undefined> {
-  try {
-    const response = await ai.client.chat.completions.create({
+  const run = async (client: OpenAI, enforceJson: boolean) => {
+    const response = await client.chat.completions.create({
       model: ai.model,
       temperature: 0.35,
-      response_format: { type: "json_object" },
-      messages
+      ...(enforceJson ? { response_format: { type: "json_object" as const } } : {}),
+      messages: enforceJson
+        ? messages
+        : [
+            ...messages,
+            {
+              role: "user",
+              content: "Important: return only valid JSON. Do not wrap it in Markdown."
+            }
+          ]
     });
     return response.choices[0]?.message?.content ?? undefined;
+  };
+
+  try {
+    return await run(ai.client, true);
   } catch (firstError) {
-    const response = await ai.client.chat.completions.create({
-      model: ai.model,
-      temperature: 0.35,
-      messages: [
-        ...messages,
-        {
-          role: "user",
-          content: "Important: return only valid JSON. Do not wrap it in Markdown."
-        }
-      ]
-    });
-    const content = response.choices[0]?.message?.content ?? undefined;
-    if (!content) throw firstError;
-    return content;
+    const retryWithoutTrustMode = shouldRetryWithoutTrustMode(firstError);
+    const client = retryWithoutTrustMode ? getDefaultTrustComputeClient() : ai.client;
+    try {
+      const content = await run(client, retryWithoutTrustMode);
+      if (!content) throw firstError;
+      return content;
+    } catch (secondError) {
+      if (retryWithoutTrustMode) {
+        const content = await run(client, false);
+        if (!content) throw secondError;
+        return content;
+      }
+      if (!shouldRetryWithoutTrustMode(secondError)) throw secondError;
+      const content = await run(getDefaultTrustComputeClient(), false);
+      if (!content) throw secondError;
+      return content;
+    }
   }
+}
+
+function shouldRetryWithoutTrustMode(error: unknown): boolean {
+  if (!config.computeApiKey || !config.computeTrustMode || config.computeTrustMode === "default") return false;
+  const message = sanitizeAiError(error).toLowerCase();
+  return message.includes("no provider available for the requested trust mode")
+    || message.includes("failed to select provider");
+}
+
+function getDefaultTrustComputeClient(): OpenAI {
+  return new OpenAI({
+    apiKey: config.computeApiKey ?? "",
+    baseURL: config.computeBaseUrl
+  });
 }
 
 function parseJsonObject(content: string): Record<string, unknown> {
