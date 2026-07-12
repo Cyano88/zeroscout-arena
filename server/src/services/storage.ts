@@ -15,12 +15,48 @@ export interface StorageResult {
   storageMode: "0g-mainnet" | "0g-testnet" | "local-dev-fallback";
 }
 
+let zeroGUploadQueue: Promise<void> = Promise.resolve();
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientZeroGUploadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /replacement fee too low|nonce too low|already known|underpriced|timeout|timed out|network|fetch failed|429|503|502|500/i.test(message);
+}
+
+async function runZeroGUploadExclusive<T>(operation: () => Promise<T>): Promise<T> {
+  const previous = zeroGUploadQueue;
+  let release!: () => void;
+  zeroGUploadQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous.catch(() => undefined);
+  try {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error;
+        if (!isTransientZeroGUploadError(error) || attempt === 3) break;
+        await sleep(2500 * (attempt + 1));
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("0G upload failed.");
+  } finally {
+    release();
+  }
+}
+
 export async function storeCanonicalArtifact(kind: "capsule" | "matchup" | "claim" | "video-review" | "intelligence", id: string, artifact: unknown): Promise<StorageResult> {
   const canonicalJson = JSON.stringify(artifact, null, 2);
   const capsuleHash = sha256Hex(canonicalJson);
 
   if (config.privateKey) {
-    return uploadToZeroG(canonicalJson, capsuleHash);
+    return runZeroGUploadExclusive(() => uploadToZeroG(canonicalJson, capsuleHash));
   }
 
   if (!config.devStorageFallback) {
@@ -45,7 +81,7 @@ export async function storeBinaryArtifact(kind: "video", id: string, data: Uint8
   const contentHash = sha256Bytes(data);
 
   if (config.privateKey) {
-    return uploadBytesToZeroG(data, contentHash);
+    return runZeroGUploadExclusive(() => uploadBytesToZeroG(data, contentHash));
   }
 
   if (!config.devStorageFallback) {

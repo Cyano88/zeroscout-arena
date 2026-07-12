@@ -61,6 +61,39 @@ app.get("/api/config/public", (_req, res) => {
   res.json(publicConfig());
 });
 
+app.get("/api/admin/storage-wallet", async (req, res) => {
+  try {
+    assertAdminAccess(req);
+  } catch (error) {
+    res.status(errorStatus(error)).json({ error: errorMessage(error) });
+    return;
+  }
+
+  if (!config.privateKey) {
+    res.status(503).json({ configured: false, error: "0G storage signer is not configured." });
+    return;
+  }
+
+  try {
+    const provider = new ethers.JsonRpcProvider(config.rpcUrl, config.chainId);
+    const wallet = new ethers.Wallet(config.privateKey, provider);
+    const balance = await provider.getBalance(wallet.address);
+    res.json({
+      configured: true,
+      network: config.network,
+      chainId: config.chainId,
+      address: wallet.address,
+      balanceOg: ethers.formatEther(balance),
+    });
+  } catch (error) {
+    res.status(502).json({
+      configured: true,
+      network: config.network,
+      error: error instanceof Error ? error.message : "Could not read 0G storage wallet balance.",
+    });
+  }
+});
+
 app.get("/api/integrations/pricing", (_req, res) => {
   res.json({
     costs: integrationCosts,
