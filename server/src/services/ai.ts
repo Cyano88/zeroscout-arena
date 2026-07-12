@@ -263,7 +263,8 @@ Rules:
   return result;
 }
 
-type AiChatClient = { client: OpenAI; model: string; label: string };
+type ComputeApiFormat = "openai" | "anthropic";
+type AiChatClient = { client: OpenAI; model: string; label: string; format: ComputeApiFormat };
 type HelperProviderLane = "0g-compute";
 
 interface HashWatchMediaRequest {
@@ -764,7 +765,7 @@ async function resolveVideoInputUrl(videoUrl: string): Promise<string> {
   return signedUrl;
 }
 
-async function generateWalkthroughLinkReview(capsule: ProjectCapsule, ai: { client: OpenAI; model: string; label: string }, reason: string): Promise<VideoReviewResult> {
+async function generateWalkthroughLinkReview(capsule: ProjectCapsule, ai: AiChatClient, reason: string): Promise<VideoReviewResult> {
   const context = await buildWalkthroughContext(capsule.videoDemoUrl ?? "");
   const prompt = `Create a ZeroScout walkthrough review for this Project Passport.
 
@@ -886,17 +887,17 @@ function decodeHtml(value: string): string {
     .replace(/&gt;/g, ">");
 }
 
-function getAiClient(): { client: OpenAI; model: string; label: string } | undefined {
+function getAiClient(): AiChatClient | undefined {
   if (!config.computeApiKey) return undefined;
   return getComputeAiClientForModel(config.computeModel, "default");
 }
 
-function getVideoAiClient(): { client: OpenAI; model: string; label: string } | undefined {
+function getVideoAiClient(): AiChatClient | undefined {
   if (!config.computeApiKey) return undefined;
   return getComputeAiClientForModel(config.computeVideoModel, "video");
 }
 
-function getHashWatchMediaAiClient(modelOverride: string): { client: OpenAI; model: string; label: string } | undefined {
+function getHashWatchMediaAiClient(modelOverride: string): AiChatClient | undefined {
   if (!config.computeApiKey) return undefined;
   const model = readString(modelOverride) || config.computeVideoModel || "qwen3-vl-30b";
   return getComputeAiClientForModel(model, "HashWatch media");
@@ -1219,6 +1220,7 @@ function getLpAiClient(): AiChatClient | undefined {
 
 function getComputeAiClientForModel(modelInput: string, laneLabel: string): AiChatClient {
   const model = readString(modelInput) || config.computeModel;
+  const format = computeApiFormatForModel(model);
   return {
     client: new OpenAI({
       apiKey: config.computeApiKey ?? "",
@@ -1226,7 +1228,8 @@ function getComputeAiClientForModel(modelInput: string, laneLabel: string): AiCh
       defaultHeaders: computeHeaders()
     }),
     model,
-    label: `0G Compute Router ${laneLabel} (${model})`
+    label: `0G Compute Router ${laneLabel} (${model})`,
+    format
   };
 }
 
@@ -1298,21 +1301,25 @@ function assertCustomIntelligenceInput(input: CustomIntelligenceInput): void {
   }
 }
 
-async function completeJson(ai: { client: OpenAI; model: string }, messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): Promise<string | undefined> {
-  const run = async (client: OpenAI, enforceJson: boolean) => {
+async function completeJson(ai: AiChatClient, messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): Promise<string | undefined> {
+  const run = async (client: OpenAI, enforceJson: boolean, useDefaultTrustMode = false) => {
+    const finalMessages = enforceJson
+      ? messages
+      : [
+          ...messages,
+          {
+            role: "user" as const,
+            content: "Important: return only valid JSON. Do not wrap it in Markdown."
+          }
+        ];
+    if (ai.format === "anthropic") {
+      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode);
+    }
     const response = await client.chat.completions.create({
       model: ai.model,
       temperature: 0.35,
       ...(enforceJson ? { response_format: { type: "json_object" as const } } : {}),
-      messages: enforceJson
-        ? messages
-        : [
-            ...messages,
-            {
-              role: "user",
-              content: "Important: return only valid JSON. Do not wrap it in Markdown."
-            }
-          ]
+      messages: finalMessages
     });
     return response.choices[0]?.message?.content ?? undefined;
   };
@@ -1323,21 +1330,86 @@ async function completeJson(ai: { client: OpenAI; model: string }, messages: Ope
     const retryWithoutTrustMode = shouldRetryWithoutTrustMode(firstError);
     const client = retryWithoutTrustMode ? getDefaultTrustComputeClient() : ai.client;
     try {
-      const content = await run(client, retryWithoutTrustMode);
+      const content = await run(client, retryWithoutTrustMode, retryWithoutTrustMode);
       if (!content) throw firstError;
       return content;
     } catch (secondError) {
       if (retryWithoutTrustMode) {
-        const content = await run(client, false);
+        const content = await run(client, false, true);
         if (!content) throw secondError;
         return content;
       }
       if (!shouldRetryWithoutTrustMode(secondError)) throw secondError;
-      const content = await run(getDefaultTrustComputeClient(), false);
+      const content = await run(getDefaultTrustComputeClient(), false, true);
       if (!content) throw secondError;
       return content;
     }
   }
+}
+
+async function completeJsonWithAnthropicFormat(
+  model: string,
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  useDefaultTrustMode: boolean
+): Promise<string | undefined> {
+  const url = `${config.computeBaseUrl.replace(/\/$/, "")}/messages`;
+  const system = messages
+    .filter((message) => message.role === "system")
+    .map((message) => messageContentToText(message.content))
+    .filter(Boolean)
+    .join("\n\n");
+  const chatMessages = messages
+    .filter((message) => message.role !== "system")
+    .map((message) => ({
+      role: message.role === "assistant" ? "assistant" : "user",
+      content: messageContentToText(message.content)
+    }))
+    .filter((message) => message.content);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "authorization": `Bearer ${config.computeApiKey ?? ""}`,
+      "x-api-key": config.computeApiKey ?? "",
+      "anthropic-version": "2023-06-01",
+      ...(useDefaultTrustMode ? {} : computeHeaders() ?? {})
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 2400,
+      temperature: 0.35,
+      ...(system ? { system } : {}),
+      messages: chatMessages.length
+        ? chatMessages
+        : [{ role: "user", content: "Return valid JSON for the supplied ZeroScout request." }]
+    })
+  });
+  const body = await response.text();
+  if (!response.ok) {
+    throw new Error(`${response.status} ${body.slice(0, 500)}`);
+  }
+  const parsed = JSON.parse(body) as { content?: Array<{ type?: string; text?: string }>; error?: unknown };
+  return parsed.content
+    ?.map((item) => typeof item.text === "string" ? item.text : "")
+    .join("")
+    .trim();
+}
+
+function messageContentToText(content: OpenAI.Chat.Completions.ChatCompletionMessageParam["content"]): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (typeof part === "string") return part;
+      if (part && typeof part === "object" && "text" in part && typeof part.text === "string") return part.text;
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function computeApiFormatForModel(model: string): ComputeApiFormat {
+  return model.toLowerCase().startsWith("claude-") ? "anthropic" : "openai";
 }
 
 function shouldRetryWithoutTrustMode(error: unknown): boolean {
