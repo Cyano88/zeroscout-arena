@@ -234,6 +234,10 @@ Rules:
 - If multiple opportunities are supplied, rank them by reward, spread, liquidity/depth, time-to-resolution, and execution risk.
 - Always include a plain-language execution checklist: reopen Polymarket, verify the live book, confirm spread/depth, quote small, avoid market orders.
 - Always include risk flags for stale data, shallow books, headline/news risk, thin liquidity, and changing rewards when present or unknown.
+- Do not expose raw machine timestamps, epoch milliseconds, internal activity ids, API names, provider routing, or backend process details in suggestedAnswer, summary, signals, recommendedActions, or riskFlags.
+- suggestedAnswer must be concise and human-ready with this shape: "Top pick: ...", "Why it ranked: ...", "Quote guide: ...", "Before quoting: ...", "Risk: ...". Use supplied market names, reward/day, spread, depth, days left, and suggested YES/NO quote levels when present.
+- recommendedActions must be short user actions, not backend narration: open the market, refresh the book, confirm spread/depth, place a small maker quote inside the spread, cancel stale quotes.
+- riskFlags must be specific and plain-language. Replace stale timestamp language with "Scout data can age quickly; refresh the live book before quoting."
 - The result must be useful to Agent Hash or another buyer agent that may resell the brief, but must preserve safety boundaries.`;
 
   let parsed: Record<string, unknown> = {};
