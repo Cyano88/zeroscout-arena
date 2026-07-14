@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { Fetch as OpenAiCompatibleFetch } from "openai/core";
 import { config } from "../config.js";
 import type { AiHealthResponse, CampaignPack, ProjectCapsule, ProjectCapsuleInput, SurvivalDelta, VideoReview } from "../../../shared/types.js";
 
@@ -290,8 +291,9 @@ Rules:
   return result;
 }
 
-type ComputeApiFormat = "openai" | "anthropic";
-type AiChatClient = { client: OpenAI; model: string; label: string; format: ComputeApiFormat };
+// These are 0G Router wire formats, not direct OpenAI or Anthropic providers.
+type ComputeApiFormat = "chat-completions" | "messages";
+type AiChatClient = { client: OpenAI; model: string; label: string; format: ComputeApiFormat; timeoutMs: number };
 type HelperProviderLane = "0g-compute";
 
 interface HashWatchMediaRequest {
@@ -353,6 +355,8 @@ Rules:
   const routing = helperProviderRouting(compactData);
   let parsed: Record<string, unknown> = {};
   let providerLabel = "";
+  let selectedModel = "";
+  let attemptedModels: string[] = [];
   const errors: string[] = [];
 
   for (const lane of routing.fallbackOrder) {
@@ -360,6 +364,8 @@ Rules:
       const laneResult = await completeHelperGuidanceForLane(lane, prompt);
       parsed = laneResult.parsed;
       providerLabel = laneResult.providerLabel;
+      selectedModel = laneResult.model;
+      attemptedModels = laneResult.attemptedModels;
       break;
     } catch (error) {
       errors.push(`${lane}: ${sanitizeAiError(error)}`);
@@ -395,7 +401,9 @@ Rules:
       requestHash: readString((compactData as Record<string, unknown>).requestHash),
       requestedRefinementLane: routing.requestedLane,
       fallbackOrder: routing.fallbackOrder,
-      refinementPolicy: routing.refinementPolicy
+      refinementPolicy: routing.refinementPolicy,
+      selectedModel,
+      attemptedModels
     }
   };
 
@@ -972,6 +980,9 @@ function compactHelperData(data: unknown): Record<string, unknown> {
   const request = objectOrUndefined(input.request) ?? {};
   const user = objectOrUndefined(input.user) ?? {};
   const sourceProof = objectOrUndefined(input.sourceProof) ?? {};
+  const modelRoutingPolicy = objectOrUndefined(input.modelRoutingPolicy) ?? {};
+  const paymentContext = objectOrUndefined(request.paymentContext) ?? {};
+  const paymentFields = objectOrUndefined(paymentContext.fields) ?? {};
   const mediaRequest = extractHashWatchMediaRequest(input);
   return {
     proofClass: readString(input.proofClass),
@@ -986,10 +997,25 @@ function compactHelperData(data: unknown): Record<string, unknown> {
     request: {
       eventId: readString(request.eventId).slice(0, 120),
       accessMode: readString(request.accessMode).slice(0, 60),
+      helperMode: readString(request.helperMode).slice(0, 60),
+      helperIntent: readString(request.helperIntent).slice(0, 100),
+      qualityMode: readString(request.qualityMode).slice(0, 40),
       question: readString(request.question).slice(0, 1000),
       memorySummary: readString(request.memorySummary).slice(0, 900),
       memorySummaryHash: readString(request.memorySummaryHash).slice(0, 180)
     },
+    paymentContext: readString(paymentContext.source) === "hashpaylink-backend-normalized"
+      ? {
+          source: "hashpaylink-backend-normalized",
+          action: readString(paymentContext.action).slice(0, 100),
+          fields: Object.fromEntries(
+            Object.entries(paymentFields)
+              .slice(0, 24)
+              .map(([key, value]) => [key.slice(0, 80), readString(value).slice(0, 220)])
+              .filter(([, value]) => Boolean(value))
+          )
+        }
+      : undefined,
     sourceProof: {
       type: readString(sourceProof.type).slice(0, 100),
       network: readString(sourceProof.network).slice(0, 120),
@@ -1011,6 +1037,17 @@ function compactHelperData(data: unknown): Record<string, unknown> {
     requestedRefinementLane: readString(input.requestedRefinementLane).slice(0, 80),
     fallbackOrder: Array.isArray(input.fallbackOrder)
       ? input.fallbackOrder.map(readString).filter(Boolean).slice(0, 6)
+      : [],
+    modelRoutingPolicy: {
+      owner: readString(modelRoutingPolicy.owner).slice(0, 80),
+      task: readString(modelRoutingPolicy.task).slice(0, 120),
+      preference: readString(modelRoutingPolicy.preference).slice(0, 500),
+      lpEndpointsAllowed: typeof modelRoutingPolicy.lpEndpointsAllowed === "boolean"
+        ? modelRoutingPolicy.lpEndpointsAllowed
+        : undefined
+    },
+    helperModeInstructions: Array.isArray(input.helperModeInstructions)
+      ? input.helperModeInstructions.map(readString).filter(Boolean).slice(0, 16)
       : [],
     separationRules: Array.isArray(input.separationRules)
       ? input.separationRules.map(readString).filter(Boolean).slice(0, 12)
@@ -1206,33 +1243,89 @@ export const __testAiRouting = {
   extractHashWatchMediaRequest,
   helperProviderRouting,
   normalizeHelperFallbackOrder,
-  resolveHashWatchMediaModels
+  resolveHashWatchMediaModels,
+  resolveHelperComputeModels,
+  completeHelperGuidanceForLane
 };
 
 async function completeHelperGuidanceForLane(
   lane: HelperProviderLane,
   prompt: string
-): Promise<{ parsed: Record<string, unknown>; providerLabel: string }> {
-  const ai = getComputeAiClient();
-  if (!ai) {
+): Promise<{ parsed: Record<string, unknown>; providerLabel: string; model: string; attemptedModels: string[] }> {
+  if (!config.computeApiKey) {
     throw new Error(`${lane} is not configured.`);
   }
-  const content = await completeJson(ai, [
-    {
-      role: "system",
-      content: "You are ZeroScout's consumer helper intelligence layer for Hash PayLink. Return strict JSON only. Be concise, human, privacy-safe, and proof-aware."
-    },
-    { role: "user", content: prompt }
-  ]);
-  return {
-    parsed: parseJsonObject(content ?? "{}"),
-    providerLabel: ai.label
-  };
+  const models = await resolveHelperComputeModels();
+  const attemptedModels: string[] = [];
+  const errors: string[] = [];
+  for (const model of models) {
+    attemptedModels.push(model);
+    const ai = getComputeAiClientForModel(model, "helper");
+    try {
+      const content = await withAiTimeout(completeJson(ai, [
+        {
+          role: "system",
+          content: "You are ZeroScout's consumer helper intelligence layer for Hash PayLink. Return strict JSON only. Be concise, human, privacy-safe, and proof-aware."
+        },
+        { role: "user", content: prompt }
+      ]), config.computeHelperAttemptTimeoutMs, model);
+      return {
+        parsed: parseJsonObject(content ?? "{}"),
+        providerLabel: ai.label,
+        model,
+        attemptedModels
+      };
+    } catch (error) {
+      errors.push(`${model}: ${sanitizeAiError(error)}`);
+    }
+  }
+  throw new Error(`No compatible 0G Compute helper model succeeded. ${errors.join(" | ")}`);
 }
 
-function getComputeAiClient(): AiChatClient | undefined {
-  if (!config.computeApiKey) return undefined;
-  return getComputeAiClientForModel(config.computeHelperModel, "helper");
+let helperModelCatalogCache: { expiresAt: number; models: string[] } | undefined;
+
+async function resolveHelperComputeModels(): Promise<string[]> {
+  const configured = uniqueStrings([config.computeHelperModel, ...config.computeHelperModelCandidates]);
+  if (!config.computeHelperModelDiscovery) return configured.slice(0, config.computeHelperModelLimit);
+  const discovered = await discoverRouterModels();
+  return uniqueStrings([...configured, ...discovered]).slice(0, config.computeHelperModelLimit);
+}
+
+async function discoverRouterModels(): Promise<string[]> {
+  if (!config.computeApiKey) return [];
+  if (helperModelCatalogCache && helperModelCatalogCache.expiresAt > Date.now()) return helperModelCatalogCache.models;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1_500);
+  try {
+    const response = await fetch(`${config.computeBaseUrl.replace(/\/$/, "")}/models`, {
+      headers: { authorization: `Bearer ${config.computeApiKey}` },
+      signal: controller.signal
+    });
+    if (!response.ok) return [];
+    const payload = await response.json() as { data?: Array<{ id?: unknown }> } | Array<{ id?: unknown }>;
+    const rows = Array.isArray(payload) ? payload : Array.isArray(payload.data) ? payload.data : [];
+    const models = uniqueStrings(rows.map((row) => readString(row.id))).filter(isTextHelperModel);
+    helperModelCatalogCache = { expiresAt: Date.now() + 5 * 60_000, models };
+    return models;
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isTextHelperModel(model: string): boolean {
+  return !/(embed|rerank|whisper|speech|audio|image|diffusion|stable-diffusion|qwen.*vl)/i.test(model);
+}
+
+async function withAiTimeout<T>(promise: Promise<T>, timeoutMs: number, model: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${model} timed out after ${timeoutMs}ms.`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 function getFullPlatformAiClient(): AiChatClient | undefined {
@@ -1248,15 +1341,20 @@ function getLpAiClient(): AiChatClient | undefined {
 function getComputeAiClientForModel(modelInput: string, laneLabel: string): AiChatClient {
   const model = readString(modelInput) || config.computeModel;
   const format = computeApiFormatForModel(model);
+  const timeoutMs = laneLabel === "helper" ? config.computeHelperAttemptTimeoutMs : 30_000;
   return {
     client: new OpenAI({
       apiKey: config.computeApiKey ?? "",
       baseURL: config.computeBaseUrl,
-      defaultHeaders: computeHeaders()
+      defaultHeaders: computeHeaders(),
+      maxRetries: 0,
+      fetch: globalThis.fetch as unknown as OpenAiCompatibleFetch,
+      timeout: timeoutMs
     }),
     model,
     label: `0G Compute Router ${laneLabel} (${model})`,
-    format
+    format,
+    timeoutMs
   };
 }
 
@@ -1345,8 +1443,8 @@ async function completeJson(ai: AiChatClient, messages: OpenAI.Chat.Completions.
           }
         ];
     const format = formatOverride ?? ai.format;
-    if (format === "anthropic") {
-      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode);
+    if (format === "messages") {
+      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs);
     }
     const response = await client.chat.completions.create({
       model: ai.model,
@@ -1368,7 +1466,7 @@ async function completeJson(ai: AiChatClient, messages: OpenAI.Chat.Completions.
       } catch (formatError) {
         const retryFormatWithoutTrustMode = shouldRetryWithoutTrustMode(formatError);
         if (!retryFormatWithoutTrustMode) throw formatError;
-        const content = await run(getDefaultTrustComputeClient(), true, true, formatRetry);
+        const content = await run(getDefaultTrustComputeClient(ai.timeoutMs), true, true, formatRetry);
         if (!content) throw formatError;
         return content;
       }
@@ -1386,7 +1484,7 @@ async function completeJson(ai: AiChatClient, messages: OpenAI.Chat.Completions.
         return content;
       }
       if (!shouldRetryWithoutTrustMode(secondError)) throw secondError;
-      const content = await run(getDefaultTrustComputeClient(), false, true);
+      const content = await run(getDefaultTrustComputeClient(ai.timeoutMs), false, true);
       if (!content) throw secondError;
       return content;
     }
@@ -1396,7 +1494,8 @@ async function completeJson(ai: AiChatClient, messages: OpenAI.Chat.Completions.
 async function completeJsonWithAnthropicFormat(
   model: string,
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  useDefaultTrustMode: boolean
+  useDefaultTrustMode: boolean,
+  timeoutMs: number
 ): Promise<string | undefined> {
   const url = `${config.computeBaseUrl.replace(/\/$/, "")}/messages`;
   const system = messages
@@ -1411,6 +1510,8 @@ async function completeJsonWithAnthropicFormat(
       content: messageContentToText(message.content)
     }))
     .filter((message) => message.content);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -1428,8 +1529,9 @@ async function completeJsonWithAnthropicFormat(
       messages: chatMessages.length
         ? chatMessages
         : [{ role: "user", content: "Return valid JSON for the supplied ZeroScout request." }]
-    })
-  });
+    }),
+    signal: controller.signal
+  }).finally(() => clearTimeout(timer));
   const body = await response.text();
   if (!response.ok) {
     throw new Error(`${response.status} ${body.slice(0, 500)}`);
@@ -1455,13 +1557,13 @@ function messageContentToText(content: OpenAI.Chat.Completions.ChatCompletionMes
 }
 
 function computeApiFormatForModel(model: string): ComputeApiFormat {
-  return model.toLowerCase().startsWith("claude-") ? "anthropic" : "openai";
+  return model.toLowerCase().startsWith("claude-") ? "messages" : "chat-completions";
 }
 
 function alternateFormatForError(error: unknown, currentFormat: ComputeApiFormat): ComputeApiFormat | undefined {
   const message = sanitizeAiError(error).toLowerCase();
-  if (currentFormat !== "anthropic" && message.includes("supported: [anthropic]")) return "anthropic";
-  if (currentFormat !== "openai" && message.includes("supported: [openai]")) return "openai";
+  if (currentFormat !== "messages" && message.includes("supported: [anthropic]")) return "messages";
+  if (currentFormat !== "chat-completions" && message.includes("supported: [openai]")) return "chat-completions";
   return undefined;
 }
 
@@ -1472,10 +1574,13 @@ function shouldRetryWithoutTrustMode(error: unknown): boolean {
     || message.includes("failed to select provider");
 }
 
-function getDefaultTrustComputeClient(): OpenAI {
+function getDefaultTrustComputeClient(timeoutMs = 30_000): OpenAI {
   return new OpenAI({
     apiKey: config.computeApiKey ?? "",
-    baseURL: config.computeBaseUrl
+    baseURL: config.computeBaseUrl,
+    maxRetries: 0,
+    fetch: globalThis.fetch as unknown as OpenAiCompatibleFetch,
+    timeout: timeoutMs
   });
 }
 

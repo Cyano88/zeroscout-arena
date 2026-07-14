@@ -2,6 +2,13 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+function commaSeparated(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 const network = process.env.ZG_NETWORK ?? "mainnet";
 const isMainnet = network === "mainnet";
 const defaultLegacyRegistries = isMainnet ? "0xc8139e917eEccB8DAE47e14fb727B6EB71f9712E" : "";
@@ -33,6 +40,12 @@ export const config = {
   computeBaseUrl: process.env.ZG_COMPUTE_BASE_URL ?? (isMainnet ? "https://router-api.0g.ai/v1" : "https://router-api-testnet.integratenetwork.work/v1"),
   computeModel: process.env.ZEROSCOUT_FULL_PLATFORM_MODEL ?? process.env.ZG_COMPUTE_MODEL ?? "claude-fable-5",
   computeHelperModel: process.env.ZEROSCOUT_HELPER_MODEL ?? process.env.ZG_COMPUTE_HELPER_MODEL ?? "claude-sonnet-5",
+  computeHelperModelCandidates: commaSeparated(
+    process.env.ZEROSCOUT_HELPER_MODEL_CANDIDATES ?? process.env.ZG_COMPUTE_HELPER_MODEL_CANDIDATES
+  ),
+  computeHelperModelDiscovery: process.env.ZEROSCOUT_HELPER_MODEL_DISCOVERY !== "false",
+  computeHelperModelLimit: Math.max(1, Math.min(12, Number(process.env.ZEROSCOUT_HELPER_MODEL_LIMIT ?? 6) || 6)),
+  computeHelperAttemptTimeoutMs: Math.max(1_500, Number(process.env.ZEROSCOUT_HELPER_ATTEMPT_TIMEOUT_MS ?? 4_500) || 4_500),
   computeLpModel: process.env.ZEROSCOUT_LP_MODEL ?? process.env.ZG_COMPUTE_LP_MODEL ?? "claude-fable-5",
   computeLpVerifierModel: process.env.ZEROSCOUT_LP_VERIFIER_MODEL ?? process.env.ZG_COMPUTE_LP_VERIFIER_MODEL ?? "deepseek-v4-pro",
   computeVideoModel: process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL ?? process.env.ZG_COMPUTE_VIDEO_MODEL ?? "qwen3-vl-30b",
@@ -62,7 +75,11 @@ export function publicConfig() {
     computeMode: has0gCompute ? "0G Compute Router" : "deterministic local scout fallback",
     computeModels: has0gCompute
       ? {
-          helper: config.computeHelperModel,
+          helper: {
+            preferred: config.computeHelperModel,
+            configuredFallbacks: config.computeHelperModelCandidates,
+            discoversRouterModels: config.computeHelperModelDiscovery
+          },
           lpIntelligence: config.computeLpModel,
           lpVerifier: config.lpVerifierEnabled ? config.computeLpVerifierModel : undefined,
           videoScoring: config.computeVideoModel,
