@@ -41,9 +41,9 @@ export const config = {
   computeModel: process.env.ZEROSCOUT_FULL_PLATFORM_MODEL ?? process.env.ZG_COMPUTE_MODEL ?? "claude-fable-5",
   computeHelperModel: process.env.ZEROSCOUT_HELPER_MODEL ?? process.env.ZG_COMPUTE_HELPER_MODEL ?? "claude-sonnet-5",
   computeHelperModelCandidates: commaSeparated(
-    process.env.ZEROSCOUT_HELPER_MODEL_CANDIDATES
-      ?? process.env.ZG_COMPUTE_HELPER_MODEL_CANDIDATES
-      ?? "claude-fable-5,deepseek-v4-pro,zai-org/GLM-5-FP8"
+    process.env.ZEROSCOUT_HELPER_MODEL_CANDIDATES?.trim()
+      || process.env.ZG_COMPUTE_HELPER_MODEL_CANDIDATES?.trim()
+      || "claude-fable-5,deepseek-v4-pro,zai-org/GLM-5-FP8"
   ),
   computeHelperModelDiscovery: process.env.ZEROSCOUT_HELPER_MODEL_DISCOVERY !== "false",
   computeHelperModelLimit: Math.max(1, Math.min(12, Number(process.env.ZEROSCOUT_HELPER_MODEL_LIMIT ?? 6) || 6)),
