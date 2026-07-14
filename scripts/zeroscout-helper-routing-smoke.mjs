@@ -11,31 +11,41 @@ const compactSimple = __testAiRouting.compactHelperData({
   fallbackOrder: ["0g-compute"],
   modelRoutingPolicy: {
     owner: "zeroscout",
-    task: "payment-assistance",
+    task: "circle-pocket-assistance",
     lpEndpointsAllowed: false,
   },
   helperModeInstructions: [
-    "Hash PayLink owns deterministic payment actions.",
-    "Never use LP Scout endpoints in Payments mode.",
+    "Hash PayLink owns deterministic Circle Pocket actions.",
+    "Never use LP Scout endpoints in Circle Pocket mode.",
   ],
   request: {
     eventId: "event-id",
-    helperMode: "payments",
-    helperIntent: "payment-help",
+    helperMode: "circle-pocket",
+    helperIntent: "circle-pocket-receive-usdc",
     qualityMode: "standard",
     question: "Create a PayLink for Nana",
     memorySummary: "User prefers to be called Shy.",
     memorySummaryHash: "memory-hash",
+    circlePocketContext: {
+      source: "hashpaylink-backend-router",
+      capability: "receive-usdc",
+      supported: true,
+      confidence: "high",
+      answer: "Use Receive USDC to create a PayLink.",
+      action: { label: "Receive USDC", url: "/?product=payment&tab=personal" },
+    },
   },
 });
 
 const simpleRouting = __testAiRouting.helperProviderRouting(compactSimple);
-assert.equal(compactSimple.request.helperMode, "payments");
-assert.equal(compactSimple.request.helperIntent, "payment-help");
+assert.equal(compactSimple.request.helperMode, "circle-pocket");
+assert.equal(compactSimple.request.helperIntent, "circle-pocket-receive-usdc");
+assert.equal(compactSimple.circlePocketContext.capability, "receive-usdc");
+assert.equal(compactSimple.circlePocketContext.action.label, "Receive USDC");
 assert.equal(compactSimple.modelRoutingPolicy.lpEndpointsAllowed, false);
 assert.deepEqual(compactSimple.helperModeInstructions, [
-  "Hash PayLink owns deterministic payment actions.",
-  "Never use LP Scout endpoints in Payments mode.",
+  "Hash PayLink owns deterministic Circle Pocket actions.",
+  "Never use LP Scout endpoints in Circle Pocket mode.",
 ]);
 assert.equal(simpleRouting.requestedLane, "og-compute");
 assert.equal(simpleRouting.refinementPolicy, "0g-compute-compatible-model-fallback");

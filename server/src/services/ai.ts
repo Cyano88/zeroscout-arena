@@ -983,6 +983,8 @@ function compactHelperData(data: unknown): Record<string, unknown> {
   const modelRoutingPolicy = objectOrUndefined(input.modelRoutingPolicy) ?? {};
   const paymentContext = objectOrUndefined(request.paymentContext) ?? {};
   const paymentFields = objectOrUndefined(paymentContext.fields) ?? {};
+  const circlePocketContext = objectOrUndefined(request.circlePocketContext) ?? {};
+  const circlePocketAction = objectOrUndefined(circlePocketContext.action) ?? {};
   const mediaRequest = extractHashWatchMediaRequest(input);
   return {
     proofClass: readString(input.proofClass),
@@ -1014,6 +1016,19 @@ function compactHelperData(data: unknown): Record<string, unknown> {
               .map(([key, value]) => [key.slice(0, 80), readString(value).slice(0, 220)])
               .filter(([, value]) => Boolean(value))
           )
+        }
+      : undefined,
+    circlePocketContext: readString(circlePocketContext.source) === "hashpaylink-backend-router"
+      ? {
+          source: "hashpaylink-backend-router",
+          capability: readString(circlePocketContext.capability).slice(0, 100),
+          supported: circlePocketContext.supported === true,
+          confidence: readString(circlePocketContext.confidence).slice(0, 30),
+          answer: readString(circlePocketContext.answer).slice(0, 700),
+          action: {
+            label: readString(circlePocketAction.label).slice(0, 100),
+            url: readString(circlePocketAction.url).slice(0, 240)
+          }
         }
       : undefined,
     sourceProof: {
