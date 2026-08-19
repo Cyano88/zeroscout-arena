@@ -59,7 +59,7 @@ export const agreementIntelligenceRequestSchema = z.object({
     providerReference: z.string().regex(/^hps_provider_[a-f0-9]{32}$/),
   }).strict(),
   agreement: z.object({
-    state: z.literal('draft'),
+    state: z.enum(['draft', 'funded']),
     template: z.literal('fixed_unlock'),
     title: z.string().trim().min(3).max(140),
     deliveryDescription: z.string().trim().min(10).max(800),
