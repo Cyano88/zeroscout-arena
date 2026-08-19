@@ -13,6 +13,7 @@
     "start": "node dist/server/server/src/index.js",
     "deploy:registry": "tsx scripts/deploy-registry.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
+    "test:agreement-intelligence": "node --import tsx scripts/agreement-intelligence-smoke.ts",
     "lint": "eslint . --ext ts,tsx --max-warnings 0"
   },
   "dependencies": {

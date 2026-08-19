@@ -7,7 +7,7 @@ import { privyEnabled } from "../privy";
 import type { IntegrationKeyRecord } from "../../../shared/types";
 
 type PublicKey = Omit<IntegrationKeyRecord, "keyHash">;
-type KeyPresetId = "helper-sponsorship" | "video-scoring" | "lp-intelligence" | "full-platform";
+type KeyPresetId = "helper-sponsorship" | "video-scoring" | "lp-intelligence" | "agreement-intelligence" | "full-platform";
 
 const keyPresets: Array<{
   id: KeyPresetId;
@@ -37,7 +37,15 @@ const keyPresets: Array<{
     id: "lp-intelligence",
     label: "LP Intelligence",
     description: "Generate prediction-market, portfolio, and LP operator intelligence briefs.",
-    endpoints: ["intelligence"],
+    endpoints: ["intelligence", "agreement-intelligence"],
+    analysisTypes: ["lp-market-intelligence", "portfolio-risk-summary", "prediction-market-brief"],
+    proofClasses: ["generic_market_analysis", "paid_lp_scout_proof"]
+  },
+  {
+    id: "agreement-intelligence",
+    label: "Agreement Intelligence",
+    description: "Assess funded agreement evidence for HashPayStream Upfront while retaining the LP intelligence lane.",
+    endpoints: ["intelligence", "agreement-intelligence"],
     analysisTypes: ["lp-market-intelligence", "portfolio-risk-summary", "prediction-market-brief"],
     proofClasses: ["generic_market_analysis", "paid_lp_scout_proof"]
   },
@@ -45,7 +53,7 @@ const keyPresets: Array<{
     id: "full-platform",
     label: "Full Platform API",
     description: "Use all current ZeroScout API lanes for a trusted platform integration.",
-    endpoints: ["capsules", "video-score", "video-score-session", "intelligence", "sponsorship-proof"],
+    endpoints: ["capsules", "video-score", "video-score-session", "intelligence", "agreement-intelligence", "sponsorship-proof"],
     analysisTypes: ["custom-intelligence", "zeroscout-helper-context-guidance", "zeroscout-sponsored-action", "lp-market-intelligence", "portfolio-risk-summary", "prediction-market-brief"],
     proofClasses: ["zeroscout_helper_context_guidance", "zeroscout_sponsored_action", "generic_market_analysis", "paid_lp_scout_proof"]
   }
@@ -57,7 +65,7 @@ export function DashboardPage() {
   const [wallet, setWallet] = useState("");
   const [keys, setKeys] = useState<PublicKey[]>([]);
   const [balance, setBalance] = useState({ creditedOg: "0", creditsPurchased: 0, topUpCount: 0 });
-  const [pricing, setPricing] = useState<{ costs: { capsule: number; videoScore: number; intelligence?: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string } | null>(null);
+  const [pricing, setPricing] = useState<{ costs: { capsule: number; videoScore: number; intelligence?: number; agreementIntelligence?: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string } | null>(null);
   const [keyName, setKeyName] = useState("production");
   const [partner, setPartner] = useState("My platform");
   const [keyPresetId, setKeyPresetId] = useState<KeyPresetId>("helper-sponsorship");
@@ -410,6 +418,7 @@ export function DashboardPage() {
           {pendingTx && <p className="pending-note">One submitted transfer is waiting for confirmation.</p>}
         </div>
         <div className="balance-secondary">
+          <Metric label="Agreement Intelligence" value={(pricing?.costs.agreementIntelligence ?? 40) + ' cr'} />
           <Metric label="Credited OG" value={balance.creditedOg} />
           <Metric label="Wallet OG" value={walletOgBalance || "-"} />
           <Metric label="Passport API" value={`${pricing?.costs.capsule ?? 20} cr`} />
@@ -424,6 +433,7 @@ export function DashboardPage() {
             <h2>Your ZeroScout wallet needs OG</h2>
             <p>Send OG to this address or connect a wallet that already has OG.</p>
             <div className="pricing-strip">
+              <span>Agreement Intelligence = {pricing?.costs.agreementIntelligence ?? 40} credits</span>
               <span>1 OG = {pricing?.creditsPerOg ?? 100} credits</span>
               <span>Passport = {pricing?.costs.capsule ?? 20} credits</span>
               <span>Video review = {pricing?.costs.videoScore ?? 50} credits</span>
@@ -627,6 +637,8 @@ cost: ${pricing?.costs.videoScore ?? 50} credits`}</pre>
             <pre>{`POST /api/integrations/capsules
 json: projectName, teamName, repoUrl, demoUrl, description, ogUsageClaims...
 cost: ${pricing?.costs.capsule ?? 20} credits`}</pre>
+            <p><b>Agreement Intelligence</b> is a separate, versioned evidence API for HashPayStream Upfront. Every active ZeroScout API key enables this schema alongside the existing intelligence API used by LP Scout.</p>
+            <p><code>POST /api/integrations/agreement-intelligence</code> accepts <code>zeroscout.agreement-intelligence.request@1.0.0</code> and returns <code>zeroscout.agreement-intelligence.result@1.0.0</code>. Cost: {pricing?.costs.agreementIntelligence ?? 40} credits.</p>
             <p><b>Custom intelligence</b> is for products that already have structured data and want ZeroScout to generate a stored operator brief through 0G Compute.</p>
             <pre>{`POST /api/integrations/intelligence
 json: partner, productType, analysisType, objective, data, outputStyle
