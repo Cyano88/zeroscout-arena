@@ -70,6 +70,20 @@ assert.match(result.requestCommitment, /^sha256:[a-f0-9]{64}$/)
 assert(result.reasonCodes.includes('NO_PROVIDER_HISTORY'))
 assert(!JSON.stringify(result).includes(input.agreement.deliveryDescription))
 
+const fundedInput = agreementIntelligenceRequestSchema.parse({
+  ...input,
+  agreement: { ...input.agreement, state: 'funded' },
+  evidence: {
+    providerHistoryIncluded: false,
+    sources: ['hashpaystream-authoritative-agreement', 'arc-funded-agreement'],
+    dataGaps: ['provider-history', 'delivery-history'],
+  },
+})
+const fundedResult = await generateAgreementIntelligence(fundedInput, async () => { throw new Error('AI unavailable') })
+assert.equal(fundedResult.recommendation, 'proceed')
+assert.equal(fundedResult.confidence, 61)
+assert.equal(fundedResult.recommendedMaxAdvanceBps, 3500)
+
 const inconsistent = {
   ...input,
   advance: { ...input.advance, requestedUsdcUnits: '30075001' },
