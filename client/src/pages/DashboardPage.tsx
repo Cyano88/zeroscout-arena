@@ -14,7 +14,7 @@ export function DashboardPage() {
   const [wallet, setWallet] = useState("");
   const [keys, setKeys] = useState<PublicKey[]>([]);
   const [balance, setBalance] = useState({ creditedOg: "0", creditsPurchased: 0, topUpCount: 0 });
-  const [pricing, setPricing] = useState<{ costs: { capsule: number; videoScore: number; intelligence?: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string } | null>(null);
+  const [pricing, setPricing] = useState<{ costs: { capsule: number; videoScore: number; intelligence?: number; agreementIntelligence?: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string } | null>(null);
   const [keyName, setKeyName] = useState("production");
   const [partner, setPartner] = useState("My platform");
   const [newKey, setNewKey] = useState("");
@@ -358,6 +358,7 @@ export function DashboardPage() {
           {pendingTx && <p className="pending-note">One submitted transfer is waiting for confirmation.</p>}
         </div>
         <div className="balance-secondary">
+          <Metric label="Agreement Intelligence" value={(pricing?.costs.agreementIntelligence ?? 40) + ' cr'} />
           <Metric label="Credited OG" value={balance.creditedOg} />
           <Metric label="Wallet OG" value={walletOgBalance || "-"} />
           <Metric label="Passport API" value={`${pricing?.costs.capsule ?? 20} cr`} />
@@ -372,6 +373,7 @@ export function DashboardPage() {
             <h2>Your ZeroScout wallet needs OG</h2>
             <p>Send OG to this address or connect a wallet that already has OG.</p>
             <div className="pricing-strip">
+              <span>Agreement Intelligence = {pricing?.costs.agreementIntelligence ?? 40} credits</span>
               <span>1 OG = {pricing?.creditsPerOg ?? 100} credits</span>
               <span>Passport = {pricing?.costs.capsule ?? 20} credits</span>
               <span>Video review = {pricing?.costs.videoScore ?? 50} credits</span>
@@ -560,6 +562,8 @@ cost: ${pricing?.costs.videoScore ?? 50} credits`}</pre>
             <pre>{`POST /api/integrations/capsules
 json: projectName, teamName, repoUrl, demoUrl, description, ogUsageClaims...
 cost: ${pricing?.costs.capsule ?? 20} credits`}</pre>
+            <p><b>Agreement Intelligence</b> is a separate, versioned evidence API for HashPayStream Upfront. Every active ZeroScout API key enables this schema alongside the existing intelligence API used by LP Scout.</p>
+            <p><code>POST /api/integrations/agreement-intelligence</code> accepts <code>zeroscout.agreement-intelligence.request@1.0.0</code> and returns <code>zeroscout.agreement-intelligence.result@1.0.0</code>. Cost: {pricing?.costs.agreementIntelligence ?? 40} credits.</p>
             <p><b>Custom intelligence</b> is for products that already have structured data and want ZeroScout to generate a stored operator brief. Add Claude/OpenAI review flags only when those providers are configured on ZeroScout.</p>
             <pre>{`POST /api/integrations/intelligence
 json: partner, productType, analysisType, objective, data, outputStyle, includeClaudeReview, includeOpenAiReview

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createHash } from 'node:crypto'
 import { campaignTypes, rounds, stages } from "../../shared/types.js";
 
 export const capsuleInputSchema = z.object({
@@ -42,4 +43,81 @@ function isSupportedVideoUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+const usdcUnitsSchema = z.string().regex(/^[1-9]\d{0,18}$/)
+const evmAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/).refine(value => !/^0x0{40}$/i.test(value), 'Address cannot be zero.')
+
+export const agreementIntelligenceRequestSchema = z.object({
+  schema: z.literal('zeroscout.agreement-intelligence.request'),
+  schemaVersion: z.literal('1.0.0'),
+  requestId: z.string().regex(/^uai_[a-zA-Z0-9]{12,80}$/),
+  issuedAt: z.string().datetime({ offset: true }),
+  source: z.object({
+    product: z.literal('hashpaystream'),
+    environment: z.literal('testnet'),
+    providerReference: z.string().regex(/^hps_provider_[a-f0-9]{32}$/),
+  }).strict(),
+  agreement: z.object({
+    state: z.literal('draft'),
+    template: z.literal('fixed_unlock'),
+    title: z.string().trim().min(3).max(140),
+    deliveryDescription: z.string().trim().min(10).max(800),
+    amountUsdcUnits: usdcUnitsSchema,
+    durationSeconds: z.number().int().min(3_600).max(2_592_000),
+    cancellationWindowSeconds: z.number().int().min(0).max(86_400),
+    releasePercentages: z.tuple([z.literal(100)]),
+    termsHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  }).strict(),
+  advance: z.object({
+    requestedBps: z.number().int().min(1_000).max(8_000),
+    requestedUsdcUnits: usdcUnitsSchema,
+    fundingNetwork: z.literal('x-layer-testnet'),
+    fundingAsset: z.literal('test-usdc'),
+    providerPayoutAddress: evmAddressSchema,
+  }).strict(),
+  settlement: z.object({
+    protectionNetwork: z.literal('arc-testnet'),
+    protectionAsset: z.literal('test-usdc'),
+    recipientSelection: z.literal('fixed-repayment-router'),
+    assetBridgeRequired: z.literal(false),
+  }).strict(),
+  evidence: z.object({
+    providerHistoryIncluded: z.boolean(),
+    sources: z.array(z.string().trim().min(3).max(100)).min(1).max(20),
+    dataGaps: z.array(z.string().trim().min(3).max(100)).max(20),
+  }).strict(),
+}).strict().superRefine((value, context) => {
+  if (value.agreement.cancellationWindowSeconds >= value.agreement.durationSeconds) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['agreement', 'cancellationWindowSeconds'], message: 'Cancellation window must end before agreement expiry.' })
+  }
+  const amount = BigInt(value.agreement.amountUsdcUnits)
+  const expectedAdvance = amount * BigInt(value.advance.requestedBps) / 10_000n
+  if (BigInt(value.advance.requestedUsdcUnits) !== expectedAdvance) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['advance', 'requestedUsdcUnits'], message: 'Requested advance does not match the agreement amount and basis points.' })
+  }
+  const terms = {
+    template: value.agreement.template,
+    title: value.agreement.title,
+    deliveryDescription: value.agreement.deliveryDescription,
+    amountUsdcUnits: value.agreement.amountUsdcUnits,
+    durationSeconds: value.agreement.durationSeconds,
+    cancellationWindowSeconds: value.agreement.cancellationWindowSeconds,
+    releasePercentages: value.agreement.releasePercentages,
+  }
+  const expectedTermsHash = 'sha256:' + createHash('sha256').update(canonicalAgreementIntelligence(terms)).digest('hex')
+  if (value.agreement.termsHash !== expectedTermsHash) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['agreement', 'termsHash'], message: 'Terms hash does not match the supplied agreement terms.' })
+  }
+})
+
+export type AgreementIntelligenceRequest = z.infer<typeof agreementIntelligenceRequestSchema>
+
+function canonicalAgreementIntelligence(value: unknown): string {
+  if (Array.isArray(value)) return '[' + value.map(canonicalAgreementIntelligence).join(',') + ']'
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return '{' + Object.keys(record).sort().map(key => JSON.stringify(key) + ':' + canonicalAgreementIntelligence(record[key])).join(',') + '}'
+  }
+  return JSON.stringify(value)
 }

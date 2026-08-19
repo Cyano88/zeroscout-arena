@@ -15,12 +15,16 @@ import { parseGitHubRepo, projectKeyFor } from "./services/project-key.js";
 import type { CapsuleIndexRecord, ClaimStartResponse, HealthResponse, MatchupReport, ProjectCapsule, ProjectCapsuleInput, VideoReview } from "../../shared/types.js";
 import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
 
+import { agreementIntelligenceRequestSchema } from './validation.js'
+import { generateAgreementIntelligence } from './services/agreement-intelligence.js'
+
 const app = express();
 const maxVideoBytes = 100 * 1024 * 1024;
 const integrationCosts = {
   capsule: 20,
   videoScore: 50,
-  intelligence: 40
+  intelligence: 40,
+  agreementIntelligence: 40
 };
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -1290,6 +1294,49 @@ app.get("*", (req, res, next) => {
   }
   res.sendFile(path.join(clientDir, "index.html"));
 });
+
+app.post('/api/integrations/agreement-intelligence', async (req, res, next) => {
+  try {
+    const input = agreementIntelligenceRequestSchema.parse(req.body)
+    const integration = await assertIntegrationAccess(req, integrationCosts.agreementIntelligence)
+    const id = 'zai_' + nanoid(10)
+    const now = new Date().toISOString()
+    const result = await generateAgreementIntelligence(input)
+    const artifactWithoutProof = {
+      id,
+      artifactType: 'zeroscout.agreement-intelligence',
+      artifactVersion: '1.0.0',
+      integrationId: integration?.id,
+      integrationName: integration?.name,
+      integrationPartner: integration?.partner,
+      request: {
+        requestId: input.requestId,
+        termsHash: input.agreement.termsHash,
+        requestCommitment: result.requestCommitment,
+      },
+      ...result,
+      createdAt: now,
+    }
+    const proof = await storeCanonicalArtifact('intelligence', id, artifactWithoutProof)
+
+    res.status(201).json({
+      id,
+      ...result,
+      proof: {
+        storageRoot: proof.storageRoot,
+        storageUri: proof.storageUri,
+        contentHash: proof.capsuleHash,
+        storageTxHash: proof.storageTxHash,
+      },
+      network: proof.network,
+      storageMode: proof.storageMode,
+      integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined,
+      createdAt: now,
+    })
+  } catch (error) {
+    next(error)
+  }
+})
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error);

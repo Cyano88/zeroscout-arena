@@ -103,7 +103,7 @@ export const api = {
   createMatchup: (capsuleAId: string, capsuleBId: string) =>
     request<MatchupReport>("/api/matchups", { method: "POST", body: JSON.stringify({ capsuleAId, capsuleBId }) }),
   integrationPricing: () =>
-    request<{ costs: { capsule: number; videoScore: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string }>("/api/integrations/pricing"),
+    request<{ costs: { capsule: number; videoScore: number; intelligence?: number; agreementIntelligence?: number }; creditsPerOg: number; treasuryAddress?: string; chainId: number; network: string }>("/api/integrations/pricing"),
   dashboardKeys: (wallet: string) =>
     request<{ keys: Omit<IntegrationKeyRecord, "keyHash">[]; balance: { creditedOg: string; creditsPurchased: number; topUpCount: number } }>(`/api/dashboard/keys?wallet=${encodeURIComponent(wallet)}`),
   createDashboardKey: (input: { wallet: string; name: string; partner: string }) =>
