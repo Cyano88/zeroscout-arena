@@ -21,6 +21,24 @@ Zero Cup is the launch campaign. Grail Builders University is the first real-wor
 - Builders can publish publicly or keep a passport unlisted.
 - Agents can consume structured project JSON from the proof record.
 
+## Agreement Intelligence for HashPayStream Upfront
+
+ZeroScout also exposes a scoped, authenticated Agreement Intelligence API for
+the BuildX AI Season pilot:
+
+```text
+POST /api/integrations/agreement-intelligence
+```
+
+It evaluates privacy-minimized service-agreement terms and returns a versioned
+`zeroscout.agreement-intelligence.result` with evidence grade, confidence,
+delivery clarity, reason codes, data gaps, summary, and a deterministic request
+commitment. The output is evidence for PolyDesk's bounded underwriting policy;
+it is never a direct funding instruction. The integration accepts only named,
+hashed server credentials with the `agreement-intelligence` endpoint scope.
+
+
+
 ## Why It Is AI-Native
 
 ZeroScout uses an AI project analyst to turn raw project data into useful action:
