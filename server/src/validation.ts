@@ -68,6 +68,7 @@ export const agreementIntelligenceRequestSchema = z.object({
     cancellationWindowSeconds: z.number().int().min(0).max(86_400),
     releasePercentages: z.tuple([z.literal(100)]),
     termsHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    protectionDeadline: z.number().int().safe().positive().optional(),
   }).strict(),
   advance: z.object({
     requestedBps: z.number().int().min(1_000).max(8_000),
@@ -90,6 +91,9 @@ export const agreementIntelligenceRequestSchema = z.object({
 }).strict().superRefine((value, context) => {
   if (value.agreement.cancellationWindowSeconds >= value.agreement.durationSeconds) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['agreement', 'cancellationWindowSeconds'], message: 'Cancellation window must end before agreement expiry.' })
+  }
+  if (value.agreement.state === 'funded' && value.agreement.protectionDeadline === undefined) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['agreement', 'protectionDeadline'], message: 'Funded agreements require the authoritative Arc expiry.' })
   }
   const amount = BigInt(value.agreement.amountUsdcUnits)
   const expectedAdvance = amount * BigInt(value.advance.requestedBps) / 10_000n

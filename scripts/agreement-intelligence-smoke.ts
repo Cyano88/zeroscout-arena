@@ -72,7 +72,7 @@ assert(!JSON.stringify(result).includes(input.agreement.deliveryDescription))
 
 const fundedInput = agreementIntelligenceRequestSchema.parse({
   ...input,
-  agreement: { ...input.agreement, state: 'funded' },
+  agreement: { ...input.agreement, state: 'funded', protectionDeadline: 1_787_227_200 },
   evidence: {
     providerHistoryIncluded: false,
     sources: ['hashpaystream-authoritative-agreement', 'arc-funded-agreement'],
@@ -83,6 +83,8 @@ const fundedResult = await generateAgreementIntelligence(fundedInput, async () =
 assert.equal(fundedResult.recommendation, 'proceed')
 assert.equal(fundedResult.confidence, 61)
 assert.equal(fundedResult.recommendedMaxAdvanceBps, 3500)
+assert.equal(fundedInput.agreement.protectionDeadline, 1_787_227_200)
+assert.equal(agreementIntelligenceRequestSchema.safeParse({ ...input, agreement: { ...input.agreement, state: 'funded' } }).success, false)
 
 const inconsistent = {
   ...input,
