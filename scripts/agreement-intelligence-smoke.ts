@@ -48,6 +48,7 @@ const input = agreementIntelligenceRequestSchema.parse({
     protectionNetwork: 'arc-testnet',
     protectionAsset: 'test-usdc',
     recipientSelection: 'fixed-repayment-router',
+    providerRecipient: '0x2222222222222222222222222222222222222222',
     assetBridgeRequired: false,
   },
   evidence: {
@@ -94,6 +95,10 @@ assert.equal(agreementIntelligenceRequestSchema.safeParse(inconsistent).success,
 assert.equal(agreementIntelligenceRequestSchema.safeParse({
   ...input,
   agreement: { ...input.agreement, title: 'Tampered title' },
+}).success, false)
+assert.equal(agreementIntelligenceRequestSchema.safeParse({
+  ...input,
+  settlement: { ...input.settlement, providerRecipient: 'not-an-address' },
 }).success, false)
 
 console.log('ZeroScout Agreement Intelligence smoke checks passed.')

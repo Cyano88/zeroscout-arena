@@ -81,6 +81,7 @@ export const agreementIntelligenceRequestSchema = z.object({
     protectionNetwork: z.literal('arc-testnet'),
     protectionAsset: z.literal('test-usdc'),
     recipientSelection: z.literal('fixed-repayment-router'),
+    providerRecipient: evmAddressSchema,
     assetBridgeRequired: z.literal(false),
   }).strict(),
   evidence: z.object({
