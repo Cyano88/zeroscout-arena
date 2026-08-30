@@ -30,6 +30,8 @@ the BuildX AI Season pilot:
 POST /api/integrations/agreement-intelligence
 ```
 
+The endpoint accepts `zeroscout.agreement-intelligence.request` versions `1.0.0` and `2.0.0`. Version `2.0.0` represents the HashPayStream public-test profile: protected test USDC on Arc Testnet and real USDC funding on X Layer Mainnet. Responses remain `zeroscout.agreement-intelligence.result@1.0.0` for backward compatibility.
+
 It evaluates privacy-minimized service-agreement terms and returns a versioned
 `zeroscout.agreement-intelligence.result` with evidence grade, confidence,
 delivery clarity, reason codes, data gaps, summary, and a deterministic request

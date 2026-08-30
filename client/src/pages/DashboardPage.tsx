@@ -638,7 +638,7 @@ cost: ${pricing?.costs.videoScore ?? 50} credits`}</pre>
 json: projectName, teamName, repoUrl, demoUrl, description, ogUsageClaims...
 cost: ${pricing?.costs.capsule ?? 20} credits`}</pre>
             <p><b>Agreement Intelligence</b> is a separate, versioned evidence API for HashPayStream Upfront. Every active ZeroScout API key enables this schema alongside the existing intelligence API used by LP Scout.</p>
-            <p><code>POST /api/integrations/agreement-intelligence</code> accepts <code>zeroscout.agreement-intelligence.request@1.0.0</code> and returns <code>zeroscout.agreement-intelligence.result@1.0.0</code>. Cost: {pricing?.costs.agreementIntelligence ?? 40} credits.</p>
+            <p><code>POST /api/integrations/agreement-intelligence</code> accepts request versions <code>1.0.0</code> and <code>2.0.0</code>, and returns <code>zeroscout.agreement-intelligence.result@1.0.0</code>. Version 2 identifies Arc Testnet protection with X Layer Mainnet USDC funding. Cost: {pricing?.costs.agreementIntelligence ?? 40} credits.</p>
             <p><b>Custom intelligence</b> is for products that already have structured data and want ZeroScout to generate a stored operator brief through 0G Compute.</p>
             <pre>{`POST /api/integrations/intelligence
 json: partner, productType, analysisType, objective, data, outputStyle

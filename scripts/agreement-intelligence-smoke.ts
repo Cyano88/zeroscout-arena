@@ -71,6 +71,26 @@ assert.match(result.requestCommitment, /^sha256:[a-f0-9]{64}$/)
 assert(result.reasonCodes.includes('NO_PROVIDER_HISTORY'))
 assert(!JSON.stringify(result).includes(input.agreement.deliveryDescription))
 
+const mainnetFundingInput = agreementIntelligenceRequestSchema.parse({
+  ...input,
+  schemaVersion: '2.0.0',
+  source: { ...input.source, environment: 'hybrid' },
+  advance: { ...input.advance, fundingNetwork: 'x-layer-mainnet', fundingAsset: 'usdc' },
+})
+const mainnetFundingResult = await generateAgreementIntelligence(mainnetFundingInput, async () => {
+  throw new Error('AI unavailable in deterministic smoke test')
+})
+assert.equal(mainnetFundingResult.requestCommitment === result.requestCommitment, false)
+assert.equal(mainnetFundingResult.schemaVersion, '1.0.0')
+assert.equal(agreementIntelligenceRequestSchema.safeParse({
+  ...mainnetFundingInput,
+  advance: { ...mainnetFundingInput.advance, fundingNetwork: 'x-layer-testnet' },
+}).success, false)
+assert.equal(agreementIntelligenceRequestSchema.safeParse({
+  ...input,
+  advance: { ...input.advance, fundingNetwork: 'x-layer-mainnet', fundingAsset: 'usdc' },
+}).success, false)
+
 const fundedInput = agreementIntelligenceRequestSchema.parse({
   ...input,
   agreement: { ...input.agreement, state: 'funded', protectionDeadline: 1_787_227_200 },

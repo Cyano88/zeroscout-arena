@@ -50,12 +50,12 @@ const evmAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/).refine(value =>
 
 export const agreementIntelligenceRequestSchema = z.object({
   schema: z.literal('zeroscout.agreement-intelligence.request'),
-  schemaVersion: z.literal('1.0.0'),
+  schemaVersion: z.enum(['1.0.0', '2.0.0']),
   requestId: z.string().regex(/^uai_[a-zA-Z0-9]{12,80}$/),
   issuedAt: z.string().datetime({ offset: true }),
   source: z.object({
     product: z.literal('hashpaystream'),
-    environment: z.literal('testnet'),
+    environment: z.enum(['testnet', 'hybrid']),
     providerReference: z.string().regex(/^hps_provider_[a-f0-9]{32}$/),
   }).strict(),
   agreement: z.object({
@@ -73,8 +73,8 @@ export const agreementIntelligenceRequestSchema = z.object({
   advance: z.object({
     requestedBps: z.number().int().min(1_000).max(8_000),
     requestedUsdcUnits: usdcUnitsSchema,
-    fundingNetwork: z.literal('x-layer-testnet'),
-    fundingAsset: z.literal('test-usdc'),
+    fundingNetwork: z.enum(['x-layer-testnet', 'x-layer-mainnet']),
+    fundingAsset: z.enum(['test-usdc', 'usdc']),
     providerPayoutAddress: evmAddressSchema,
   }).strict(),
   settlement: z.object({
@@ -90,6 +90,16 @@ export const agreementIntelligenceRequestSchema = z.object({
     dataGaps: z.array(z.string().trim().min(3).max(100)).max(20),
   }).strict(),
 }).strict().superRefine((value, context) => {
+  const validNetworkProfile = value.schemaVersion === '1.0.0'
+    ? value.source.environment === 'testnet'
+      && value.advance.fundingNetwork === 'x-layer-testnet'
+      && value.advance.fundingAsset === 'test-usdc'
+    : value.source.environment === 'hybrid'
+      && value.advance.fundingNetwork === 'x-layer-mainnet'
+      && value.advance.fundingAsset === 'usdc'
+  if (!validNetworkProfile) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['schemaVersion'], message: 'Schema version does not match the declared funding environment.' })
+  }
   if (value.agreement.cancellationWindowSeconds >= value.agreement.durationSeconds) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['agreement', 'cancellationWindowSeconds'], message: 'Cancellation window must end before agreement expiry.' })
   }
