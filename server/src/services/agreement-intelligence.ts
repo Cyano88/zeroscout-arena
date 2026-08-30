@@ -40,6 +40,15 @@ function unique(values: string[], maximum = 20) {
   return [...new Set(values.map(value => value.replace(/\s+/g, ' ').trim()).filter(Boolean))].slice(0, maximum)
 }
 
+async function withOptionalAiDeadline<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error('Optional agreement AI timed out.')), timeoutMs)
+  })
+  try { return await Promise.race([promise, timeout]) }
+  finally { if (timer) clearTimeout(timer) }
+}
+
 function deterministicEvidence(input: AgreementIntelligenceRequest) {
   const words = input.agreement.deliveryDescription.split(/\s+/).filter(Boolean).length
   const deliveryClarityScore = clamp(
@@ -83,6 +92,7 @@ function deterministicEvidence(input: AgreementIntelligenceRequest) {
 export async function generateAgreementIntelligence(
   input: AgreementIntelligenceRequest,
   generate: typeof generateCustomIntelligence = generateCustomIntelligence,
+  aiTimeoutMs = 8_000,
 ): Promise<AgreementIntelligenceResult> {
   const deterministic = deterministicEvidence(input)
   let aiProvider = 'zeroscout-deterministic-evidence-engine'
@@ -90,14 +100,14 @@ export async function generateAgreementIntelligence(
   let aiSignals: string[] = []
   let aiRiskFlags: string[] = []
   try {
-    const ai = await generate({
+    const ai = await withOptionalAiDeadline(generate({
       partner: 'HashPayStream',
       productType: 'agreement-financing',
       analysisType: 'agreement-intelligence',
       objective: 'Assess evidence quality, delivery clarity, and bounded advance risk without making a lending decision.',
       outputStyle: 'structured-underwriting-evidence',
       data: input,
-    })
+    }), Math.max(1, Math.min(15_000, Math.floor(aiTimeoutMs))))
     aiProvider = ai.aiProvider
     aiSummary = ai.summary
     aiSignals = ai.signals

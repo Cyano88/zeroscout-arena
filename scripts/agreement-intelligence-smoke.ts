@@ -87,6 +87,12 @@ assert.equal(fundedResult.recommendedMaxAdvanceBps, 3500)
 assert.equal(fundedInput.agreement.protectionDeadline, 1_787_227_200)
 assert.equal(agreementIntelligenceRequestSchema.safeParse({ ...input, agreement: { ...input.agreement, state: 'funded' } }).success, false)
 
+const timeoutStartedAt = Date.now()
+const timeoutFallback = await generateAgreementIntelligence(fundedInput, () => new Promise(() => {}), 5)
+assert.equal(timeoutFallback.intelligenceProvider, 'zeroscout-deterministic-evidence-engine')
+assert.equal(timeoutFallback.requestCommitment, fundedResult.requestCommitment)
+assert(Date.now() - timeoutStartedAt < 500)
+
 const inconsistent = {
   ...input,
   advance: { ...input.advance, requestedUsdcUnits: '30075001' },
