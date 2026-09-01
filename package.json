@@ -18,6 +18,7 @@
     "deploy:registry": "tsx scripts/deploy-registry.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
     "test:agreement-intelligence": "node --import tsx scripts/agreement-intelligence-smoke.ts",
+    "test:direct-trade-intelligence": "node --import tsx scripts/direct-trade-intelligence-smoke.ts",
     "lint": "eslint . --ext ts,tsx --max-warnings 0"
   },
   "dependencies": {
@@ -51,8 +52,10 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "eslint": "^9.17.0",
+    "globals": "^17.12.0",
     "solc": "^0.8.35",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.69.0"
   },
   "overrides": {
     "axios": "1.18.1",

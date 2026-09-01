@@ -39,6 +39,21 @@ commitment. The output is evidence for PolyDesk's bounded underwriting policy;
 it is never a direct funding instruction. The integration accepts only named,
 hashed server credentials with the `agreement-intelligence` endpoint scope.
 
+## Direct Trade Intelligence for PolyDesk OKX AI
+
+The authenticated custom-intelligence endpoint also has a separate direct-trade lane for the PolyDesk OKX AI service:
+
+```text
+POST /api/integrations/intelligence
+productType: polymarket-direct-trading
+analysisType: polydesk-smart-market-research
+proofClass: polydesk_smart_market_research
+```
+
+This lane requires an exact Polymarket condition ID, outcome token, BUY or SELL side, execution snapshot, and bounded mandate. It returns a structured `SUPPORT`, `OPPOSE`, or `INSUFFICIENT` trade assessment with thesis, counter-thesis, resolution risk, and evidence quality.
+
+Direct-trade requests never enter the LP intelligence lane. The prompt explicitly prohibits liquidity provision, two-sided quoting, maker-reward farming, and LP inventory guidance. It provides decision support only; OnchainOS retains access checks, preview, typed live confirmation, signing, and submission.
+
 
 
 ## Why It Is AI-Native

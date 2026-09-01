@@ -571,6 +571,7 @@ app.post("/api/integrations/intelligence", async (req, res, next) => {
       partner: cleanBodyField(req.body?.partner, integration?.partner ?? "External platform"),
       productType: cleanBodyField(req.body?.productType, "custom-platform"),
       analysisType: requestedAnalysisType,
+      proofClass: requestedProofClass,
       objective: cleanBodyField(req.body?.objective, "Find useful, practical signals from the supplied data."),
       outputStyle: cleanBodyField(req.body?.outputStyle, "executive-brief"),
       data: req.body?.data
