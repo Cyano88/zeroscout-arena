@@ -39,6 +39,12 @@ export const config = {
   computeApiKey: process.env.ZG_COMPUTE_API_KEY,
   computeBaseUrl: process.env.ZG_COMPUTE_BASE_URL ?? (isMainnet ? "https://router-api.0g.ai/v1" : "https://router-api-testnet.integratenetwork.work/v1"),
   computeModel: process.env.ZEROSCOUT_FULL_PLATFORM_MODEL ?? process.env.ZG_COMPUTE_MODEL ?? "claude-fable-5",
+  computeDirectTradeModel: process.env.ZEROSCOUT_DIRECT_TRADE_MODEL ?? "gpt-5.6-luna",
+  computeDirectTradeModelCandidates: commaSeparated(
+    process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_CANDIDATES?.trim()
+      || "gpt-5.6-luna,glm-5.3-flash,deepseek-v4-flash"
+  ),
+  computeDirectTradeAttemptTimeoutMs: Math.max(3_000, Math.min(20_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_ATTEMPT_TIMEOUT_MS ?? 12_000) || 12_000)),
   computeHelperModel: process.env.ZEROSCOUT_HELPER_MODEL ?? process.env.ZG_COMPUTE_HELPER_MODEL ?? "claude-sonnet-5",
   computeHelperModelCandidates: commaSeparated(
     process.env.ZEROSCOUT_HELPER_MODEL_CANDIDATES?.trim()
@@ -82,6 +88,7 @@ export function publicConfig() {
             configuredFallbacks: config.computeHelperModelCandidates,
             discoversRouterModels: config.computeHelperModelDiscovery
           },
+          directTrade: config.computeDirectTradeModel,
           lpIntelligence: config.computeLpModel,
           lpVerifier: config.lpVerifierEnabled ? config.computeLpVerifierModel : undefined,
           videoScoring: config.computeVideoModel,

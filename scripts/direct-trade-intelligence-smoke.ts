@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 process.env.ZG_COMPUTE_API_KEY = 'test-0g-key'
 process.env.ZG_COMPUTE_BASE_URL = 'https://router-api.0g.test/v1'
 process.env.ZEROSCOUT_FULL_PLATFORM_MODEL = 'direct-trade-test-model'
+process.env.ZEROSCOUT_DIRECT_TRADE_MODEL = 'direct-trade-test-model'
+process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_CANDIDATES = 'direct-trade-test-model'
 
 const originalFetch = globalThis.fetch
 const prompts: string[] = []

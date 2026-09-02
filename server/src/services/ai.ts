@@ -242,10 +242,10 @@ async function generateDirectTradeIntelligence(input: CustomIntelligenceInput): 
   if (!config.computeApiKey) throw new Error("0G Compute Router is not configured for direct-trade intelligence.");
 
   const modelCandidates = uniqueStrings([
+    config.computeDirectTradeModel,
+    ...config.computeDirectTradeModelCandidates,
     config.computeModel,
-    config.computeHelperModel,
-    "deepseek-v4-pro",
-    "glm-5.2"
+    config.computeHelperModel
   ]);
   const prompt = `Create a ZeroScout Direct Trade Intelligence brief for the PolyDesk OKX AI service.
 
@@ -1503,7 +1503,11 @@ function getLpAiClient(): AiChatClient | undefined {
 function getComputeAiClientForModel(modelInput: string, laneLabel: string): AiChatClient {
   const model = readString(modelInput) || config.computeModel;
   const format = computeApiFormatForModel(model);
-  const timeoutMs = laneLabel === "helper" ? config.computeHelperAttemptTimeoutMs : 30_000;
+  const timeoutMs = laneLabel === "helper"
+    ? config.computeHelperAttemptTimeoutMs
+    : laneLabel === "Direct Trade Intelligence"
+      ? config.computeDirectTradeAttemptTimeoutMs
+      : 30_000;
   return {
     client: new OpenAI({
       apiKey: config.computeApiKey ?? "",
