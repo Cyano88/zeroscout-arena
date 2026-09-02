@@ -610,6 +610,27 @@ app.post("/api/integrations/intelligence", async (req, res, next) => {
   }
 });
 
+app.post("/api/integrations/intelligence/readiness", async (req, res, next) => {
+  try {
+    const analysisType = cleanBodyField(req.body?.analysisType, "custom-intelligence");
+    const proofClass = bodyProofClass(req);
+    const integration = await assertIntegrationIdentity(req, {
+      endpoint: "intelligence",
+      analysisType,
+      proofClass
+    });
+    res.json({
+      ok: true,
+      service: "zeroscout-intelligence",
+      analysisType,
+      proofClass,
+      integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/integrations/sponsorship-proof", async (req, res, next) => {
   try {
     const proofClass = cleanBodyField(req.body?.proofClass ?? req.body?.data?.proofClass, "zeroscout_sponsored_action").slice(0, 120);
