@@ -28,7 +28,7 @@ globalThis.fetch = async (_url, init = {}) => {
           confidence: 63,
           summary: 'The supplied evidence supports the requested BUY, subject to the stated risks.',
           signals: ['Current two-sided book is inside the supplied mandate.'],
-          riskFlags: ['Resolution and headline risk remain.'],
+          riskFlags: [{ risk: 'Resolution and headline risk remain.', severity: 'high' }],
           recommendedActions: ['Refresh the order book before preparing the trade.'],
           dataGaps: [],
           suggestedVisuals: [],
@@ -80,6 +80,8 @@ try {
   assert.equal(result.intent, 'polymarket-direct-trade-intelligence')
   assert.equal(result.tradeAssessment?.stance, 'SUPPORT')
   assert.equal(result.tradeAssessment?.side, 'BUY')
+  assert.match(result.riskFlags?.[0] ?? '', /Resolution and headline risk remain/)
+  assert.notEqual(result.riskFlags?.[0], '[object Object]')
   mockedAssessmentSide = 'SELL'
   const mismatchedResult = await generateCustomIntelligence(directInput)
   assert.equal(mismatchedResult.tradeAssessment?.side, 'SELL')

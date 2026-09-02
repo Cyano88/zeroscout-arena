@@ -1906,7 +1906,22 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function list(value: unknown, fallback: string[]): string[] {
-  return Array.isArray(value) && value.length > 0 ? value.map(String).slice(0, 8) : fallback;
+  if (!Array.isArray(value) || value.length === 0) return fallback;
+  const normalized = value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (item && typeof item === "object") {
+        try {
+          return JSON.stringify(item).slice(0, 600);
+        } catch {
+          return "";
+        }
+      }
+      return item === undefined || item === null ? "" : String(item).trim();
+    })
+    .filter(Boolean)
+    .slice(0, 8);
+  return normalized.length ? normalized : fallback;
 }
 
 function text(value: unknown, fallback: string): string {
