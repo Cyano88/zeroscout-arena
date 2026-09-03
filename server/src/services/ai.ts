@@ -1646,6 +1646,7 @@ async function completeJson(
       }
     }
     const retryWithoutTrustMode = shouldRetryWithoutTrustMode(firstError);
+    if (!retryWithoutTrustMode && !enforceResponseFormat) throw firstError;
     const client = retryWithoutTrustMode ? getDefaultTrustComputeClient(ai.timeoutMs) : ai.client;
     try {
       const content = await run(client, enforceResponseFormat, retryWithoutTrustMode);

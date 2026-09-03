@@ -13,6 +13,7 @@ const prompts: string[] = []
 const responseFormats: unknown[] = []
 const trustModes: Array<string | null> = []
 let mockedAssessmentSide: 'BUY' | 'SELL' = 'BUY'
+let mockTrustFailure = true
 
 globalThis.fetch = async (_url, init = {}) => {
   const headers = new Headers(init.headers)
@@ -22,7 +23,7 @@ globalThis.fetch = async (_url, init = {}) => {
   prompts.push((body.messages ?? []).map(message => message.content ?? '').join('\n'))
   responseFormats.push(body.response_format)
   if (trustMode) {
-    return new Response(JSON.stringify({ error: { message: 'No provider available for the requested trust mode' } }), {
+    return new Response(JSON.stringify({ error: { message: mockTrustFailure ? 'No provider available for the requested trust mode' : 'Request timed out' } }), {
       status: 503,
       headers: { 'content-type': 'application/json' },
     })
@@ -118,6 +119,10 @@ try {
   assert(responseFormats.every(value => value === undefined))
   assert(trustModes.includes('verified'))
   assert(trustModes.includes(null))
+  mockTrustFailure = false
+  const callsBeforeTimeout = trustModes.length
+  await assert.rejects(() => generateCustomIntelligence(directInput), /Request timed out/i)
+  assert.equal(trustModes.length, callsBeforeTimeout + 1)
   console.log('zeroscout direct-trade intelligence smoke ok')
 } finally {
   globalThis.fetch = originalFetch
