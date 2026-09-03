@@ -283,12 +283,12 @@ Rules:
   for (const model of modelCandidates) {
     const ai = getComputeAiClientForModel(model, "Direct Trade Intelligence");
     try {
-      const content = await withAiTimeout(completeJson(ai, [
+      const completion = await completeDirectTradeJson(ai, [
         { role: "system", content: "You are ZeroScout's direct prediction-market trade intelligence verifier. Return strict JSON only. Never provide LP analysis or fabricate evidence." },
         { role: "user", content: prompt }
-      ], false), ai.timeoutMs, ai.model);
-      parsed = parseJsonObject(content ?? "{}");
-      selectedAi = ai;
+      ]);
+      parsed = parseJsonObject(completion.content ?? "{}");
+      selectedAi = { ...ai, label: `${ai.label}; trust=${completion.trustMode}` };
       break;
     } catch (error) {
       errors.push(`${ai.model}: ${sanitizeAiError(error)}`);
@@ -1428,13 +1428,13 @@ async function completeHelperGuidanceForLane(
     attemptedModels.push(model);
     const ai = getComputeAiClientForModel(model, "helper");
     try {
-      const content = await withAiTimeout(completeJson(ai, [
+      const content = await withAiTimeout(signal => completeJson(ai, [
         {
           role: "system",
           content: "You are ZeroScout's consumer helper intelligence layer for Hash PayLink. Return strict JSON only. Be concise, human, privacy-safe, and proof-aware."
         },
         { role: "user", content: prompt }
-      ]), config.computeHelperAttemptTimeoutMs, model);
+      ], true, { signal }), config.computeHelperAttemptTimeoutMs, model);
       return {
         parsed: parseJsonObject(content ?? "{}"),
         providerLabel: ai.label,
@@ -1484,14 +1484,65 @@ function isTextHelperModel(model: string): boolean {
   return !/(embed|rerank|whisper|speech|audio|image|diffusion|stable-diffusion|qwen.*vl)/i.test(model);
 }
 
-async function withAiTimeout<T>(promise: Promise<T>, timeoutMs: number, model: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${model} timed out after ${timeoutMs}ms.`)), timeoutMs);
-  });
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
+async function withAiTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number, model: string): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await operation(controller.signal);
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error(`${model} timed out after ${timeoutMs}ms.`);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function completeDirectTradeJson(
+  ai: AiChatClient,
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+): Promise<{ content: string | undefined; trustMode: "configured" | "default" }> {
+  const configuredTrust = Boolean(config.computeTrustMode && config.computeTrustMode !== "default");
+  if (!configuredTrust) {
+    const content = await withAiTimeout(
+      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 2400 }),
+      ai.timeoutMs,
+      ai.model
+    );
+    return { content, trustMode: "default" };
+  }
+
+  const startedAt = Date.now();
+  const trustProbeMs = Math.min(config.computeDirectTradeTrustProbeTimeoutMs, Math.max(1_000, ai.timeoutMs - 1_000));
+  let configuredError: unknown;
+  try {
+    const content = await withAiTimeout(
+      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, maxTokens: 2400 }),
+      trustProbeMs,
+      `${ai.model} configured-trust probe`
+    );
+    return { content, trustMode: "configured" };
+  } catch (error) {
+    configuredError = error;
+  }
+
+  const remainingMs = ai.timeoutMs - (Date.now() - startedAt);
+  if (remainingMs < 1_000) {
+    throw new Error(
+      `configured trust failed: ${sanitizeAiError(configuredError)}; no default-trust fallback budget remained.`
+    );
+  }
+  try {
+    const content = await withAiTimeout(
+      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 2400 }),
+      remainingMs,
+      `${ai.model} default-trust fallback`
+    );
+    return { content, trustMode: "default" };
+  } catch (fallbackError) {
+    throw new Error(
+      `configured trust failed: ${sanitizeAiError(configuredError)}; default trust failed: ${sanitizeAiError(fallbackError)}`
+    );
+  }
 }
 
 function getFullPlatformAiClient(): AiChatClient | undefined {
@@ -1600,7 +1651,14 @@ async function completeJson(
   ai: AiChatClient,
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   enforceResponseFormat = true,
+  options: {
+    signal?: AbortSignal;
+    allowTrustFallback?: boolean;
+    useDefaultTrustMode?: boolean;
+    maxTokens?: number;
+  } = {},
 ): Promise<string | undefined> {
+  const allowTrustFallback = options.allowTrustFallback !== false;
   const run = async (
     client: OpenAI,
     enforceJson: boolean,
@@ -1618,20 +1676,23 @@ async function completeJson(
         ];
     const format = formatOverride ?? ai.format;
     if (format === "messages") {
-      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs);
+      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs, options.signal);
     }
     const response = await client.chat.completions.create({
       model: ai.model,
       temperature: 0.35,
       ...(enforceJson ? { response_format: { type: "json_object" as const } } : {}),
-      messages: finalMessages
-    });
+      messages: finalMessages,
+      ...(options.maxTokens ? { max_tokens: options.maxTokens } : {})
+    }, options.signal ? { signal: options.signal } : undefined);
     return response.choices[0]?.message?.content ?? undefined;
   };
 
   try {
-    return await run(ai.client, enforceResponseFormat);
+    const initialClient = options.useDefaultTrustMode ? getDefaultTrustComputeClient(ai.timeoutMs) : ai.client;
+    return await run(initialClient, enforceResponseFormat, options.useDefaultTrustMode);
   } catch (firstError) {
+    if (!allowTrustFallback) throw firstError;
     const formatRetry = alternateFormatForError(firstError, ai.format);
     if (formatRetry) {
       try {
@@ -1670,7 +1731,8 @@ async function completeJsonWithAnthropicFormat(
   model: string,
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   useDefaultTrustMode: boolean,
-  timeoutMs: number
+  timeoutMs: number,
+  externalSignal?: AbortSignal
 ): Promise<string | undefined> {
   const url = `${config.computeBaseUrl.replace(/\/$/, "")}/messages`;
   const system = messages
@@ -1685,8 +1747,8 @@ async function completeJsonWithAnthropicFormat(
       content: messageContentToText(message.content)
     }))
     .filter((message) => message.content);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const controller = externalSignal ? undefined : new AbortController();
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -1705,8 +1767,10 @@ async function completeJsonWithAnthropicFormat(
         ? chatMessages
         : [{ role: "user", content: "Return valid JSON for the supplied ZeroScout request." }]
     }),
-    signal: controller.signal
-  }).finally(() => clearTimeout(timer));
+    signal: externalSignal ?? controller?.signal
+  }).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
   const body = await response.text();
   if (!response.ok) {
     throw new Error(`${response.status} ${body.slice(0, 500)}`);

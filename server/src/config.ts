@@ -46,6 +46,7 @@ export const config = {
       || "gpt-5.6-sol"
   ),
   computeDirectTradeAttemptTimeoutMs: Math.max(3_000, Math.min(60_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_ATTEMPT_TIMEOUT_MS ?? 30_000) || 30_000)),
+  computeDirectTradeTrustProbeTimeoutMs: Math.max(1_000, Math.min(15_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_TRUST_PROBE_TIMEOUT_MS ?? 10_000) || 10_000)),
   computeHelperModel: process.env.ZEROSCOUT_HELPER_MODEL ?? process.env.ZG_COMPUTE_HELPER_MODEL ?? "claude-sonnet-5",
   computeHelperModelCandidates: commaSeparated(
     process.env.ZEROSCOUT_HELPER_MODEL_CANDIDATES?.trim()

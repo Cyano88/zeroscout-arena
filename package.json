@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
     "test:agreement-intelligence": "node --import tsx scripts/agreement-intelligence-smoke.ts",
     "test:direct-trade-intelligence": "node --import tsx scripts/direct-trade-intelligence-smoke.ts",
+    "canary:direct-trade-intelligence": "node --import tsx scripts/direct-trade-intelligence-canary.ts",
     "lint": "eslint . --ext ts,tsx --max-warnings 0"
   },
   "dependencies": {

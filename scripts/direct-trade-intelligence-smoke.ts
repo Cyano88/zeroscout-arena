@@ -8,23 +8,33 @@ process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_CANDIDATES = 'direct-trade-test-model'
 process.env.ZEROSCOUT_HELPER_MODEL = 'helper-model-must-not-enter-direct-trade-routing'
 process.env.ZG_COMPUTE_TRUST_MODE = 'verified'
 process.env.ZEROSCOUT_DIRECT_TRADE_ATTEMPT_TIMEOUT_MS = '3000'
+process.env.ZEROSCOUT_DIRECT_TRADE_TRUST_PROBE_TIMEOUT_MS = '1000'
 
 const originalFetch = globalThis.fetch
 const prompts: string[] = []
 const responseFormats: unknown[] = []
+const outputTokenLimits: unknown[] = []
 const trustModes: Array<string | null> = []
 let mockedAssessmentSide: 'BUY' | 'SELL' = 'BUY'
 let mockTrustFailure = true
 let mockHang = false
+let mockConfiguredTrustHang = false
 
 globalThis.fetch = async (_url, init = {}) => {
   const headers = new Headers(init.headers)
   const trustMode = headers.get('x-0g-provider-trust-mode')
   trustModes.push(trustMode)
-  if (mockHang) return new Promise<Response>(() => {})
-  const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; response_format?: unknown; messages?: Array<{ content?: string }> }
+  if (mockHang || (mockConfiguredTrustHang && trustMode)) {
+    return new Promise<Response>((_resolve, reject) => {
+      const signal = init.signal
+      if (signal?.aborted) return reject(new DOMException('The operation was aborted.', 'AbortError'))
+      signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')), { once: true })
+    })
+  }
+  const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; response_format?: unknown; max_tokens?: unknown; messages?: Array<{ content?: string }> }
   prompts.push((body.messages ?? []).map(message => message.content ?? '').join('\n'))
   responseFormats.push(body.response_format)
+  outputTokenLimits.push(body.max_tokens)
   if (trustMode) {
     return new Response(JSON.stringify({ error: { message: mockTrustFailure ? 'No provider available for the requested trust mode' : 'Request timed out' } }), {
       status: 503,
@@ -120,16 +130,27 @@ try {
   assert.match(prompts.join('\n'), /must not be reported as a research data gap/i)
   assert.match(prompts.join('\n'), /RESOLUTION_AUTHORITY/i)
   assert(responseFormats.every(value => value === undefined))
+  assert(outputTokenLimits.every(value => value === 2400))
   assert(trustModes.includes('verified'))
   assert(trustModes.includes(null))
   mockTrustFailure = false
   const callsBeforeTimeout = trustModes.length
-  await assert.rejects(() => generateCustomIntelligence(directInput), /Request timed out/i)
-  assert.equal(trustModes.length, callsBeforeTimeout + 1)
+  const errorFallbackResult = await generateCustomIntelligence(directInput)
+  assert.equal(errorFallbackResult.tradeAssessment?.stance, 'INSUFFICIENT')
+  assert.deepEqual(trustModes.slice(callsBeforeTimeout), ['verified', null])
+  mockConfiguredTrustHang = true
+  const callsBeforeFallback = trustModes.length
+  const fallbackResult = await generateCustomIntelligence(directInput)
+  assert.equal(fallbackResult.tradeAssessment?.stance, 'INSUFFICIENT')
+  assert.deepEqual(trustModes.slice(callsBeforeFallback), ['verified', null])
+  mockConfiguredTrustHang = false
   mockHang = true
   const callsBeforeHang = trustModes.length
-  await assert.rejects(() => generateCustomIntelligence(directInput), /timed out after 3000ms/i)
-  assert.equal(trustModes.length, callsBeforeHang + 1)
+  await assert.rejects(
+    () => generateCustomIntelligence(directInput),
+    /configured trust failed.*timed out after 1000ms.*default trust failed.*timed out after 1\d{3}ms/i,
+  )
+  assert.equal(trustModes.length, callsBeforeHang + 2)
   console.log('zeroscout direct-trade intelligence smoke ok')
 } finally {
   globalThis.fetch = originalFetch
