@@ -92,6 +92,23 @@ function sourceHost(value: string | undefined): string {
   }
 }
 
+function isExcludedEvidenceUrl(url: string, resolutionSource: string | undefined): boolean {
+  const host = sourceHost(url).toLowerCase();
+  const resolutionHost = sourceHost(resolutionSource).toLowerCase();
+  if (resolutionHost && host === resolutionHost) return false;
+  const excludedHosts = [
+    'facebook.com',
+    'instagram.com',
+    'polymarket.com',
+    'reddit.com',
+    'tiktok.com',
+    'twitter.com',
+    'x.com',
+    'youtube.com',
+  ];
+  return excludedHosts.some((excluded) => host === excluded || host.endsWith('.' + excluded));
+}
+
 export function buildPolyDeskResearchQueries(input: PolyDeskGeneralResearchRequest): string[] {
   const query = cleanText(input.query, 180);
   const question = cleanText(input.market.question, 300);
@@ -200,6 +217,7 @@ export async function fetchPolyDeskGeneralResearch(
   const batches = await Promise.all(searchQueries.map((query) => searchTavily(query, apiKey, baseUrl)));
   const byUrl = new Map<string, z.infer<typeof tavilyResultSchema>>();
   for (const candidate of batches.flat()) {
+    if (isExcludedEvidenceUrl(candidate.url, input.market.resolutionSource)) continue;
     if (!/^https?:\/\//i.test(candidate.url)) continue;
     const key = candidate.url.toLowerCase();
     const prior = byUrl.get(key);

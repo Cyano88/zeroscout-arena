@@ -87,6 +87,11 @@ globalThis.fetch = async (input, init) => {
       content: 'Current evidence returned by the retrieval API.',
       published_date: '2026-09-01',
       score: searchCalls === 1 ? 0.98 : 0.8,
+    }, {
+      title: 'Social media commentary',
+      url: 'https://www.facebook.com/example/posts/market-rumor',
+      content: 'Unverified commentary must not become evidence.',
+      score: 0.99,
     }],
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 };
