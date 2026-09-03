@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { config } from '../config.js';
 
 export const polyDeskGeneralResearchRequestSchema = z.object({
   schema: z.literal('zeroscout.polydesk-general-research.request'),
@@ -27,21 +28,33 @@ export type PolyDeskGeneralResearchResult = {
   articles: PolyDeskGeneralResearchArticle[];
   model: string;
   searchQueries: string[];
-};
-
-type Citation = {
-  title: string;
-  url: string;
-  startIndex?: number;
-  endIndex?: number;
+  computeProvider: '0G Compute Router';
+  retrievalProvider: 'Tavily Search';
 };
 
 type CacheEntry = { expiresAt: number; result: PolyDeskGeneralResearchResult };
 
 const cache = new Map<string, CacheEntry>();
-const DEFAULT_MODEL = 'gpt-5.6';
-const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
+const DEFAULT_MODEL = 'gpt-5.6-sol';
+const DEFAULT_SEARCH_BASE_URL = 'https://api.tavily.com';
 const DEFAULT_CACHE_MS = 10 * 60 * 1000;
+
+const queryPlanSchema = z.object({
+  queries: z.array(z.string().trim().min(3).max(300)).min(2).max(3),
+}).strict();
+
+const tavilyResultSchema = z.object({
+  title: z.string().optional().default(''),
+  url: z.string().url(),
+  content: z.string().optional().default(''),
+  raw_content: z.string().nullable().optional(),
+  published_date: z.string().nullable().optional(),
+  score: z.number().optional().default(0),
+});
+
+const tavilyResponseSchema = z.object({
+  results: z.array(tavilyResultSchema).default([]),
+});
 
 function cleanText(value: string, max = 500): string {
   return value
@@ -91,150 +104,126 @@ export function buildPolyDeskResearchQueries(input: PolyDeskGeneralResearchReque
   ].map((value) => cleanText(value, 300)).filter(Boolean))];
 }
 
-function responseText(payload: Record<string, unknown>): string {
-  if (typeof payload.output_text === 'string') return payload.output_text;
-  const output = Array.isArray(payload.output) ? payload.output : [];
-  return output.flatMap((item) => {
-    if (!item || typeof item !== 'object') return [];
-    const content = Array.isArray((item as Record<string, unknown>).content)
-      ? (item as Record<string, unknown>).content as Array<Record<string, unknown>>
-      : [];
-    return content.map((entry) => typeof entry.text === 'string' ? entry.text : '');
-  }).filter(Boolean).join('\n');
+function parseJsonObject(value: string): unknown {
+  const trimmed = value.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('0G research planner returned invalid JSON.');
+  return JSON.parse(trimmed.slice(start, end + 1));
 }
 
-function responseSearchQueries(payload: Record<string, unknown>, fallback: string[]): string[] {
-  const output = Array.isArray(payload.output) ? payload.output : [];
-  const queries = output.flatMap((item) => {
-    if (!item || typeof item !== 'object') return [];
-    const record = item as Record<string, unknown>;
-    if (record.type !== 'web_search_call' || !record.action || typeof record.action !== 'object') return [];
-    const action = record.action as Record<string, unknown>;
-    if (Array.isArray(action.queries)) return action.queries.filter((value): value is string => typeof value === 'string');
-    return typeof action.query === 'string' ? [action.query] : [];
-  });
-  return [...new Set((queries.length ? queries : fallback).map((value) => cleanText(value, 300)).filter(Boolean))];
-}
-
-function responseCitations(payload: Record<string, unknown>): Citation[] {
-  const output = Array.isArray(payload.output) ? payload.output : [];
-  const citations: Citation[] = [];
-  for (const item of output) {
-    if (!item || typeof item !== 'object') continue;
-    const content = Array.isArray((item as Record<string, unknown>).content)
-      ? (item as Record<string, unknown>).content as Array<Record<string, unknown>>
-      : [];
-    for (const entry of content) {
-      const annotations = Array.isArray(entry.annotations) ? entry.annotations : [];
-      for (const annotationValue of annotations) {
-        if (!annotationValue || typeof annotationValue !== 'object') continue;
-        const annotation = annotationValue as Record<string, unknown>;
-        const nested = annotation.url_citation && typeof annotation.url_citation === 'object'
-          ? annotation.url_citation as Record<string, unknown>
-          : annotation;
-        const url = typeof nested.url === 'string' ? nested.url.trim() : '';
-        if (annotation.type !== 'url_citation' || !/^https?:\/\//i.test(url)) continue;
-        citations.push({
-          title: typeof nested.title === 'string' ? cleanText(nested.title, 500) : '',
-          url,
-          startIndex: typeof nested.start_index === 'number' ? nested.start_index : undefined,
-          endIndex: typeof nested.end_index === 'number' ? nested.end_index : undefined,
-        });
-      }
-    }
-  }
-  return citations;
-}
-
-function citationDescription(citation: Citation, text: string, question: string): string {
-  if (citation.startIndex !== undefined && citation.endIndex !== undefined) {
-    const start = Math.max(0, citation.startIndex - 220);
-    const end = Math.min(text.length, citation.endIndex + 120);
-    const context = cleanText(text.slice(start, end), 700);
-    if (context) return context;
-  }
-  return 'Source cited by ZeroScout agentic web research for: ' + cleanText(question, 400);
-}
-
-function articlesFromResponse(payload: Record<string, unknown>, question: string): PolyDeskGeneralResearchArticle[] {
-  const text = responseText(payload);
-  const seen = new Set<string>();
-  return responseCitations(payload)
-    .filter((citation) => {
-      const key = citation.url.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .map((citation) => ({
-      title: citation.title || sourceHost(citation.url) || 'Cited web source',
-      description: citationDescription(citation, text, question),
-      source: sourceHost(citation.url) || 'Web source',
-      url: citation.url,
-      publishedAt: '',
-    }))
-    .slice(0, 8);
-}
-
-export function polyDeskGeneralResearchConfigured(): boolean {
-  return Boolean(process.env.ZEROSCOUT_GENERAL_RESEARCH_API_KEY?.trim());
-}
-
-export async function fetchPolyDeskGeneralResearch(
+async function planQueriesWith0g(
   input: PolyDeskGeneralResearchRequest,
-): Promise<PolyDeskGeneralResearchResult> {
-  const apiKey = process.env.ZEROSCOUT_GENERAL_RESEARCH_API_KEY?.trim() || '';
-  if (!apiKey) throw new Error('ZeroScout agentic web research is not configured.');
-
-  const model = process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL?.trim() || DEFAULT_MODEL;
-  const baseUrl = (process.env.ZEROSCOUT_GENERAL_RESEARCH_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, '');
-  const seedQueries = buildPolyDeskResearchQueries(input);
-  const cacheKey = input.market.conditionId.toLowerCase() + '|' + cleanText(input.query, 180).toLowerCase();
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.result;
-
+  model: string,
+): Promise<string[]> {
+  if (!config.computeApiKey) throw new Error('0G Compute Router is not configured.');
+  const seeds = buildPolyDeskResearchQueries(input);
   const prompt = [
-    'You are ZeroScout market research. Search the live web before answering.',
-    'Research this prediction market without forecasting or recommending a trade.',
+    'Create 2 to 3 precise web-search queries for evidence about this prediction market.',
+    'Return JSON only: {"queries":["..."]}. Do not answer the market and do not invent URLs.',
+    'Queries must cover: the official resolution authority, the newest confirming evidence, and credible contradictory evidence.',
+    'Use distinctive entities, dates, thresholds, event names, and resolution keywords from the complete rules.',
+    'Research request: ' + input.query,
     'Market question: ' + input.market.question,
     'Full resolution rules: ' + input.market.resolutionRules,
     input.market.resolutionSource ? 'Resolution source: ' + input.market.resolutionSource : '',
-    'Seed search queries: ' + seedQueries.join(' | '),
-    'Prioritize primary sources, official resolution authorities, reputable reporting, and recent contradictory evidence.',
-    'Do not rely on memory. Every factual claim must have a web citation. Clearly separate confirmed facts from uncertainty.',
+    'Deterministic seed queries: ' + seeds.join(' | '),
   ].filter(Boolean).join('\n');
 
-  const response = await fetch(baseUrl + '/responses', {
+  const response = await fetch(config.computeBaseUrl.replace(/\/+$/, '') + '/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + config.computeApiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.1,
+      messages: [
+        { role: 'system', content: 'You are ZeroScout query planning running through 0G Compute. Output strict JSON only.' },
+        { role: 'user', content: prompt },
+      ],
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const payload = await response.json() as Record<string, unknown>;
+  if (!response.ok) throw new Error('0G research planner failed with ' + response.status + '.');
+  const choices = Array.isArray(payload.choices) ? payload.choices : [];
+  const first = choices[0] && typeof choices[0] === 'object' ? choices[0] as Record<string, unknown> : {};
+  const message = first.message && typeof first.message === 'object' ? first.message as Record<string, unknown> : {};
+  const content = typeof message.content === 'string' ? message.content : '';
+  const plan = queryPlanSchema.parse(parseJsonObject(content));
+  return [...new Set(plan.queries.map((query) => cleanText(query, 300)).filter(Boolean))];
+}
+
+async function searchTavily(query: string, apiKey: string, baseUrl: string) {
+  const response = await fetch(baseUrl.replace(/\/+$/, '') + '/search', {
     method: 'POST',
     headers: {
       Authorization: 'Bearer ' + apiKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model,
-      reasoning: { effort: 'low' },
-      tools: [{ type: 'web_search' }],
-      tool_choice: 'required',
-      include: ['web_search_call.action.sources'],
-      input: prompt,
+      query,
+      search_depth: 'advanced',
+      topic: 'general',
+      max_results: 5,
+      include_answer: false,
+      include_raw_content: 'text',
+      include_images: false,
     }),
-    signal: AbortSignal.timeout(45_000),
+    signal: AbortSignal.timeout(25_000),
   });
-  const payload = await response.json() as Record<string, unknown>;
-  if (!response.ok) {
-    const error = payload.error && typeof payload.error === 'object'
-      ? payload.error as Record<string, unknown>
-      : {};
-    const message = typeof error.message === 'string' ? cleanText(error.message, 300) : '';
-    throw new Error('ZeroScout agentic web research failed with ' + response.status + (message ? ': ' + message : '.'));
-  }
+  const payload = await response.json() as unknown;
+  if (!response.ok) throw new Error('ZeroScout search retrieval failed with ' + response.status + '.');
+  return tavilyResponseSchema.parse(payload).results;
+}
 
-  const articles = articlesFromResponse(payload, input.market.question);
-  if (!articles.length) throw new Error('ZeroScout agentic web research returned no cited sources.');
-  const result = {
+export function polyDeskGeneralResearchConfigured(): boolean {
+  return Boolean(config.computeApiKey?.trim() && process.env.ZEROSCOUT_GENERAL_SEARCH_API_KEY?.trim());
+}
+
+export async function fetchPolyDeskGeneralResearch(
+  input: PolyDeskGeneralResearchRequest,
+): Promise<PolyDeskGeneralResearchResult> {
+  const apiKey = process.env.ZEROSCOUT_GENERAL_SEARCH_API_KEY?.trim() || '';
+  if (!config.computeApiKey) throw new Error('0G Compute Router is not configured.');
+  if (!apiKey) throw new Error('ZeroScout general search retrieval is not configured.');
+
+  const model = config.computeGeneralResearchModel.trim() || DEFAULT_MODEL;
+  const baseUrl = process.env.ZEROSCOUT_GENERAL_SEARCH_BASE_URL?.trim() || DEFAULT_SEARCH_BASE_URL;
+  const cacheKey = input.market.conditionId.toLowerCase() + '|' + cleanText(input.query, 180).toLowerCase();
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.result;
+
+  const searchQueries = await planQueriesWith0g(input, model);
+  const batches = await Promise.all(searchQueries.map((query) => searchTavily(query, apiKey, baseUrl)));
+  const byUrl = new Map<string, z.infer<typeof tavilyResultSchema>>();
+  for (const candidate of batches.flat()) {
+    if (!/^https?:\/\//i.test(candidate.url)) continue;
+    const key = candidate.url.toLowerCase();
+    const prior = byUrl.get(key);
+    if (!prior || candidate.score > prior.score) byUrl.set(key, candidate);
+  }
+  const articles = [...byUrl.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+    .map((candidate) => ({
+      title: cleanText(candidate.title, 500) || sourceHost(candidate.url) || 'Retrieved web source',
+      description: cleanText(candidate.raw_content || candidate.content, 1_500),
+      source: sourceHost(candidate.url) || 'Web source',
+      url: candidate.url,
+      publishedAt: cleanText(candidate.published_date || '', 80),
+    }))
+    .filter((article) => article.description.length > 0);
+  if (!articles.length) throw new Error('ZeroScout general search returned no usable cited sources.');
+
+  const result: PolyDeskGeneralResearchResult = {
     articles,
     model,
-    searchQueries: responseSearchQueries(payload, seedQueries),
+    searchQueries,
+    computeProvider: '0G Compute Router',
+    retrievalProvider: 'Tavily Search',
   };
   const cacheMs = Math.max(60_000, Number(process.env.ZEROSCOUT_GENERAL_RESEARCH_CACHE_MS || DEFAULT_CACHE_MS));
   cache.set(cacheKey, { expiresAt: Date.now() + cacheMs, result });

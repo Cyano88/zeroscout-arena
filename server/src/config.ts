@@ -40,6 +40,7 @@ export const config = {
   computeBaseUrl: process.env.ZG_COMPUTE_BASE_URL ?? (isMainnet ? "https://router-api.0g.ai/v1" : "https://router-api-testnet.integratenetwork.work/v1"),
   computeModel: process.env.ZEROSCOUT_FULL_PLATFORM_MODEL ?? process.env.ZG_COMPUTE_MODEL ?? "claude-fable-5",
   computeDirectTradeModel: process.env.ZEROSCOUT_DIRECT_TRADE_MODEL ?? "gpt-5.6-luna",
+  computeGeneralResearchModel: process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL ?? "gpt-5.6-sol",
   computeDirectTradeModelCandidates: commaSeparated(
     process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_CANDIDATES?.trim()
       || "gpt-5.6-luna,glm-5.3-flash,deepseek-v4-flash"
@@ -89,6 +90,7 @@ export function publicConfig() {
             discoversRouterModels: config.computeHelperModelDiscovery
           },
           directTrade: config.computeDirectTradeModel,
+          generalResearch: config.computeGeneralResearchModel,
           lpIntelligence: config.computeLpModel,
           lpVerifier: config.lpVerifierEnabled ? config.computeLpVerifierModel : undefined,
           videoScoring: config.computeVideoModel,

@@ -57,10 +57,12 @@ Direct-trade requests never enter the LP intelligence lane. The prompt explicitl
 PolyDesk general-market evidence is fetched through the authenticated
 /api/integrations/polydesk-general-research contract. Requests must include the
 exact condition, question, full resolution rules, and resolution source.
-ZeroScout uses an agentic web-research model to generate focused search queries
-from the market question, full resolution rules, and resolution authority. It
-returns only web-search citations supplied by the model API; an uncited answer
-fails closed. GNews is not part of this lane.
+ZeroScout uses `gpt-5.6-sol` through the 0G Compute Router to generate focused
+search queries from the market question, full resolution rules, and resolution
+authority. Tavily Search is a retrieval-only adapter: it supplies the current
+source URLs and page text, while 0G remains the intelligence layer. Only URLs
+returned by the retrieval API are accepted, and empty evidence fails closed.
+GNews and direct OpenAI inference are not part of this lane.
 Sports evidence does not use this lane; PolyDesk routes sports to SportMonks.
 
 An operator may mark a named integration key billingMode=included when an

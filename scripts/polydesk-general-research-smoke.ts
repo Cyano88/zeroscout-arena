@@ -1,10 +1,24 @@
 import assert from 'node:assert/strict';
-import {
+
+const priorComputeKey = process.env.ZG_COMPUTE_API_KEY;
+const priorComputeBaseUrl = process.env.ZG_COMPUTE_BASE_URL;
+const priorSearchBaseUrl = process.env.ZEROSCOUT_GENERAL_SEARCH_BASE_URL;
+const priorSearchKey = process.env.ZEROSCOUT_GENERAL_SEARCH_API_KEY;
+const priorModel = process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL;
+
+process.env.ZG_COMPUTE_API_KEY = '0g-test-key';
+process.env.ZG_COMPUTE_BASE_URL = 'https://router.0g.example/v1';
+process.env.ZEROSCOUT_GENERAL_SEARCH_BASE_URL = 'https://search.example';
+process.env.ZEROSCOUT_GENERAL_SEARCH_API_KEY = 'search-test-key';
+process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL = 'gpt-5.6-sol';
+
+const {
   buildPolyDeskResearchQueries,
   fetchPolyDeskGeneralResearch,
+  polyDeskGeneralResearchConfigured,
   polyDeskGeneralResearchRequestSchema,
-} from '../server/src/services/polydesk-general-research.js';
-import { integrationUsesIncludedBilling } from '../server/src/repository.js';
+} = await import('../server/src/services/polydesk-general-research.js');
+const { integrationUsesIncludedBilling } = await import('../server/src/repository.js');
 
 const request = polyDeskGeneralResearchRequestSchema.parse({
   schema: 'zeroscout.polydesk-general-research.request',
@@ -22,69 +36,83 @@ const request = polyDeskGeneralResearchRequestSchema.parse({
 assert.equal(integrationUsesIncludedBilling({ billingMode: 'included' }), true);
 assert.equal(integrationUsesIncludedBilling({ billingMode: 'metered' }), false);
 assert.equal(integrationUsesIncludedBilling({}), false);
+assert.equal(polyDeskGeneralResearchConfigured(), true);
 assert.equal(polyDeskGeneralResearchRequestSchema.safeParse({
   ...request,
   market: { ...request.market, resolutionRules: '' },
 }).success, false);
 
-const queries = buildPolyDeskResearchQueries(request);
-assert.equal(queries.length, 3);
-assert.match(queries.join(' '), /federal reserve/i);
-assert.match(queries.join(' '), /federalreserve\.gov/i);
+const seeds = buildPolyDeskResearchQueries(request);
+assert.equal(seeds.length, 3);
+assert.match(seeds.join(' '), /federal reserve/i);
+assert.match(seeds.join(' '), /federalreserve\.gov/i);
 
-const priorBaseUrl = process.env.ZEROSCOUT_GENERAL_RESEARCH_BASE_URL;
-const priorKey = process.env.ZEROSCOUT_GENERAL_RESEARCH_API_KEY;
-const priorModel = process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL;
 const originalFetch = globalThis.fetch;
-process.env.ZEROSCOUT_GENERAL_RESEARCH_BASE_URL = 'https://research.example/v1';
-process.env.ZEROSCOUT_GENERAL_RESEARCH_API_KEY = 'test-key';
-process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL = 'gpt-5.6';
+let searchCalls = 0;
 globalThis.fetch = async (input, init) => {
-  assert.equal(String(input), 'https://research.example/v1/responses');
+  const url = String(input);
   const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-  assert.equal(body.model, 'gpt-5.6');
-  assert.deepEqual(body.tools, [{ type: 'web_search' }]);
-  assert.equal(body.tool_choice, 'required');
-  assert.match(String(body.input), /Full resolution rules:/);
+  if (url === 'https://router.0g.example/v1/chat/completions') {
+    assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer 0g-test-key');
+    assert.equal(body.model, 'gpt-5.6-sol');
+    assert.match(JSON.stringify(body.messages), /Full resolution rules:/);
+    assert.match(JSON.stringify(body.messages), /Research request:/);
+    assert.match(JSON.stringify(body.messages), /Federal Reserve announcement/);
+    return new Response(JSON.stringify({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            queries: [
+              'site:federalreserve.gov September rate decision official',
+              'Federal Reserve September rate decision contradiction latest',
+            ],
+          }),
+        },
+      }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  assert.equal(url, 'https://search.example/search');
+  assert.equal((init?.headers as Record<string, string>).Authorization, 'Bearer search-test-key');
+  assert.equal(body.search_depth, 'advanced');
+  assert.equal(body.include_answer, false);
+  assert.equal(body.include_raw_content, 'text');
+  searchCalls += 1;
   return new Response(JSON.stringify({
-    output: [
-      {
-        type: 'web_search_call',
-        action: { type: 'search', queries: ['Federal Reserve September official update'] },
-      },
-      {
-        type: 'message',
-        content: [{
-          type: 'output_text',
-          text: 'Federal Reserve officials published a current policy update.',
-          annotations: [{
-            type: 'url_citation',
-            title: 'Federal Reserve policy update',
-            url: 'https://www.federalreserve.gov/policy-update',
-            start_index: 0,
-            end_index: 60,
-          }],
-        }],
-      },
-    ],
+    results: [{
+      title: searchCalls === 1 ? 'Federal Reserve policy update' : 'Independent policy coverage',
+      url: searchCalls === 1
+        ? 'https://www.federalreserve.gov/policy-update'
+        : 'https://example.org/fed-coverage',
+      content: 'Current evidence returned by the retrieval API.',
+      published_date: '2026-09-01',
+      score: searchCalls === 1 ? 0.98 : 0.8,
+    }],
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 };
 
 try {
   const result = await fetchPolyDeskGeneralResearch(request);
-  assert.equal(result.model, 'gpt-5.6');
-  assert.deepEqual(result.searchQueries, ['Federal Reserve September official update']);
-  assert.equal(result.articles.length, 1);
+  assert.equal(searchCalls, 2);
+  assert.equal(result.model, 'gpt-5.6-sol');
+  assert.equal(result.computeProvider, '0G Compute Router');
+  assert.equal(result.retrievalProvider, 'Tavily Search');
+  assert.equal(result.searchQueries.length, 2);
+  assert.equal(result.articles.length, 2);
   assert.equal(result.articles[0].source, 'federalreserve.gov');
   assert.equal(result.articles[0].url, 'https://www.federalreserve.gov/policy-update');
 } finally {
   globalThis.fetch = originalFetch;
-  if (priorBaseUrl === undefined) delete process.env.ZEROSCOUT_GENERAL_RESEARCH_BASE_URL;
-  else process.env.ZEROSCOUT_GENERAL_RESEARCH_BASE_URL = priorBaseUrl;
-  if (priorKey === undefined) delete process.env.ZEROSCOUT_GENERAL_RESEARCH_API_KEY;
-  else process.env.ZEROSCOUT_GENERAL_RESEARCH_API_KEY = priorKey;
+  if (priorComputeKey === undefined) delete process.env.ZG_COMPUTE_API_KEY;
+  else process.env.ZG_COMPUTE_API_KEY = priorComputeKey;
+  if (priorComputeBaseUrl === undefined) delete process.env.ZG_COMPUTE_BASE_URL;
+  else process.env.ZG_COMPUTE_BASE_URL = priorComputeBaseUrl;
+  if (priorSearchBaseUrl === undefined) delete process.env.ZEROSCOUT_GENERAL_SEARCH_BASE_URL;
+  else process.env.ZEROSCOUT_GENERAL_SEARCH_BASE_URL = priorSearchBaseUrl;
+  if (priorSearchKey === undefined) delete process.env.ZEROSCOUT_GENERAL_SEARCH_API_KEY;
+  else process.env.ZEROSCOUT_GENERAL_SEARCH_API_KEY = priorSearchKey;
   if (priorModel === undefined) delete process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL;
   else process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL = priorModel;
 }
 
-console.log('ZeroScout PolyDesk general-research smoke checks passed.');
+console.log('ZeroScout 0G-planned PolyDesk general-research smoke checks passed.');

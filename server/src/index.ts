@@ -1622,6 +1622,8 @@ app.post('/api/integrations/polydesk-general-research', async (req, res, next) =
       retrievedAt: new Date().toISOString(),
       articles: research.articles,
       researchModel: research.model,
+      computeProvider: research.computeProvider,
+      retrievalProvider: research.retrievalProvider,
       searchQueries: research.searchQueries,
       integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined,
     });
