@@ -19,6 +19,7 @@ let mockedAssessmentSide: 'BUY' | 'SELL' = 'BUY'
 let mockTrustFailure = true
 let mockHang = false
 let mockConfiguredTrustHang = false
+let mockConfiguredTrustInvalid = false
 
 globalThis.fetch = async (_url, init = {}) => {
   const headers = new Headers(init.headers)
@@ -35,6 +36,12 @@ globalThis.fetch = async (_url, init = {}) => {
   prompts.push((body.messages ?? []).map(message => message.content ?? '').join('\n'))
   responseFormats.push(body.response_format)
   outputTokenLimits.push(body.max_tokens)
+  if (trustMode && mockConfiguredTrustInvalid) {
+    return new Response(JSON.stringify({
+      id: '0g-direct-trade-invalid',
+      choices: [{ message: { role: 'assistant', content: 'incomplete non-JSON output' } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
   if (trustMode) {
     return new Response(JSON.stringify({ error: { message: mockTrustFailure ? 'No provider available for the requested trust mode' : 'Request timed out' } }), {
       status: 503,
@@ -138,6 +145,12 @@ try {
   const errorFallbackResult = await generateCustomIntelligence(directInput)
   assert.equal(errorFallbackResult.tradeAssessment?.stance, 'INSUFFICIENT')
   assert.deepEqual(trustModes.slice(callsBeforeTimeout), ['verified', null])
+  mockConfiguredTrustInvalid = true
+  const callsBeforeInvalidFallback = trustModes.length
+  const invalidFallbackResult = await generateCustomIntelligence(directInput)
+  assert.equal(invalidFallbackResult.tradeAssessment?.stance, 'INSUFFICIENT')
+  assert.deepEqual(trustModes.slice(callsBeforeInvalidFallback), ['verified', null])
+  mockConfiguredTrustInvalid = false
   mockConfiguredTrustHang = true
   const callsBeforeFallback = trustModes.length
   const fallbackResult = await generateCustomIntelligence(directInput)

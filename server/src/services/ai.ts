@@ -1508,6 +1508,7 @@ async function completeDirectTradeJson(
       ai.timeoutMs,
       ai.model
     );
+    parseJsonObject(content ?? "{}");
     return { content, trustMode: "default" };
   }
 
@@ -1520,6 +1521,7 @@ async function completeDirectTradeJson(
       trustProbeMs,
       `${ai.model} configured-trust probe`
     );
+    parseJsonObject(content ?? "{}");
     return { content, trustMode: "configured" };
   } catch (error) {
     configuredError = error;
@@ -1537,6 +1539,7 @@ async function completeDirectTradeJson(
       remainingMs,
       `${ai.model} default-trust fallback`
     );
+    parseJsonObject(content ?? "{}");
     return { content, trustMode: "default" };
   } catch (fallbackError) {
     throw new Error(
