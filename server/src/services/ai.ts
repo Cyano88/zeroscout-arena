@@ -1646,9 +1646,9 @@ async function completeJson(
       }
     }
     const retryWithoutTrustMode = shouldRetryWithoutTrustMode(firstError);
-    const client = retryWithoutTrustMode ? getDefaultTrustComputeClient() : ai.client;
+    const client = retryWithoutTrustMode ? getDefaultTrustComputeClient(ai.timeoutMs) : ai.client;
     try {
-      const content = await run(client, retryWithoutTrustMode, retryWithoutTrustMode);
+      const content = await run(client, enforceResponseFormat, retryWithoutTrustMode);
       if (!content) throw firstError;
       return content;
     } catch (secondError) {
@@ -1748,7 +1748,7 @@ function shouldRetryWithoutTrustMode(error: unknown): boolean {
     || message.includes("failed to select provider");
 }
 
-function getDefaultTrustComputeClient(timeoutMs = 30_000): OpenAI {
+function getDefaultTrustComputeClient(timeoutMs: number): OpenAI {
   return new OpenAI({
     apiKey: config.computeApiKey ?? "",
     baseURL: config.computeBaseUrl,

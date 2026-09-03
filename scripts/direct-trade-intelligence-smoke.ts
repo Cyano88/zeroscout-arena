@@ -6,16 +6,27 @@ process.env.ZEROSCOUT_FULL_PLATFORM_MODEL = 'generic-model-must-not-enter-direct
 process.env.ZEROSCOUT_DIRECT_TRADE_MODEL = 'direct-trade-test-model'
 process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_CANDIDATES = 'direct-trade-test-model'
 process.env.ZEROSCOUT_HELPER_MODEL = 'helper-model-must-not-enter-direct-trade-routing'
+process.env.ZG_COMPUTE_TRUST_MODE = 'verified'
 
 const originalFetch = globalThis.fetch
 const prompts: string[] = []
 const responseFormats: unknown[] = []
+const trustModes: Array<string | null> = []
 let mockedAssessmentSide: 'BUY' | 'SELL' = 'BUY'
 
 globalThis.fetch = async (_url, init = {}) => {
+  const headers = new Headers(init.headers)
+  const trustMode = headers.get('x-0g-provider-trust-mode')
+  trustModes.push(trustMode)
   const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; response_format?: unknown; messages?: Array<{ content?: string }> }
   prompts.push((body.messages ?? []).map(message => message.content ?? '').join('\n'))
   responseFormats.push(body.response_format)
+  if (trustMode) {
+    return new Response(JSON.stringify({ error: { message: 'No provider available for the requested trust mode' } }), {
+      status: 503,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
   return new Response(JSON.stringify({
     id: '0g-direct-trade-test',
     object: 'chat.completion',
@@ -105,6 +116,8 @@ try {
   assert.match(prompts.join('\n'), /must not be reported as a research data gap/i)
   assert.match(prompts.join('\n'), /RESOLUTION_AUTHORITY/i)
   assert(responseFormats.every(value => value === undefined))
+  assert(trustModes.includes('verified'))
+  assert(trustModes.includes(null))
   console.log('zeroscout direct-trade intelligence smoke ok')
 } finally {
   globalThis.fetch = originalFetch
