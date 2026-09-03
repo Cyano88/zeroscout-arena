@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  buildPolyDeskResearchQueries,
   fetchPolyDeskGeneralResearch,
   polyDeskGeneralResearchRequestSchema,
 } from '../server/src/services/polydesk-general-research.js';
@@ -26,36 +27,64 @@ assert.equal(polyDeskGeneralResearchRequestSchema.safeParse({
   market: { ...request.market, resolutionRules: '' },
 }).success, false);
 
-const priorUrl = process.env.ZEROSCOUT_GENERAL_RESEARCH_URL;
+const queries = buildPolyDeskResearchQueries(request);
+assert.equal(queries.length, 3);
+assert.match(queries.join(' '), /federal reserve/i);
+assert.match(queries.join(' '), /federalreserve\.gov/i);
+
+const priorBaseUrl = process.env.ZEROSCOUT_GENERAL_RESEARCH_BASE_URL;
 const priorKey = process.env.ZEROSCOUT_GENERAL_RESEARCH_API_KEY;
+const priorModel = process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL;
 const originalFetch = globalThis.fetch;
-process.env.ZEROSCOUT_GENERAL_RESEARCH_URL = 'https://research.example/search';
-delete process.env.ZEROSCOUT_GENERAL_RESEARCH_API_KEY;
-globalThis.fetch = async input => {
-  const url = new URL(String(input));
-  assert.equal(url.searchParams.get('q'), 'Federal Reserve September decision');
+process.env.ZEROSCOUT_GENERAL_RESEARCH_BASE_URL = 'https://research.example/v1';
+process.env.ZEROSCOUT_GENERAL_RESEARCH_API_KEY = 'test-key';
+process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL = 'gpt-5.6';
+globalThis.fetch = async (input, init) => {
+  assert.equal(String(input), 'https://research.example/v1/responses');
+  const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+  assert.equal(body.model, 'gpt-5.6');
+  assert.deepEqual(body.tools, [{ type: 'web_search' }]);
+  assert.equal(body.tool_choice, 'required');
+  assert.match(String(body.input), /Full resolution rules:/);
   return new Response(JSON.stringify({
-    articles: [{
-      title: 'Federal Reserve officials review September policy',
-      description: 'Officials are reviewing current inflation and employment data.',
-      url: 'https://publisher.example/fed-policy',
-      publishedAt: '2026-09-02T12:00:00.000Z',
-      source: { name: 'Example Publisher' },
-    }],
+    output: [
+      {
+        type: 'web_search_call',
+        action: { type: 'search', queries: ['Federal Reserve September official update'] },
+      },
+      {
+        type: 'message',
+        content: [{
+          type: 'output_text',
+          text: 'Federal Reserve officials published a current policy update.',
+          annotations: [{
+            type: 'url_citation',
+            title: 'Federal Reserve policy update',
+            url: 'https://www.federalreserve.gov/policy-update',
+            start_index: 0,
+            end_index: 60,
+          }],
+        }],
+      },
+    ],
   }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 };
 
 try {
-  const articles = await fetchPolyDeskGeneralResearch(request);
-  assert.equal(articles.length, 1);
-  assert.equal(articles[0].source, 'Example Publisher');
-  assert.equal(articles[0].url, 'https://publisher.example/fed-policy');
+  const result = await fetchPolyDeskGeneralResearch(request);
+  assert.equal(result.model, 'gpt-5.6');
+  assert.deepEqual(result.searchQueries, ['Federal Reserve September official update']);
+  assert.equal(result.articles.length, 1);
+  assert.equal(result.articles[0].source, 'federalreserve.gov');
+  assert.equal(result.articles[0].url, 'https://www.federalreserve.gov/policy-update');
 } finally {
   globalThis.fetch = originalFetch;
-  if (priorUrl === undefined) delete process.env.ZEROSCOUT_GENERAL_RESEARCH_URL;
-  else process.env.ZEROSCOUT_GENERAL_RESEARCH_URL = priorUrl;
+  if (priorBaseUrl === undefined) delete process.env.ZEROSCOUT_GENERAL_RESEARCH_BASE_URL;
+  else process.env.ZEROSCOUT_GENERAL_RESEARCH_BASE_URL = priorBaseUrl;
   if (priorKey === undefined) delete process.env.ZEROSCOUT_GENERAL_RESEARCH_API_KEY;
   else process.env.ZEROSCOUT_GENERAL_RESEARCH_API_KEY = priorKey;
+  if (priorModel === undefined) delete process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL;
+  else process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL = priorModel;
 }
 
 console.log('ZeroScout PolyDesk general-research smoke checks passed.');

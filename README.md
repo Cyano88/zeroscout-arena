@@ -57,7 +57,10 @@ Direct-trade requests never enter the LP intelligence lane. The prompt explicitl
 PolyDesk general-market evidence is fetched through the authenticated
 /api/integrations/polydesk-general-research contract. Requests must include the
 exact condition, question, full resolution rules, and resolution source.
-ZeroScout returns cited articles with their underlying publisher provenance.
+ZeroScout uses an agentic web-research model to generate focused search queries
+from the market question, full resolution rules, and resolution authority. It
+returns only web-search citations supplied by the model API; an uncited answer
+fails closed. GNews is not part of this lane.
 Sports evidence does not use this lane; PolyDesk routes sports to SportMonks.
 
 An operator may mark a named integration key billingMode=included when an

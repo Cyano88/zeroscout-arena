@@ -1601,8 +1601,8 @@ app.post('/api/integrations/polydesk-general-research', async (req, res, next) =
       res.status(503).json({ error: 'ZeroScout general research is not configured.' });
       return;
     }
-    const articles = await fetchPolyDeskGeneralResearch(input);
-    if (!articles.length) {
+    const research = await fetchPolyDeskGeneralResearch(input);
+    if (!research.articles.length) {
       res.status(404).json({
         error: 'ZeroScout found no current general-market evidence for this query.',
         schema: 'zeroscout.polydesk-general-research.result',
@@ -1620,7 +1620,9 @@ app.post('/api/integrations/polydesk-general-research', async (req, res, next) =
       query: input.query,
       market: input.market,
       retrievedAt: new Date().toISOString(),
-      articles,
+      articles: research.articles,
+      researchModel: research.model,
+      searchQueries: research.searchQueries,
       integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined,
     });
   } catch (error) {
