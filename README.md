@@ -54,6 +54,21 @@ This lane requires an exact Polymarket condition ID, outcome token, BUY or SELL 
 
 Direct-trade requests never enter the LP intelligence lane. The prompt explicitly prohibits liquidity provision, two-sided quoting, maker-reward farming, and LP inventory guidance. It provides decision support only; OnchainOS retains access checks, preview, typed live confirmation, signing, and submission.
 
+PolyDesk general-market evidence is fetched through the authenticated
+/api/integrations/polydesk-general-research contract. Requests must include the
+exact condition, question, full resolution rules, and resolution source.
+ZeroScout returns cited articles with their underlying publisher provenance.
+Sports evidence does not use this lane; PolyDesk routes sports to SportMonks.
+
+An operator may mark a named integration key billingMode=included when an
+upstream marketplace already bills the end user. Included keys remain scoped,
+revocable, and usage-counted; they do not spend ZeroScout credits.
+
+The existing PolyDesk production key should explicitly allow both
+`intelligence` and `polydesk-general-research`. The admin endpoint
+`POST /api/admin/integration-keys/:id/endpoints` updates that allowlist without
+rotating the production secret.
+
 
 
 ## Why It Is AI-Native

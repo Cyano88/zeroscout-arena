@@ -289,10 +289,21 @@ export async function touchIntegrationKey(id: string): Promise<void> {
   await writeStore(store);
 }
 
+export function integrationUsesIncludedBilling(record: Pick<IntegrationKeyRecord, 'billingMode'>): boolean {
+  return record.billingMode === 'included';
+}
+
 export async function consumeIntegrationCredits(id: string, credits: number): Promise<IntegrationKeyRecord> {
   const store = await readStore();
   const target = (store.integrationKeys ?? []).find((item) => item.id === id && !item.revokedAt);
   if (!target) throw new Error("Integration key not found.");
+  if (integrationUsesIncludedBilling(target)) {
+    target.creditsUsed = Number(target.creditsUsed || 0) + credits;
+    target.lastUsedAt = new Date().toISOString();
+    target.requestCount = Number(target.requestCount || 0) + 1;
+    await writeStore(store);
+    return target;
+  }
   const ownerWallet = target.ownerWallet?.toLowerCase();
   if (ownerWallet) {
     const sharedBalance = walletCreditBalance(store, ownerWallet);
@@ -314,6 +325,30 @@ export async function consumeIntegrationCredits(id: string, credits: number): Pr
   target.requestCount = (target.requestCount ?? 0) + 1;
   await writeStore(store);
   return target;
+}
+
+export async function setIntegrationKeyBillingMode(
+  id: string,
+  billingMode: 'metered' | 'included',
+): Promise<Omit<IntegrationKeyRecord, 'keyHash'> | undefined> {
+  const store = await readStore();
+  const target = (store.integrationKeys ?? []).find((item) => item.id === id && !item.revokedAt);
+  if (!target) return undefined;
+  target.billingMode = billingMode;
+  await writeStore(store);
+  return publicIntegrationKey(target);
+}
+
+export async function setIntegrationKeyAllowedEndpoints(
+  id: string,
+  allowedEndpoints: string[],
+): Promise<Omit<IntegrationKeyRecord, 'keyHash'> | undefined> {
+  const store = await readStore();
+  const target = (store.integrationKeys ?? []).find((item) => item.id === id && !item.revokedAt);
+  if (!target) return undefined;
+  target.allowedEndpoints = [...new Set(allowedEndpoints.map((value) => value.trim()).filter(Boolean))];
+  await writeStore(store);
+  return publicIntegrationKey(target);
 }
 
 export async function findSponsorshipProof(input: {

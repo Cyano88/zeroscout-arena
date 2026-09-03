@@ -245,6 +245,7 @@ export interface IntegrationKeyRecord {
   allowedEndpoints?: string[];
   allowedAnalysisTypes?: string[];
   allowedProofClasses?: string[];
+  billingMode?: 'metered' | 'included';
   creditBalance: number;
   creditsUsed: number;
   createdAt: string;

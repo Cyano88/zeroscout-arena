@@ -17,6 +17,12 @@ import { campaignPresets, findCampaignPreset } from "../../shared/campaigns.js";
 
 import { agreementIntelligenceRequestSchema } from './validation.js'
 import { generateAgreementIntelligence } from './services/agreement-intelligence.js'
+import { setIntegrationKeyAllowedEndpoints, setIntegrationKeyBillingMode } from './repository.js'
+import {
+  fetchPolyDeskGeneralResearch,
+  polyDeskGeneralResearchConfigured,
+  polyDeskGeneralResearchRequestSchema,
+} from './services/polydesk-general-research.js'
 
 const app = express();
 const maxVideoBytes = 100 * 1024 * 1024;
@@ -30,7 +36,7 @@ const integrationCosts = {
 type IntegrationEndpointScope = "capsules" | "video-score" | "video-score-session" | "intelligence" | "agreement-intelligence" | "sponsorship-proof";
 type IntegrationAccess = { id: string; name: string; partner?: string };
 type IntegrationScopeRequest = {
-  endpoint: IntegrationEndpointScope;
+  endpoint: IntegrationEndpointScope | 'polydesk-general-research';
   analysisType?: string;
   proofClass?: string;
 };
@@ -960,6 +966,7 @@ app.post("/api/admin/integration-keys", async (req, res, next) => {
       allowedEndpoints: parseStringList(req.body?.allowedEndpoints, defaultKeyEndpoints),
       allowedAnalysisTypes: parseStringList(req.body?.allowedAnalysisTypes),
       allowedProofClasses: parseStringList(req.body?.allowedProofClasses),
+      billingMode: req.body?.billingMode === 'included' ? 'included' as const : 'metered' as const,
       creditBalance: Number(req.body?.creditBalance ?? 0),
       creditsUsed: 0,
       createdAt: new Date().toISOString(),
@@ -1585,6 +1592,81 @@ app.post('/api/integrations/agreement-intelligence', async (req, res, next) => {
     next(error)
   }
 })
+
+app.post('/api/integrations/polydesk-general-research', async (req, res, next) => {
+  try {
+    const input = polyDeskGeneralResearchRequestSchema.parse(req.body);
+    const integration = await assertIntegrationIdentity(req, { endpoint: 'polydesk-general-research' });
+    if (!polyDeskGeneralResearchConfigured()) {
+      res.status(503).json({ error: 'ZeroScout general research is not configured.' });
+      return;
+    }
+    const articles = await fetchPolyDeskGeneralResearch(input);
+    if (!articles.length) {
+      res.status(404).json({
+        error: 'ZeroScout found no current general-market evidence for this query.',
+        schema: 'zeroscout.polydesk-general-research.result',
+        schemaVersion: '1.0.0',
+        query: input.query,
+        articles: [],
+      });
+      return;
+    }
+    res.json({
+      schema: 'zeroscout.polydesk-general-research.result',
+      schemaVersion: '1.0.0',
+      provider: 'ZeroScout',
+      lane: 'general-market',
+      query: input.query,
+      market: input.market,
+      retrievedAt: new Date().toISOString(),
+      articles,
+      integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/admin/integration-keys/:id/billing', async (req, res, next) => {
+  try {
+    assertAdminAccess(req);
+    const billingMode = req.body?.billingMode === 'included'
+      ? 'included'
+      : req.body?.billingMode === 'metered' ? 'metered' : undefined;
+    if (!billingMode) {
+      res.status(400).json({ error: 'billingMode must be metered or included.' });
+      return;
+    }
+    const record = await setIntegrationKeyBillingMode(req.params.id, billingMode);
+    if (!record) {
+      res.status(404).json({ error: 'Integration key not found.' });
+      return;
+    }
+    res.json(record);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/admin/integration-keys/:id/endpoints', async (req, res, next) => {
+  try {
+    assertAdminAccess(req);
+    const allowedEndpoints = parseStringList(req.body?.allowedEndpoints) ?? [];
+    if (!allowedEndpoints.length) {
+      res.status(400).json({ error: 'allowedEndpoints must contain at least one endpoint.' });
+      return;
+    }
+    const record = await setIntegrationKeyAllowedEndpoints(req.params.id, allowedEndpoints);
+    if (!record) {
+      res.status(404).json({ error: 'Integration key not found.' });
+      return;
+    }
+    res.json(record);
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(error);
