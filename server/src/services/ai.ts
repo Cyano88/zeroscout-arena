@@ -1505,13 +1505,32 @@ async function completeDirectTradeJson(
 ): Promise<{ content: string | undefined; trustMode: "configured" | "default" }> {
   const configuredTrust = Boolean(config.computeTrustMode && config.computeTrustMode !== "default");
   if (!configuredTrust) {
-    const content = await withAiTimeout(
-      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 1200, reasoningEffort: "low" }),
-      ai.timeoutMs,
-      ai.model
-    );
-    parseJsonObject(content ?? "{}");
-    return { content, trustMode: "default" };
+    const startedAt = Date.now();
+    try {
+      const content = await withAiTimeout(
+        signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 1200, reasoningEffort: "low" }),
+        ai.timeoutMs,
+        ai.model
+      );
+      parseJsonObject(content ?? "{}");
+      console.info("[ai] direct-trade completion", {
+        model: ai.model,
+        trustMode: "default",
+        durationMs: Date.now() - startedAt,
+        contentLength: content?.length ?? 0,
+        outcome: "valid_json"
+      });
+      return { content, trustMode: "default" };
+    } catch (error) {
+      console.warn("[ai] direct-trade completion", {
+        model: ai.model,
+        trustMode: "default",
+        durationMs: Date.now() - startedAt,
+        outcome: "failed",
+        error: sanitizeAiError(error)
+      });
+      throw error;
+    }
   }
 
   const startedAt = Date.now();
@@ -1524,9 +1543,23 @@ async function completeDirectTradeJson(
       `${ai.model} configured-trust probe`
     );
     parseJsonObject(content ?? "{}");
+    console.info("[ai] direct-trade completion", {
+      model: ai.model,
+      trustMode: "configured",
+      durationMs: Date.now() - startedAt,
+      contentLength: content?.length ?? 0,
+      outcome: "valid_json"
+    });
     return { content, trustMode: "configured" };
   } catch (error) {
     configuredError = error;
+    console.warn("[ai] direct-trade completion", {
+      model: ai.model,
+      trustMode: "configured",
+      durationMs: Date.now() - startedAt,
+      outcome: "fallback",
+      error: sanitizeAiError(error)
+    });
   }
 
   const remainingMs = ai.timeoutMs - (Date.now() - startedAt);
@@ -1536,14 +1569,30 @@ async function completeDirectTradeJson(
     );
   }
   try {
+    const fallbackStartedAt = Date.now();
     const content = await withAiTimeout(
       signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 1200, reasoningEffort: "low" }),
       remainingMs,
       `${ai.model} default-trust fallback`
     );
     parseJsonObject(content ?? "{}");
+    console.info("[ai] direct-trade completion", {
+      model: ai.model,
+      trustMode: "default",
+      durationMs: Date.now() - fallbackStartedAt,
+      totalDurationMs: Date.now() - startedAt,
+      contentLength: content?.length ?? 0,
+      outcome: "valid_json"
+    });
     return { content, trustMode: "default" };
   } catch (fallbackError) {
+    console.warn("[ai] direct-trade completion", {
+      model: ai.model,
+      trustMode: "default",
+      totalDurationMs: Date.now() - startedAt,
+      outcome: "failed",
+      error: sanitizeAiError(fallbackError)
+    });
     throw new Error(
       `configured trust failed: ${sanitizeAiError(configuredError)}; default trust failed: ${sanitizeAiError(fallbackError)}`
     );
