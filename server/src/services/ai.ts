@@ -220,6 +220,13 @@ export function classifyCustomIntelligenceLane(input: CustomIntelligenceInput): 
   return "generic";
 }
 
+export function directTradeModelCandidates(): string[] {
+  return uniqueStrings([
+    config.computeDirectTradeModel,
+    ...config.computeDirectTradeModelCandidates,
+  ]);
+}
+
 async function generateDirectTradeIntelligence(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
   const data = input.data && typeof input.data === "object" && !Array.isArray(input.data)
     ? input.data as Record<string, unknown>
@@ -241,12 +248,7 @@ async function generateDirectTradeIntelligence(input: CustomIntelligenceInput): 
   }
   if (!config.computeApiKey) throw new Error("0G Compute Router is not configured for direct-trade intelligence.");
 
-  const modelCandidates = uniqueStrings([
-    config.computeDirectTradeModel,
-    ...config.computeDirectTradeModelCandidates,
-    config.computeModel,
-    config.computeHelperModel
-  ]);
+  const modelCandidates = directTradeModelCandidates();
   const prompt = `Create a ZeroScout Direct Trade Intelligence brief for the PolyDesk OKX AI service.
 
 Partner: ${input.partner}
@@ -284,7 +286,7 @@ Rules:
       const content = await completeJson(ai, [
         { role: "system", content: "You are ZeroScout's direct prediction-market trade intelligence verifier. Return strict JSON only. Never provide LP analysis or fabricate evidence." },
         { role: "user", content: prompt }
-      ]);
+      ], false);
       parsed = parseJsonObject(content ?? "{}");
       selectedAi = ai;
       break;
@@ -1594,7 +1596,11 @@ function assertCustomIntelligenceInput(input: CustomIntelligenceInput): void {
   }
 }
 
-async function completeJson(ai: AiChatClient, messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]): Promise<string | undefined> {
+async function completeJson(
+  ai: AiChatClient,
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  enforceResponseFormat = true,
+): Promise<string | undefined> {
   const run = async (
     client: OpenAI,
     enforceJson: boolean,
@@ -1624,7 +1630,7 @@ async function completeJson(ai: AiChatClient, messages: OpenAI.Chat.Completions.
   };
 
   try {
-    return await run(ai.client, true);
+    return await run(ai.client, enforceResponseFormat);
   } catch (firstError) {
     const formatRetry = alternateFormatForError(firstError, ai.format);
     if (formatRetry) {

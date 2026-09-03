@@ -2,17 +2,20 @@ import assert from 'node:assert/strict'
 
 process.env.ZG_COMPUTE_API_KEY = 'test-0g-key'
 process.env.ZG_COMPUTE_BASE_URL = 'https://router-api.0g.test/v1'
-process.env.ZEROSCOUT_FULL_PLATFORM_MODEL = 'direct-trade-test-model'
+process.env.ZEROSCOUT_FULL_PLATFORM_MODEL = 'generic-model-must-not-enter-direct-trade-routing'
 process.env.ZEROSCOUT_DIRECT_TRADE_MODEL = 'direct-trade-test-model'
 process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_CANDIDATES = 'direct-trade-test-model'
+process.env.ZEROSCOUT_HELPER_MODEL = 'helper-model-must-not-enter-direct-trade-routing'
 
 const originalFetch = globalThis.fetch
 const prompts: string[] = []
+const responseFormats: unknown[] = []
 let mockedAssessmentSide: 'BUY' | 'SELL' = 'BUY'
 
 globalThis.fetch = async (_url, init = {}) => {
-  const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; messages?: Array<{ content?: string }> }
+  const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; response_format?: unknown; messages?: Array<{ content?: string }> }
   prompts.push((body.messages ?? []).map(message => message.content ?? '').join('\n'))
+  responseFormats.push(body.response_format)
   return new Response(JSON.stringify({
     id: '0g-direct-trade-test',
     object: 'chat.completion',
@@ -52,7 +55,8 @@ globalThis.fetch = async (_url, init = {}) => {
 }
 
 try {
-  const { classifyCustomIntelligenceLane, generateCustomIntelligence } = await import('../server/src/services/ai.js')
+  const { classifyCustomIntelligenceLane, directTradeModelCandidates, generateCustomIntelligence } = await import('../server/src/services/ai.js')
+  assert.deepEqual(directTradeModelCandidates(), ['direct-trade-test-model'])
   const directInput = {
     partner: 'polydesk',
     productType: 'polymarket-direct-trading',
@@ -100,6 +104,7 @@ try {
   assert.match(prompts.join('\n'), /downstream execution gates/i)
   assert.match(prompts.join('\n'), /must not be reported as a research data gap/i)
   assert.match(prompts.join('\n'), /RESOLUTION_AUTHORITY/i)
+  assert(responseFormats.every(value => value === undefined))
   console.log('zeroscout direct-trade intelligence smoke ok')
 } finally {
   globalThis.fetch = originalFetch
