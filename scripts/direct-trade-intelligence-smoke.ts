@@ -97,6 +97,9 @@ try {
   assert.equal(classifyCustomIntelligenceLane(topLevelProofConflict), 'conflict')
   assert.match(prompts.join('\n'), /never LP analysis/i)
   assert.match(prompts.join('\n'), /Never recommend supplying liquidity/i)
+  assert.match(prompts.join('\n'), /downstream execution gates/i)
+  assert.match(prompts.join('\n'), /must not be reported as a research data gap/i)
+  assert.match(prompts.join('\n'), /RESOLUTION_AUTHORITY/i)
   console.log('zeroscout direct-trade intelligence smoke ok')
 } finally {
   globalThis.fetch = originalFetch

@@ -106,6 +106,9 @@ try {
   assert.equal(result.articles.length, 2);
   assert.equal(result.articles[0].source, 'federalreserve.gov');
   assert.equal(result.articles[0].url, 'https://www.federalreserve.gov/policy-update');
+  assert.equal(result.articles[0].evidenceRole, 'RESOLUTION_AUTHORITY');
+  assert.match(result.articles[0].retrievedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(result.articles[1].evidenceRole, 'EXTERNAL_SOURCE');
 } finally {
   globalThis.fetch = originalFetch;
   if (priorComputeKey === undefined) delete process.env.ZG_COMPUTE_API_KEY;

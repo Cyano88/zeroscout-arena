@@ -22,6 +22,8 @@ export type PolyDeskGeneralResearchArticle = {
   source: string;
   url: string;
   publishedAt: string;
+  retrievedAt: string;
+  evidenceRole: 'RESOLUTION_AUTHORITY' | 'EXTERNAL_SOURCE';
 };
 
 export type PolyDeskGeneralResearchResult = {
@@ -223,6 +225,8 @@ export async function fetchPolyDeskGeneralResearch(
     const prior = byUrl.get(key);
     if (!prior || candidate.score > prior.score) byUrl.set(key, candidate);
   }
+  const retrievedAt = new Date().toISOString();
+  const resolutionHost = sourceHost(input.market.resolutionSource).toLowerCase();
   const articles = [...byUrl.values()]
     .sort((a, b) => b.score - a.score)
     .slice(0, 8)
@@ -232,6 +236,10 @@ export async function fetchPolyDeskGeneralResearch(
       source: sourceHost(candidate.url) || 'Web source',
       url: candidate.url,
       publishedAt: cleanText(candidate.published_date || '', 80),
+      retrievedAt,
+      evidenceRole: resolutionHost && sourceHost(candidate.url).toLowerCase() === resolutionHost
+        ? 'RESOLUTION_AUTHORITY' as const
+        : 'EXTERNAL_SOURCE' as const,
     }))
     .filter((article) => article.description.length > 0);
   if (!articles.length) throw new Error('ZeroScout general search returned no usable cited sources.');
