@@ -283,10 +283,10 @@ Rules:
   for (const model of modelCandidates) {
     const ai = getComputeAiClientForModel(model, "Direct Trade Intelligence");
     try {
-      const content = await completeJson(ai, [
+      const content = await withAiTimeout(completeJson(ai, [
         { role: "system", content: "You are ZeroScout's direct prediction-market trade intelligence verifier. Return strict JSON only. Never provide LP analysis or fabricate evidence." },
         { role: "user", content: prompt }
-      ], false);
+      ], false), ai.timeoutMs, ai.model);
       parsed = parseJsonObject(content ?? "{}");
       selectedAi = ai;
       break;

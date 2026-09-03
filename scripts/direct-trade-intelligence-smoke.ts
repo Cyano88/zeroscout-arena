@@ -7,6 +7,7 @@ process.env.ZEROSCOUT_DIRECT_TRADE_MODEL = 'direct-trade-test-model'
 process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_CANDIDATES = 'direct-trade-test-model'
 process.env.ZEROSCOUT_HELPER_MODEL = 'helper-model-must-not-enter-direct-trade-routing'
 process.env.ZG_COMPUTE_TRUST_MODE = 'verified'
+process.env.ZEROSCOUT_DIRECT_TRADE_ATTEMPT_TIMEOUT_MS = '3000'
 
 const originalFetch = globalThis.fetch
 const prompts: string[] = []
@@ -14,11 +15,13 @@ const responseFormats: unknown[] = []
 const trustModes: Array<string | null> = []
 let mockedAssessmentSide: 'BUY' | 'SELL' = 'BUY'
 let mockTrustFailure = true
+let mockHang = false
 
 globalThis.fetch = async (_url, init = {}) => {
   const headers = new Headers(init.headers)
   const trustMode = headers.get('x-0g-provider-trust-mode')
   trustModes.push(trustMode)
+  if (mockHang) return new Promise<Response>(() => {})
   const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; response_format?: unknown; messages?: Array<{ content?: string }> }
   prompts.push((body.messages ?? []).map(message => message.content ?? '').join('\n'))
   responseFormats.push(body.response_format)
@@ -123,6 +126,10 @@ try {
   const callsBeforeTimeout = trustModes.length
   await assert.rejects(() => generateCustomIntelligence(directInput), /Request timed out/i)
   assert.equal(trustModes.length, callsBeforeTimeout + 1)
+  mockHang = true
+  const callsBeforeHang = trustModes.length
+  await assert.rejects(() => generateCustomIntelligence(directInput), /timed out after 3000ms/i)
+  assert.equal(trustModes.length, callsBeforeHang + 1)
   console.log('zeroscout direct-trade intelligence smoke ok')
 } finally {
   globalThis.fetch = originalFetch
