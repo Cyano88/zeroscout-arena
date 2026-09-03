@@ -137,7 +137,7 @@ try {
   assert.match(prompts.join('\n'), /must not be reported as a research data gap/i)
   assert.match(prompts.join('\n'), /RESOLUTION_AUTHORITY/i)
   assert(responseFormats.every(value => value === undefined))
-  assert(outputTokenLimits.every(value => value === 2400))
+  assert(outputTokenLimits.every(value => value === 1200))
   assert(trustModes.includes('verified'))
   assert(trustModes.includes(null))
   mockTrustFailure = false

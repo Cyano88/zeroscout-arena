@@ -258,7 +258,7 @@ Objective: ${input.objective}
 Output style: ${input.outputStyle}
 
 Supplied direct-trade evidence:
-${JSON.stringify(data).slice(0, 24000)}
+${JSON.stringify(data).slice(0, 16000)}
 
 Return strict JSON with the normal ZeroScout intelligence fields plus tradeAssessment: stance SUPPORT|OPPOSE|INSUFFICIENT, side BUY|SELL, thesis, counterThesis, resolutionRisk, and evidenceQuality HIGH|MEDIUM|LOW.
 
@@ -275,6 +275,7 @@ Rules:
 - suggestedAnswer sections: Market, PolyDesk view, Why, Counter-case, Execution safety, Decision.
 - Actions may say refresh, reduce size, wait, or stop. Never claim an order was placed or bypass wallet confirmation.
 - The official OnchainOS Polymarket integration owns access checks, preview, typed live confirmation, signing, and submission.
+- Keep the JSON concise and below 1200 output tokens.
 - No guaranteed earnings, certainty, or financial advice.`;
 
   let parsed: Record<string, unknown> = {};
@@ -1504,7 +1505,7 @@ async function completeDirectTradeJson(
   const configuredTrust = Boolean(config.computeTrustMode && config.computeTrustMode !== "default");
   if (!configuredTrust) {
     const content = await withAiTimeout(
-      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 2400 }),
+      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 1200 }),
       ai.timeoutMs,
       ai.model
     );
@@ -1517,7 +1518,7 @@ async function completeDirectTradeJson(
   let configuredError: unknown;
   try {
     const content = await withAiTimeout(
-      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, maxTokens: 2400 }),
+      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, maxTokens: 1200 }),
       trustProbeMs,
       `${ai.model} configured-trust probe`
     );
@@ -1535,7 +1536,7 @@ async function completeDirectTradeJson(
   }
   try {
     const content = await withAiTimeout(
-      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 2400 }),
+      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 1200 }),
       remainingMs,
       `${ai.model} default-trust fallback`
     );
