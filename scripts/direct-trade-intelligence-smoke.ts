@@ -138,6 +138,7 @@ try {
   assert.match(prompts.join('\n'), /downstream execution gates/i)
   assert.match(prompts.join('\n'), /must not be reported as a research data gap/i)
   assert.match(prompts.join('\n'), /RESOLUTION_AUTHORITY/i)
+  assert.match(prompts.join('\n'), /Return exactly one JSON object with this shape/i)
   assert(responseFormats.every(value => value === undefined))
   assert(outputTokenLimits.every(value => value === 1200))
   assert(reasoningEfforts.every(value => value === 'low'))

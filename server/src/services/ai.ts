@@ -260,7 +260,8 @@ Output style: ${input.outputStyle}
 Supplied direct-trade evidence:
 ${JSON.stringify(data).slice(0, 16000)}
 
-Return strict JSON with the normal ZeroScout intelligence fields plus tradeAssessment: stance SUPPORT|OPPOSE|INSUFFICIENT, side BUY|SELL, thesis, counterThesis, resolutionRisk, and evidenceQuality HIGH|MEDIUM|LOW.
+Return exactly one JSON object with this shape and no other text:
+{"intelligenceScore":0,"confidence":0,"summary":"...","signals":["..."],"riskFlags":["..."],"recommendedActions":["..."],"dataGaps":["..."],"suggestedVisuals":["..."],"disclaimer":"...","tradeAssessment":{"stance":"SUPPORT|OPPOSE|INSUFFICIENT","side":"BUY|SELL","thesis":"...","counterThesis":"...","resolutionRisk":"...","evidenceQuality":"HIGH|MEDIUM|LOW"}}
 
 Rules:
 - This evaluates a direct ${side} of one Polymarket outcome. It is never LP analysis.
@@ -1830,6 +1831,7 @@ function getDefaultTrustComputeClient(timeoutMs: number): OpenAI {
 }
 
 function parseJsonObject(content: string): Record<string, unknown> {
+  if (!content.trim()) throw new Error("AI provider returned empty content");
   const trimmed = content.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
   try {
     return JSON.parse(trimmed) as Record<string, unknown>;
@@ -1839,7 +1841,8 @@ function parseJsonObject(content: string): Record<string, unknown> {
     if (start >= 0 && end > start) {
       return JSON.parse(trimmed.slice(start, end + 1)) as Record<string, unknown>;
     }
-    throw new Error("AI provider returned non-JSON content");
+    if (start >= 0) throw new Error("AI provider returned truncated JSON content");
+    throw new Error(`AI provider returned non-JSON content without an object (length=${trimmed.length})`);
   }
 }
 
