@@ -14,6 +14,7 @@ const originalFetch = globalThis.fetch
 const prompts: string[] = []
 const responseFormats: unknown[] = []
 const outputTokenLimits: unknown[] = []
+const reasoningEfforts: unknown[] = []
 const trustModes: Array<string | null> = []
 let mockedAssessmentSide: 'BUY' | 'SELL' = 'BUY'
 let mockTrustFailure = true
@@ -32,10 +33,11 @@ globalThis.fetch = async (_url, init = {}) => {
       signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')), { once: true })
     })
   }
-  const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; response_format?: unknown; max_tokens?: unknown; messages?: Array<{ content?: string }> }
+  const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; response_format?: unknown; max_tokens?: unknown; reasoning_effort?: unknown; messages?: Array<{ content?: string }> }
   prompts.push((body.messages ?? []).map(message => message.content ?? '').join('\n'))
   responseFormats.push(body.response_format)
   outputTokenLimits.push(body.max_tokens)
+  reasoningEfforts.push(body.reasoning_effort)
   if (trustMode && mockConfiguredTrustInvalid) {
     return new Response(JSON.stringify({
       id: '0g-direct-trade-invalid',
@@ -138,6 +140,7 @@ try {
   assert.match(prompts.join('\n'), /RESOLUTION_AUTHORITY/i)
   assert(responseFormats.every(value => value === undefined))
   assert(outputTokenLimits.every(value => value === 1200))
+  assert(reasoningEfforts.every(value => value === 'low'))
   assert(trustModes.includes('verified'))
   assert(trustModes.includes(null))
   mockTrustFailure = false

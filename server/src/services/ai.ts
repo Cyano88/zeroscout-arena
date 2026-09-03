@@ -1505,7 +1505,7 @@ async function completeDirectTradeJson(
   const configuredTrust = Boolean(config.computeTrustMode && config.computeTrustMode !== "default");
   if (!configuredTrust) {
     const content = await withAiTimeout(
-      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 1200 }),
+      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 1200, reasoningEffort: "low" }),
       ai.timeoutMs,
       ai.model
     );
@@ -1518,7 +1518,7 @@ async function completeDirectTradeJson(
   let configuredError: unknown;
   try {
     const content = await withAiTimeout(
-      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, maxTokens: 1200 }),
+      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, maxTokens: 1200, reasoningEffort: "low" }),
       trustProbeMs,
       `${ai.model} configured-trust probe`
     );
@@ -1536,7 +1536,7 @@ async function completeDirectTradeJson(
   }
   try {
     const content = await withAiTimeout(
-      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 1200 }),
+      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 1200, reasoningEffort: "low" }),
       remainingMs,
       `${ai.model} default-trust fallback`
     );
@@ -1660,6 +1660,7 @@ async function completeJson(
     allowTrustFallback?: boolean;
     useDefaultTrustMode?: boolean;
     maxTokens?: number;
+    reasoningEffort?: "low" | "medium" | "high";
   } = {},
 ): Promise<string | undefined> {
   const allowTrustFallback = options.allowTrustFallback !== false;
@@ -1687,7 +1688,8 @@ async function completeJson(
       temperature: 0.35,
       ...(enforceJson ? { response_format: { type: "json_object" as const } } : {}),
       messages: finalMessages,
-      ...(options.maxTokens ? { max_tokens: options.maxTokens } : {})
+      ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+      ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {})
     }, options.signal ? { signal: options.signal } : undefined);
     return response.choices[0]?.message?.content ?? undefined;
   };
