@@ -47,7 +47,7 @@ export const config = {
   ),
   computeDirectTradeModelDiscovery: process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_DISCOVERY !== "false",
   computeDirectTradeModelLimit: Math.max(1, Math.min(12, Number(process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_LIMIT ?? 6) || 6)),
-  computeDirectTradeTotalTimeoutMs: Math.max(10_000, Math.min(70_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_TOTAL_TIMEOUT_MS ?? 70_000) || 70_000)),
+  computeDirectTradeTotalTimeoutMs: Math.max(10_000, Math.min(40_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_TOTAL_TIMEOUT_MS ?? 40_000) || 40_000)),
   computeDirectTradeAttemptTimeoutMs: Math.max(3_000, Math.min(60_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_ATTEMPT_TIMEOUT_MS ?? 30_000) || 30_000)),
   computeDirectTradeTrustProbeTimeoutMs: Math.max(1_000, Math.min(15_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_TRUST_PROBE_TIMEOUT_MS ?? 10_000) || 10_000)),
   computeHelperModel: process.env.ZEROSCOUT_HELPER_MODEL ?? process.env.ZG_COMPUTE_HELPER_MODEL ?? "claude-sonnet-5",
