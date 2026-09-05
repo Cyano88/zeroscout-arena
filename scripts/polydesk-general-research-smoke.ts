@@ -24,6 +24,8 @@ const request = polyDeskGeneralResearchRequestSchema.parse({
   schema: 'zeroscout.polydesk-general-research.request',
   schemaVersion: '1.0.0',
   query: 'Federal Reserve: September decision?',
+  requestedOutcome: 'Yes',
+  requestedSide: 'BUY',
   market: {
     conditionId: '0x' + 'a'.repeat(64),
     question: 'Will the Federal Reserve change rates in September?',
@@ -49,6 +51,7 @@ assert.match(seeds.join(' '), /federalreserve\.gov/i);
 
 const originalFetch = globalThis.fetch;
 let searchCalls = 0;
+const searchTopics = new Map<string, unknown>();
 globalThis.fetch = async (input, init) => {
   const url = String(input);
   const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -57,6 +60,7 @@ globalThis.fetch = async (input, init) => {
     assert.equal(body.model, 'gpt-5.6-sol');
     assert.match(JSON.stringify(body.messages), /Full resolution rules:/);
     assert.match(JSON.stringify(body.messages), /Research request:/);
+    assert.match(JSON.stringify(body.messages), /Requested trade: BUY Yes/);
     assert.match(JSON.stringify(body.messages), /Federal Reserve announcement/);
     return new Response(JSON.stringify({
       choices: [{
@@ -64,7 +68,8 @@ globalThis.fetch = async (input, init) => {
           content: JSON.stringify({
             queries: [
               'site:federalreserve.gov September rate decision official',
-              'Federal Reserve September rate decision contradiction latest',
+              'Federal Reserve September rate decision latest confirming evidence',
+              'Federal Reserve September rate decision latest contradictory evidence',
             ],
           }),
         },
@@ -78,16 +83,45 @@ globalThis.fetch = async (input, init) => {
   assert.equal(body.include_answer, false);
   assert.equal(body.include_raw_content, 'text');
   searchCalls += 1;
+  const searchQuery = String(body.query);
+  searchTopics.set(searchQuery, body.topic);
+  const results = searchQuery.includes('site:federalreserve.gov')
+    ? [{
+        title: 'Generic high-score policy coverage',
+        url: 'https://example.org/generic-policy-coverage',
+        content: 'Generic coverage must not displace the official resolution authority.',
+        published_date: '2026-09-04',
+        score: 0.99,
+      }, {
+        title: 'Federal Reserve policy update',
+        url: 'https://www.federalreserve.gov/policy-update',
+        content: 'Current evidence returned by the official resolution authority.',
+        published_date: null,
+        score: 0.3,
+      }]
+    : searchQuery.includes('confirming')
+      ? [{
+          title: 'Undated confirming commentary',
+          url: 'https://example.net/undated-confirming',
+          content: 'A high-score but undated result must not take the confirming evidence slot.',
+          published_date: null,
+          score: 0.98,
+        }, {
+          title: 'Dated confirming report',
+          url: 'https://news.example.com/dated-confirming',
+          content: 'Fresh confirming evidence with a real publication date.',
+          published_date: '2026-09-03',
+          score: 0.7,
+        }]
+      : [{
+          title: 'Dated contradictory report',
+          url: 'https://counter.example.com/dated-contradictory',
+          content: 'Fresh contradictory evidence for the requested outcome.',
+          published_date: '2026-09-04',
+          score: 0.65,
+        }];
   return new Response(JSON.stringify({
-    results: [{
-      title: searchCalls === 1 ? 'Federal Reserve policy update' : 'Independent policy coverage',
-      url: searchCalls === 1
-        ? 'https://www.federalreserve.gov/policy-update'
-        : 'https://example.org/fed-coverage',
-      content: 'Current evidence returned by the retrieval API.',
-      published_date: '2026-09-01',
-      score: searchCalls === 1 ? 0.98 : 0.8,
-    }, {
+    results: [...results, {
       title: 'Social media commentary',
       url: 'https://www.facebook.com/example/posts/market-rumor',
       content: 'Unverified commentary must not become evidence.',
@@ -98,17 +132,24 @@ globalThis.fetch = async (input, init) => {
 
 try {
   const result = await fetchPolyDeskGeneralResearch(request);
-  assert.equal(searchCalls, 2);
+  assert.equal(searchCalls, 3);
   assert.equal(result.model, 'gpt-5.6-sol');
   assert.equal(result.computeProvider, '0G Compute Router');
   assert.equal(result.retrievalProvider, 'Tavily Search');
-  assert.equal(result.searchQueries.length, 2);
-  assert.equal(result.articles.length, 2);
+  assert.equal(result.searchQueries.length, 3);
+  assert.equal(searchTopics.get('site:federalreserve.gov September rate decision official'), 'general');
+  assert.equal(searchTopics.get('Federal Reserve September rate decision latest confirming evidence'), 'news');
+  assert.equal(searchTopics.get('Federal Reserve September rate decision latest contradictory evidence'), 'news');
+  assert.equal(result.articles.length, 5);
   assert.equal(result.articles[0].source, 'federalreserve.gov');
   assert.equal(result.articles[0].url, 'https://www.federalreserve.gov/policy-update');
   assert.equal(result.articles[0].evidenceRole, 'RESOLUTION_AUTHORITY');
   assert.match(result.articles[0].retrievedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(result.articles[1].url, 'https://news.example.com/dated-confirming');
+  assert.equal(result.articles[1].publishedAt, '2026-09-03');
   assert.equal(result.articles[1].evidenceRole, 'EXTERNAL_SOURCE');
+  assert.equal(result.articles[2].url, 'https://counter.example.com/dated-contradictory');
+  assert.equal(result.articles[2].publishedAt, '2026-09-04');
 } finally {
   globalThis.fetch = originalFetch;
   if (priorComputeKey === undefined) delete process.env.ZG_COMPUTE_API_KEY;

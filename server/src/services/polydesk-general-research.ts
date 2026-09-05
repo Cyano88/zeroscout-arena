@@ -5,6 +5,8 @@ export const polyDeskGeneralResearchRequestSchema = z.object({
   schema: z.literal('zeroscout.polydesk-general-research.request'),
   schemaVersion: z.literal('1.0.0'),
   query: z.string().trim().min(2).max(180),
+  requestedOutcome: z.string().trim().min(1).max(120).optional(),
+  requestedSide: z.enum(['BUY', 'SELL']).optional(),
   market: z.object({
     conditionId: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
     question: z.string().trim().min(2).max(500),
@@ -42,8 +44,23 @@ const DEFAULT_SEARCH_BASE_URL = 'https://api.tavily.com';
 const DEFAULT_CACHE_MS = 10 * 60 * 1000;
 
 const queryPlanSchema = z.object({
-  queries: z.array(z.string().trim().min(3).max(300)).min(2).max(3),
+  queries: z.array(z.union([
+    z.string().trim().min(3).max(300),
+    z.object({
+      role: z.enum(['RESOLUTION_AUTHORITY', 'CURRENT_CONFIRMING', 'CURRENT_CONTRADICTORY']),
+      query: z.string().trim().min(3).max(300),
+    }).strict(),
+  ])).min(2).max(3),
 }).strict();
+
+type ResearchQueryRole = 'RESOLUTION_AUTHORITY' | 'CURRENT_CONFIRMING' | 'CURRENT_CONTRADICTORY';
+type ResearchQuery = { role: ResearchQueryRole; query: string };
+
+const RESEARCH_QUERY_ROLES: ResearchQueryRole[] = [
+  'RESOLUTION_AUTHORITY',
+  'CURRENT_CONFIRMING',
+  'CURRENT_CONTRADICTORY',
+];
 
 const tavilyResultSchema = z.object({
   title: z.string().optional().default(''),
@@ -58,9 +75,14 @@ const tavilyResponseSchema = z.object({
   results: z.array(tavilyResultSchema).default([]),
 });
 
+type RankedCandidate = z.infer<typeof tavilyResultSchema> & { queryRole: ResearchQueryRole };
+
 function cleanText(value: string, max = 500): string {
-  return value
-    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+  const withoutControls = Array.from(value, (character) => {
+    const code = character.codePointAt(0) || 0;
+    return code <= 0x1f || code === 0x7f ? ' ' : character;
+  }).join('');
+  return withoutControls
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, max);
@@ -123,6 +145,15 @@ export function buildPolyDeskResearchQueries(input: PolyDeskGeneralResearchReque
   ].map((value) => cleanText(value, 300)).filter(Boolean))];
 }
 
+function deterministicResearchQueries(input: PolyDeskGeneralResearchRequest): ResearchQuery[] {
+  const seeds = buildPolyDeskResearchQueries(input);
+  return [
+    { role: 'RESOLUTION_AUTHORITY', query: seeds[1] || seeds[0] },
+    { role: 'CURRENT_CONFIRMING', query: seeds[0] || seeds[1] },
+    { role: 'CURRENT_CONTRADICTORY', query: seeds[2] || seeds[0] },
+  ].filter((entry): entry is ResearchQuery => Boolean(entry.query));
+}
+
 function parseJsonObject(value: string): unknown {
   const trimmed = value.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const start = trimmed.indexOf('{');
@@ -134,15 +165,19 @@ function parseJsonObject(value: string): unknown {
 async function planQueriesWith0g(
   input: PolyDeskGeneralResearchRequest,
   model: string,
-): Promise<string[]> {
+): Promise<ResearchQuery[]> {
   if (!config.computeApiKey) throw new Error('0G Compute Router is not configured.');
   const seeds = buildPolyDeskResearchQueries(input);
   const prompt = [
     'Create 2 to 3 precise web-search queries for evidence about this prediction market.',
     'Return JSON only: {"queries":["..."]}. Do not answer the market and do not invent URLs.',
     'Queries must cover: the official resolution authority, the newest confirming evidence, and credible contradictory evidence.',
+    'Return queries in exactly that order: resolution authority, current confirming evidence, current contradictory evidence.',
     'Use distinctive entities, dates, thresholds, event names, and resolution keywords from the complete rules.',
     'Research request: ' + input.query,
+    input.requestedOutcome && input.requestedSide
+      ? 'Requested trade: ' + input.requestedSide + ' ' + input.requestedOutcome + '. Confirming evidence must support this exact trade; contradictory evidence must cut against it.'
+      : '',
     'Market question: ' + input.market.question,
     'Full resolution rules: ' + input.market.resolutionRules,
     input.market.resolutionSource ? 'Resolution source: ' + input.market.resolutionSource : '',
@@ -172,10 +207,18 @@ async function planQueriesWith0g(
   const message = first.message && typeof first.message === 'object' ? first.message as Record<string, unknown> : {};
   const content = typeof message.content === 'string' ? message.content : '';
   const plan = queryPlanSchema.parse(parseJsonObject(content));
-  return [...new Set(plan.queries.map((query) => cleanText(query, 300)).filter(Boolean))];
+  const fallbacks = deterministicResearchQueries(input);
+  const planned = plan.queries.map((entry, index): ResearchQuery => typeof entry === 'string'
+    ? { role: RESEARCH_QUERY_ROLES[index] || 'CURRENT_CONFIRMING', query: cleanText(entry, 300) }
+    : { role: entry.role, query: cleanText(entry.query, 300) });
+  const byRole = new Map<ResearchQueryRole, ResearchQuery>();
+  for (const entry of [...planned, ...fallbacks]) {
+    if (entry.query && !byRole.has(entry.role)) byRole.set(entry.role, entry);
+  }
+  return RESEARCH_QUERY_ROLES.flatMap((role) => byRole.get(role) ? [byRole.get(role)!] : []);
 }
 
-async function searchTavily(query: string, apiKey: string, baseUrl: string) {
+async function searchTavily(query: ResearchQuery, apiKey: string, baseUrl: string) {
   const response = await fetch(baseUrl.replace(/\/+$/, '') + '/search', {
     method: 'POST',
     headers: {
@@ -183,9 +226,9 @@ async function searchTavily(query: string, apiKey: string, baseUrl: string) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      query,
+      query: query.query,
       search_depth: 'advanced',
-      topic: 'general',
+      topic: query.role === 'RESOLUTION_AUTHORITY' ? 'general' : 'news',
       max_results: 5,
       include_answer: false,
       include_raw_content: 'text',
@@ -196,6 +239,26 @@ async function searchTavily(query: string, apiKey: string, baseUrl: string) {
   const payload = await response.json() as unknown;
   if (!response.ok) throw new Error('ZeroScout search retrieval failed with ' + response.status + '.');
   return tavilyResponseSchema.parse(payload).results;
+}
+
+function hasPublicationDate(candidate: z.infer<typeof tavilyResultSchema>): boolean {
+  return Boolean(candidate.published_date && Number.isFinite(Date.parse(candidate.published_date)));
+}
+
+function rankRoleCandidates(candidates: RankedCandidate[], role: ResearchQueryRole, resolutionHost: string) {
+  return [...candidates].sort((a, b) => {
+    if (role === 'RESOLUTION_AUTHORITY' && resolutionHost) {
+      const aAuthority = sourceHost(a.url).toLowerCase() === resolutionHost ? 1 : 0;
+      const bAuthority = sourceHost(b.url).toLowerCase() === resolutionHost ? 1 : 0;
+      if (aAuthority !== bAuthority) return bAuthority - aAuthority;
+    }
+    if (role !== 'RESOLUTION_AUTHORITY') {
+      const aDated = hasPublicationDate(a) ? 1 : 0;
+      const bDated = hasPublicationDate(b) ? 1 : 0;
+      if (aDated !== bDated) return bDated - aDated;
+    }
+    return b.score - a.score;
+  });
 }
 
 export function polyDeskGeneralResearchConfigured(): boolean {
@@ -211,25 +274,47 @@ export async function fetchPolyDeskGeneralResearch(
 
   const model = config.computeGeneralResearchModel.trim() || DEFAULT_MODEL;
   const baseUrl = process.env.ZEROSCOUT_GENERAL_SEARCH_BASE_URL?.trim() || DEFAULT_SEARCH_BASE_URL;
-  const cacheKey = input.market.conditionId.toLowerCase() + '|' + cleanText(input.query, 180).toLowerCase();
+  const cacheKey = [
+    input.market.conditionId.toLowerCase(),
+    cleanText(input.query, 180).toLowerCase(),
+    input.requestedSide || '',
+    cleanText(input.requestedOutcome || '', 120).toLowerCase(),
+  ].join('|');
   const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.result;
 
   const searchQueries = await planQueriesWith0g(input, model);
-  const batches = await Promise.all(searchQueries.map((query) => searchTavily(query, apiKey, baseUrl)));
-  const byUrl = new Map<string, z.infer<typeof tavilyResultSchema>>();
-  for (const candidate of batches.flat()) {
-    if (isExcludedEvidenceUrl(candidate.url, input.market.resolutionSource)) continue;
-    if (!/^https?:\/\//i.test(candidate.url)) continue;
-    const key = candidate.url.toLowerCase();
-    const prior = byUrl.get(key);
-    if (!prior || candidate.score > prior.score) byUrl.set(key, candidate);
+  const batches = await Promise.all(searchQueries.map(async (query) => ({
+    query,
+    results: await searchTavily(query, apiKey, baseUrl),
+  })));
+  const candidates: RankedCandidate[] = [];
+  for (const batch of batches) {
+    for (const candidate of batch.results) {
+      if (isExcludedEvidenceUrl(candidate.url, input.market.resolutionSource)) continue;
+      if (!/^https?:\/\//i.test(candidate.url)) continue;
+      candidates.push({ ...candidate, queryRole: batch.query.role });
+    }
   }
   const retrievedAt = new Date().toISOString();
   const resolutionHost = sourceHost(input.market.resolutionSource).toLowerCase();
-  const articles = [...byUrl.values()]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 8)
+  const selected: RankedCandidate[] = [];
+  const selectedUrls = new Set<string>();
+  for (const role of RESEARCH_QUERY_ROLES) {
+    const candidate = rankRoleCandidates(candidates.filter((entry) => entry.queryRole === role), role, resolutionHost)
+      .find((entry) => !selectedUrls.has(entry.url.toLowerCase()));
+    if (!candidate) continue;
+    selected.push(candidate);
+    selectedUrls.add(candidate.url.toLowerCase());
+  }
+  for (const candidate of [...candidates].sort((a, b) => b.score - a.score)) {
+    if (selected.length >= 8) break;
+    const key = candidate.url.toLowerCase();
+    if (selectedUrls.has(key)) continue;
+    selected.push(candidate);
+    selectedUrls.add(key);
+  }
+  const articles = selected
     .map((candidate) => ({
       title: cleanText(candidate.title, 500) || sourceHost(candidate.url) || 'Retrieved web source',
       description: cleanText(candidate.raw_content || candidate.content, 1_500),
@@ -247,7 +332,7 @@ export async function fetchPolyDeskGeneralResearch(
   const result: PolyDeskGeneralResearchResult = {
     articles,
     model,
-    searchQueries,
+    searchQueries: searchQueries.map((entry) => entry.query),
     computeProvider: '0G Compute Router',
     retrievalProvider: 'Tavily Search',
   };
