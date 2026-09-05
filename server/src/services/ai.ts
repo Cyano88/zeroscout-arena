@@ -89,6 +89,77 @@ export interface CustomIntelligenceResult {
   };
 }
 
+export type DirectTradeModelReadiness = {
+  state: "checking" | "available" | "unavailable";
+  checkedAt?: string;
+  model?: string;
+  reason?: string;
+  retryAfterSeconds: number;
+};
+
+const DIRECT_TRADE_READINESS_AVAILABLE_TTL_MS = 5 * 60_000;
+const DIRECT_TRADE_READINESS_UNAVAILABLE_TTL_MS = 60_000;
+let directTradeModelReadiness: DirectTradeModelReadiness = { state: "checking", retryAfterSeconds: 45 };
+let directTradeReadinessProbe: Promise<DirectTradeModelReadiness> | undefined;
+
+function recordDirectTradeModelReadiness(result: CustomIntelligenceResult): DirectTradeModelReadiness {
+  const degraded = result.proofMetadata?.degraded === true;
+  directTradeModelReadiness = {
+    state: degraded ? "unavailable" : "available",
+    checkedAt: new Date().toISOString(),
+    model: degraded ? undefined : result.aiProvider,
+    reason: degraded ? "Every configured or discovered direct-trade model route failed." : undefined,
+    retryAfterSeconds: degraded ? 60 : 0,
+  };
+  return directTradeModelReadiness;
+}
+
+export function getDirectTradeModelReadiness(now = Date.now()): DirectTradeModelReadiness {
+  const checkedAt = directTradeModelReadiness.checkedAt ? Date.parse(directTradeModelReadiness.checkedAt) : Number.NaN;
+  const ttl = directTradeModelReadiness.state === "available"
+    ? DIRECT_TRADE_READINESS_AVAILABLE_TTL_MS
+    : DIRECT_TRADE_READINESS_UNAVAILABLE_TTL_MS;
+  if (Number.isFinite(checkedAt) && now - checkedAt < ttl) return directTradeModelReadiness;
+  void refreshDirectTradeModelReadiness();
+  return { state: "checking", checkedAt: directTradeModelReadiness.checkedAt, retryAfterSeconds: 45 };
+}
+
+export async function refreshDirectTradeModelReadiness(): Promise<DirectTradeModelReadiness> {
+  if (directTradeReadinessProbe) return directTradeReadinessProbe;
+  directTradeReadinessProbe = (async () => {
+    try {
+      const result = await generateDirectTradeIntelligence({
+        partner: "zeroscout-readiness",
+        productType: "polymarket-direct-trading",
+        analysisType: "polydesk-smart-market-research",
+        proofClass: "polydesk_smart_market_research",
+        objective: "Verify that at least one direct-trade model route returns usable strict JSON.",
+        outputStyle: "readiness-probe",
+        data: {
+          side: "BUY",
+          market: { conditionId: `0x${"00".repeat(32)}`, title: "Provider readiness probe" },
+          outcome: { tokenId: "1", label: "Yes" },
+          execution: { bestBid: 0.49, bestAsk: 0.51, spread: 0.02, bookAgeSeconds: 0 },
+          mandate: { maximumPrice: 0.6, maximumPriceDrift: 0.05, maximumSpendUsdc: 1 },
+          newsEvidence: [],
+        },
+      });
+      return recordDirectTradeModelReadiness(result);
+    } catch (error) {
+      directTradeModelReadiness = {
+        state: "unavailable",
+        checkedAt: new Date().toISOString(),
+        reason: sanitizeAiError(error),
+        retryAfterSeconds: 60,
+      };
+      return directTradeModelReadiness;
+    } finally {
+      directTradeReadinessProbe = undefined;
+    }
+  })();
+  return directTradeReadinessProbe;
+}
+
 export async function generateScout(input: ProjectCapsuleInput, previous?: ProjectCapsule): Promise<ScoutResult> {
   const prompt = scoutPrompt(input, previous);
   const ai = getAiClient();
@@ -124,7 +195,9 @@ export async function generateCustomIntelligence(input: CustomIntelligenceInput)
     return generateHelperGuidance(input);
   }
   if (lane === "direct-trade") {
-    return generateDirectTradeIntelligence(input);
+    const result = await generateDirectTradeIntelligence(input);
+    recordDirectTradeModelReadiness(result);
+    return result;
   }
   if (lane === "lp-intelligence") {
     return generateLpMarketIntelligence(input);

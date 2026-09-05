@@ -98,7 +98,7 @@ globalThis.fetch = async (_url, init = {}) => {
 }
 
 try {
-  const { classifyCustomIntelligenceLane, directTradeModelCandidates, generateCustomIntelligence } = await import('../server/src/services/ai.js')
+  const { classifyCustomIntelligenceLane, directTradeModelCandidates, generateCustomIntelligence, getDirectTradeModelReadiness } = await import('../server/src/services/ai.js')
   assert.deepEqual(directTradeModelCandidates(), ['direct-trade-test-model'])
   const directInput = {
     partner: 'polydesk',
@@ -124,6 +124,8 @@ try {
   assert.equal(classifyCustomIntelligenceLane(conflictingInput), 'conflict')
   await assert.rejects(() => generateCustomIntelligence(conflictingInput), /mixes direct-trade and LP routing markers/i)
   const result = await generateCustomIntelligence(directInput)
+  assert.equal(getDirectTradeModelReadiness().state, 'available')
+  assert.match(getDirectTradeModelReadiness().model ?? '', /direct-trade-test-model/i)
   assert.equal(result.intent, 'polymarket-direct-trade-intelligence')
   assert.equal(result.tradeAssessment?.stance, 'SUPPORT')
   assert.equal(result.tradeAssessment?.side, 'BUY')
@@ -182,6 +184,7 @@ try {
   assert.equal(degradedResult.tradeAssessment?.evidenceQuality, 'LOW')
   assert.equal(degradedResult.proofMetadata?.degraded, true)
   assert.equal(degradedResult.proofMetadata?.failureClass, 'all-direct-trade-models-unavailable')
+  assert.equal(getDirectTradeModelReadiness().state, 'unavailable')
   assert.match(degradedResult.disclaimer, /does not authorize PolyDesk PREPARE/i)
   assert.equal(trustModes.length, callsBeforeHang + 4)
   console.log('zeroscout direct-trade intelligence smoke ok')

@@ -8,7 +8,7 @@ import { ethers } from "ethers";
 import { config, publicConfig } from "./config.js";
 import { capsuleInputSchema, matchupInputSchema } from "./validation.js";
 import { addCreditsToWalletKeys, claimIntegrationKeyByHash, clearPendingClaim, consumeIntegrationCredits, findActiveIntegrationKeyByHash, findSponsorshipProof, getCapsule, getPendingClaim, getVideoScoreSession, hasIntegrationTopUp, integrationTopUpSummary, listCapsulesByProjectKey, listIntegrationKeys, listIntegrationKeysByWallet, listMatchups, listPublicCapsules, markVideoScoreSessionUsed, revokeIntegrationKey, revokeIntegrationKeyForWallet, saveCapsule, saveIntegrationKey, saveIntegrationTopUp, saveMatchup, savePendingClaim, saveSponsorshipProof, saveVideoScoreSession } from "./repository.js";
-import { checkAiHealth, generateCustomIntelligence, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview } from "./services/ai.js";
+import { checkAiHealth, generateCustomIntelligence, generateMatchup, generatePlatformVideoScore, generateScout, generateUploadedVideoReview, generateVideoReview, getDirectTradeModelReadiness, refreshDirectTradeModelReadiness } from "./services/ai.js";
 import { loadBinaryArtifact, loadCanonicalArtifact, storeBinaryArtifact, storeCanonicalArtifact } from "./services/storage.js";
 import { getRegistryCapsuleRoot, getRegistryClaim, listRegistryCapsules, registerClaimOnChain, registerPassportOnChain } from "./services/registry.js";
 import { parseGitHubRepo, projectKeyFor } from "./services/project-key.js";
@@ -625,11 +625,43 @@ app.post("/api/integrations/intelligence/readiness", async (req, res, next) => {
       analysisType,
       proofClass
     });
+    const directTradeReadinessRequired = analysisType === "polydesk-smart-market-research"
+      || proofClass === "polydesk_smart_market_research";
+    if (directTradeReadinessRequired && !config.privateKey) {
+      res.status(503).json({
+        ok: false,
+        service: "zeroscout-intelligence",
+        analysisType,
+        proofClass,
+        storageConfigured: false,
+        error: "ZeroScout proof storage is unavailable. Retry before paying.",
+        integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined
+      });
+      return;
+    }
+    const modelReadiness = directTradeReadinessRequired ? getDirectTradeModelReadiness() : undefined;
+    if (modelReadiness && modelReadiness.state !== "available") {
+      res.setHeader("Retry-After", String(modelReadiness.retryAfterSeconds));
+      res.status(503).json({
+        ok: false,
+        service: "zeroscout-intelligence",
+        analysisType,
+        proofClass,
+        modelReadiness,
+        error: modelReadiness.state === "checking"
+          ? "ZeroScout is checking direct-trade model availability. Retry before paying."
+          : "No usable ZeroScout direct-trade model route is currently available. Retry before paying.",
+        integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined
+      });
+      return;
+    }
     res.json({
       ok: true,
       service: "zeroscout-intelligence",
       analysisType,
       proofClass,
+      modelReadiness,
+      storageConfigured: Boolean(config.privateKey),
       integration: integration ? { id: integration.id, name: integration.name, partner: integration.partner } : undefined
     });
   } catch (error) {
@@ -1685,4 +1717,9 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
 
 app.listen(config.port, () => {
   console.log(`ZeroScout Arena API running on http://localhost:${config.port}`);
+  void refreshDirectTradeModelReadiness().then((readiness) => {
+    console.info("[ai] initial direct-trade model readiness", readiness);
+  }).catch((error) => {
+    console.error("[ai] initial direct-trade model readiness failed", error);
+  });
 });
