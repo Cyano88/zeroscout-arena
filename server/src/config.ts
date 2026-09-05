@@ -17,6 +17,8 @@ const legacyRegistrySource = legacyRegistryEnv && ["none", "off", "disabled"].in
   ? ""
   : legacyRegistryEnv ?? defaultLegacyRegistries;
 
+export const directTradeFallbackModels = ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "glm-5.3", "qwen3.7-plus"];
+
 export const config = {
   port: Number(process.env.PORT ?? 8787),
   corsOrigin: process.env.CORS_ORIGIN ?? "*",
@@ -43,7 +45,7 @@ export const config = {
   computeGeneralResearchModel: process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL ?? "gpt-5.6-sol",
   computeDirectTradeModelCandidates: commaSeparated(
     process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_CANDIDATES?.trim()
-      || "gpt-5.6-sol,claude-fable-5,deepseek-v4-pro,zai-org/GLM-5-FP8"
+      || ["gpt-5.6-sol", ...directTradeFallbackModels].join(",")
   ),
   computeDirectTradeModelDiscovery: process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_DISCOVERY !== "false",
   computeDirectTradeModelLimit: Math.max(1, Math.min(12, Number(process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_LIMIT ?? 6) || 6)),

@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import type { Fetch as OpenAiCompatibleFetch } from "openai/core";
-import { config } from "../config.js";
+import { config, directTradeFallbackModels } from "../config.js";
 import type { AiHealthResponse, CampaignPack, ProjectCapsule, ProjectCapsuleInput, SurvivalDelta, VideoReview } from "../../../shared/types.js";
 
 interface ScoutResult {
@@ -300,15 +300,35 @@ export function directTradeModelCandidates(): string[] {
   ]);
 }
 
-async function resolveDirectTradeModelCandidates(): Promise<string[]> {
+export async function resolveDirectTradeModelCandidates(): Promise<string[]> {
   const configured = directTradeModelCandidates();
   const compatibleFallbacks = uniqueStrings([
     config.computeHelperModel,
     ...config.computeHelperModelCandidates,
   ]).filter(isTextHelperModel);
   const discovered = config.computeDirectTradeModelDiscovery ? await discoverRouterModels() : [];
-  return uniqueStrings([...configured, ...compatibleFallbacks, ...discovered])
+  // A successful catalog excludes stale IDs. Keep current direct-trade fallbacks
+  // ahead of helper routes so the attempt limit cannot hide them.
+  const available = new Set(discovered);
+  const candidates = discovered.length
+    ? uniqueStrings([...configured, ...directTradeFallbackModels, ...discovered, ...compatibleFallbacks])
+      .filter(model => available.has(model))
+    : uniqueStrings([...configured, ...compatibleFallbacks]);
+  return candidates
     .slice(0, config.computeDirectTradeModelLimit);
+}
+
+function parseDirectTradeCompletion(content: string | undefined): Record<string, unknown> {
+  const parsed = parseJsonObject(content ?? "");
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error("Direct-trade response must be a JSON object.");
+  const assessment = objectOrUndefined(parsed.tradeAssessment);
+  if (!readString(parsed.summary) || !assessment
+    || !["SUPPORT", "OPPOSE", "INSUFFICIENT"].includes(readString(assessment.stance).toUpperCase())
+    || !["BUY", "SELL"].includes(readString(assessment.side).toUpperCase())
+    || !["HIGH", "MEDIUM", "LOW"].includes(readString(assessment.evidenceQuality).toUpperCase())) {
+    throw new Error("Direct-trade response is missing a usable summary or trade assessment.");
+  }
+  return parsed;
 }
 
 function degradedDirectTradeIntelligence(
@@ -405,6 +425,7 @@ Rules:
   let parsed: Record<string, unknown> = {};
   let selectedAi: AiChatClient | undefined;
   const errors: string[] = [];
+  const attemptedModels: string[] = [];
   const routingDeadline = Date.now() + config.computeDirectTradeTotalTimeoutMs;
   for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex += 1) {
     const model = modelCandidates[modelIndex];
@@ -413,22 +434,24 @@ Rules:
       errors.push(`Routing budget exhausted before ${model}.`);
       break;
     }
-    const remainingCandidates = modelCandidates.length - modelIndex - 1;
-    const attemptBudgetMs = Math.min(config.computeDirectTradeAttemptTimeoutMs, remainingMs, Math.max(1_500, remainingMs - remainingCandidates * 1_500));
+    // Leave half the original budget for another full model completion.
+    const attemptBudgetMs = Math.min(config.computeDirectTradeAttemptTimeoutMs, remainingMs,
+      modelCandidates.length > 1 ? config.computeDirectTradeTotalTimeoutMs / 2 : remainingMs);
     const ai = { ...getComputeAiClientForModel(model, "Direct Trade Intelligence"), timeoutMs: attemptBudgetMs };
+    attemptedModels.push(model);
     try {
       const completion = await completeDirectTradeJson(ai, [
         { role: "system", content: "You are ZeroScout's direct prediction-market trade intelligence verifier. Return strict JSON only. Never provide LP analysis or fabricate evidence." },
         { role: "user", content: prompt }
       ]);
-      parsed = parseJsonObject(completion.content ?? "{}");
+      parsed = parseDirectTradeCompletion(completion.content);
       selectedAi = { ...ai, label: `${ai.label}; trust=${completion.trustMode}` };
       break;
     } catch (error) {
       errors.push(`${ai.model}: ${sanitizeAiError(error)}`);
     }
   }
-  if (!selectedAi) return degradedDirectTradeIntelligence(side as "BUY" | "SELL", modelCandidates, errors);
+  if (!selectedAi) return degradedDirectTradeIntelligence(side as "BUY" | "SELL", attemptedModels, errors);
 
   const rawAssessment = parsed.tradeAssessment && typeof parsed.tradeAssessment === "object"
     ? parsed.tradeAssessment as Record<string, unknown>
@@ -1615,7 +1638,7 @@ async function discoverRouterModels(): Promise<string[]> {
 }
 
 function isTextHelperModel(model: string): boolean {
-  return !/(embed|rerank|whisper|speech|audio|image|diffusion|stable-diffusion|qwen.*vl)/i.test(model);
+  return !/(embed|rerank|whisper|speech|audio|image|diffusion|stable-diffusion|qwen.*vl|seedance|video)/i.test(model);
 }
 
 async function withAiTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number, model: string): Promise<T> {
@@ -1644,7 +1667,7 @@ async function completeDirectTradeJson(
         ai.timeoutMs,
         ai.model
       );
-      parseJsonObject(content ?? "{}");
+      parseDirectTradeCompletion(content);
       console.info("[ai] direct-trade completion", {
         model: ai.model,
         trustMode: "default",
@@ -1666,7 +1689,7 @@ async function completeDirectTradeJson(
   }
 
   const startedAt = Date.now();
-  const trustProbeMs = Math.min(config.computeDirectTradeTrustProbeTimeoutMs, Math.max(1_000, ai.timeoutMs - 1_000));
+  const trustProbeMs = Math.min(config.computeDirectTradeTrustProbeTimeoutMs, Math.max(1_000, ai.timeoutMs / 4));
   let configuredError: unknown;
   try {
     const content = await withAiTimeout(
@@ -1674,7 +1697,7 @@ async function completeDirectTradeJson(
       trustProbeMs,
       `${ai.model} configured-trust probe`
     );
-    parseJsonObject(content ?? "{}");
+    parseDirectTradeCompletion(content);
     console.info("[ai] direct-trade completion", {
       model: ai.model,
       trustMode: "configured",
@@ -1707,7 +1730,7 @@ async function completeDirectTradeJson(
       remainingMs,
       `${ai.model} default-trust fallback`
     );
-    parseJsonObject(content ?? "{}");
+    parseDirectTradeCompletion(content);
     console.info("[ai] direct-trade completion", {
       model: ai.model,
       trustMode: "default",

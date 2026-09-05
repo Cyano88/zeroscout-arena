@@ -40,6 +40,7 @@ const result = await generateCustomIntelligence({
 })
 
 assert(result.tradeAssessment, 'Direct-trade canary returned no trade assessment.')
+assert.notEqual(result.proofMetadata?.degraded, true, 'Direct-trade canary exhausted the model routes and returned a degraded safeguard.')
 console.log(JSON.stringify({
   ok: true,
   elapsedMs: Date.now() - startedAt,

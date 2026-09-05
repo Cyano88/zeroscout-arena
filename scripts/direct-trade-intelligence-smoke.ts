@@ -24,8 +24,17 @@ let mockHang = false
 let mockConfiguredTrustHang = false
 let mockConfiguredTrustInvalid = false
 let mockPrimaryModelFailure = false
+let mockPrimaryUnusable = false
+let mockPrimaryContent: string | null = null
+let mockCatalog = false
 
 globalThis.fetch = async (_url, init = {}) => {
+  if (mockCatalog && String(_url).endsWith('/models')) {
+    return new Response(JSON.stringify({ data: [
+      'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'glm-5.3', 'qwen3.7-plus',
+      'bytedance/seedance-2.5', 'whisper-large-v3',
+    ].map(id => ({ id })) }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }
   const headers = new Headers(init.headers)
   const trustMode = headers.get('x-0g-provider-trust-mode')
   trustModes.push(trustMode)
@@ -37,6 +46,11 @@ globalThis.fetch = async (_url, init = {}) => {
     })
   }
   const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; response_format?: unknown; max_tokens?: unknown; reasoning_effort?: unknown; messages?: Array<{ content?: string }> }
+  if (mockPrimaryUnusable && body.model === 'direct-trade-test-model') {
+    return new Response(JSON.stringify({ choices: [{ message: { content: mockPrimaryContent } }] }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    })
+  }
   if (mockPrimaryModelFailure && body.model === 'direct-trade-test-model') {
     return new Response(JSON.stringify({ error: { message: 'Primary model unavailable' } }), {
       status: 503,
@@ -98,7 +112,7 @@ globalThis.fetch = async (_url, init = {}) => {
 }
 
 try {
-  const { classifyCustomIntelligenceLane, directTradeModelCandidates, generateCustomIntelligence, getDirectTradeModelReadiness } = await import('../server/src/services/ai.js')
+  const { classifyCustomIntelligenceLane, directTradeModelCandidates, resolveDirectTradeModelCandidates, generateCustomIntelligence, getDirectTradeModelReadiness } = await import('../server/src/services/ai.js')
   assert.deepEqual(directTradeModelCandidates(), ['direct-trade-test-model'])
   const directInput = {
     partner: 'polydesk',
@@ -136,6 +150,14 @@ try {
   assert.match(modelFallbackResult.aiProvider, /direct-trade-fallback-model/i)
   assert.equal(modelFallbackResult.tradeAssessment?.stance, 'SUPPORT')
   mockPrimaryModelFailure = false
+  mockPrimaryUnusable = true
+  for (const content of [null, '', '{}', '[]', 'null', '{"summary":"No assessment"}']) {
+    mockPrimaryContent = content
+    const recovered = await generateCustomIntelligence(directInput)
+    assert.match(recovered.aiProvider, /direct-trade-fallback-model/i, `Unusable content must fall back: ${content}`)
+    assert.equal(recovered.tradeAssessment?.stance, 'SUPPORT')
+  }
+  mockPrimaryUnusable = false
   mockedAssessmentSide = 'SELL'
   const mismatchedResult = await generateCustomIntelligence(directInput)
   assert.equal(mismatchedResult.tradeAssessment?.side, 'SELL')
@@ -187,6 +209,14 @@ try {
   assert.equal(getDirectTradeModelReadiness().state, 'unavailable')
   assert.match(degradedResult.disclaimer, /does not authorize PolyDesk PREPARE/i)
   assert.equal(trustModes.length, callsBeforeHang + 4)
+  mockHang = false
+  const { config } = await import('../server/src/config.js')
+  config.computeDirectTradeModelDiscovery = true
+  config.computeDirectTradeModelLimit = 12
+  mockCatalog = true
+  const catalogCandidates = await resolveDirectTradeModelCandidates()
+  assert.deepEqual(catalogCandidates, ['gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'glm-5.3', 'qwen3.7-plus', 'gpt-5.6-sol'])
+  assert(!catalogCandidates.includes('direct-trade-test-model'), 'Stale configured IDs must not consume attempts.')
   console.log('zeroscout direct-trade intelligence smoke ok')
 } finally {
   globalThis.fetch = originalFetch
