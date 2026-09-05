@@ -227,6 +227,56 @@ export function directTradeModelCandidates(): string[] {
   ]);
 }
 
+async function resolveDirectTradeModelCandidates(): Promise<string[]> {
+  const configured = directTradeModelCandidates();
+  const compatibleFallbacks = uniqueStrings([
+    config.computeHelperModel,
+    ...config.computeHelperModelCandidates,
+  ]).filter(isTextHelperModel);
+  const discovered = config.computeDirectTradeModelDiscovery ? await discoverRouterModels() : [];
+  return uniqueStrings([...configured, ...compatibleFallbacks, ...discovered])
+    .slice(0, config.computeDirectTradeModelLimit);
+}
+
+function degradedDirectTradeIntelligence(
+  side: "BUY" | "SELL",
+  attemptedModels: string[],
+  errors: string[],
+): CustomIntelligenceResult {
+  console.error("[ai] every direct-trade model failed; returning a non-authorizing degraded receipt", {
+    attemptedModels,
+    errors,
+  });
+  return {
+    aiProvider: "ZeroScout degraded deterministic safeguard",
+    intelligenceScore: 0,
+    confidence: 0,
+    summary: "ZeroScout could not obtain a model-backed directional assessment. Market data may still be reviewed, but this receipt does not approve a trade.",
+    signals: [],
+    riskFlags: ["All available 0G direct-trade model routes were unavailable or returned unusable output."],
+    recommendedActions: ["Review the market manually or retry after model availability recovers. Any manual trade still requires its own preview and explicit confirmation."],
+    dataGaps: ["No model-backed interpretation of the supplied evidence was available."],
+    suggestedVisuals: ["Show the market and execution snapshot with a prominent intelligence-unavailable notice."],
+    disclaimer: "ZeroScout intelligence was unavailable. This degraded receipt is not a recommendation and does not authorize PolyDesk PREPARE.",
+    intent: "polymarket-direct-trade-intelligence",
+    safetyBoundaries: ["No automated approval without model-backed evidence.", "Manual execution remains a separate user-controlled flow."],
+    proofMetadata: {
+      degraded: true,
+      failureClass: "all-direct-trade-models-unavailable",
+      attemptedModels,
+      providerFailureCount: errors.length,
+    },
+    tradeAssessment: {
+      stance: "INSUFFICIENT",
+      side,
+      thesis: "A directional thesis was not produced because every available model route failed.",
+      counterThesis: "Without a model-backed review, material counter-evidence may be missing.",
+      resolutionRisk: "Review the authoritative market rules and sources manually before any separate trade.",
+      evidenceQuality: "LOW",
+    },
+  };
+}
+
 async function generateDirectTradeIntelligence(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
   const data = input.data && typeof input.data === "object" && !Array.isArray(input.data)
     ? input.data as Record<string, unknown>
@@ -248,7 +298,7 @@ async function generateDirectTradeIntelligence(input: CustomIntelligenceInput): 
   }
   if (!config.computeApiKey) throw new Error("0G Compute Router is not configured for direct-trade intelligence.");
 
-  const modelCandidates = directTradeModelCandidates();
+  const modelCandidates = await resolveDirectTradeModelCandidates();
   const prompt = `Create a ZeroScout Direct Trade Intelligence brief for the PolyDesk OKX AI service.
 
 Partner: ${input.partner}
@@ -282,8 +332,17 @@ Rules:
   let parsed: Record<string, unknown> = {};
   let selectedAi: AiChatClient | undefined;
   const errors: string[] = [];
-  for (const model of modelCandidates) {
-    const ai = getComputeAiClientForModel(model, "Direct Trade Intelligence");
+  const routingDeadline = Date.now() + config.computeDirectTradeTotalTimeoutMs;
+  for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex += 1) {
+    const model = modelCandidates[modelIndex];
+    const remainingMs = routingDeadline - Date.now();
+    if (remainingMs < 1_500) {
+      errors.push(`Routing budget exhausted before ${model}.`);
+      break;
+    }
+    const remainingCandidates = modelCandidates.length - modelIndex - 1;
+    const attemptBudgetMs = Math.min(config.computeDirectTradeAttemptTimeoutMs, remainingMs, Math.max(1_500, remainingMs - remainingCandidates * 1_500));
+    const ai = { ...getComputeAiClientForModel(model, "Direct Trade Intelligence"), timeoutMs: attemptBudgetMs };
     try {
       const completion = await completeDirectTradeJson(ai, [
         { role: "system", content: "You are ZeroScout's direct prediction-market trade intelligence verifier. Return strict JSON only. Never provide LP analysis or fabricate evidence." },
@@ -296,7 +355,7 @@ Rules:
       errors.push(`${ai.model}: ${sanitizeAiError(error)}`);
     }
   }
-  if (!selectedAi) throw new Error(`ZeroScout/0G compute could not finalize direct-trade intelligence. ${errors.join(" | ")}`);
+  if (!selectedAi) return degradedDirectTradeIntelligence(side as "BUY" | "SELL", modelCandidates, errors);
 
   const rawAssessment = parsed.tradeAssessment && typeof parsed.tradeAssessment === "object"
     ? parsed.tradeAssessment as Record<string, unknown>

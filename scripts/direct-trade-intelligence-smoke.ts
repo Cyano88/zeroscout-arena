@@ -5,7 +5,9 @@ process.env.ZG_COMPUTE_BASE_URL = 'https://router-api.0g.test/v1'
 process.env.ZEROSCOUT_FULL_PLATFORM_MODEL = 'generic-model-must-not-enter-direct-trade-routing'
 process.env.ZEROSCOUT_DIRECT_TRADE_MODEL = 'direct-trade-test-model'
 process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_CANDIDATES = 'direct-trade-test-model'
-process.env.ZEROSCOUT_HELPER_MODEL = 'helper-model-must-not-enter-direct-trade-routing'
+process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_DISCOVERY = 'false'
+process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_LIMIT = '2'
+process.env.ZEROSCOUT_HELPER_MODEL = 'direct-trade-fallback-model'
 process.env.ZG_COMPUTE_TRUST_MODE = 'verified'
 process.env.ZEROSCOUT_DIRECT_TRADE_ATTEMPT_TIMEOUT_MS = '3000'
 process.env.ZEROSCOUT_DIRECT_TRADE_TRUST_PROBE_TIMEOUT_MS = '1000'
@@ -21,6 +23,7 @@ let mockTrustFailure = true
 let mockHang = false
 let mockConfiguredTrustHang = false
 let mockConfiguredTrustInvalid = false
+let mockPrimaryModelFailure = false
 
 globalThis.fetch = async (_url, init = {}) => {
   const headers = new Headers(init.headers)
@@ -34,6 +37,12 @@ globalThis.fetch = async (_url, init = {}) => {
     })
   }
   const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; response_format?: unknown; max_tokens?: unknown; reasoning_effort?: unknown; messages?: Array<{ content?: string }> }
+  if (mockPrimaryModelFailure && body.model === 'direct-trade-test-model') {
+    return new Response(JSON.stringify({ error: { message: 'Primary model unavailable' } }), {
+      status: 503,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
   prompts.push((body.messages ?? []).map(message => message.content ?? '').join('\n'))
   responseFormats.push(body.response_format)
   outputTokenLimits.push(body.max_tokens)
@@ -120,6 +129,11 @@ try {
   assert.equal(result.tradeAssessment?.side, 'BUY')
   assert.match(result.riskFlags?.[0] ?? '', /Resolution and headline risk remain/)
   assert.notEqual(result.riskFlags?.[0], '[object Object]')
+  mockPrimaryModelFailure = true
+  const modelFallbackResult = await generateCustomIntelligence(directInput)
+  assert.match(modelFallbackResult.aiProvider, /direct-trade-fallback-model/i)
+  assert.equal(modelFallbackResult.tradeAssessment?.stance, 'SUPPORT')
+  mockPrimaryModelFailure = false
   mockedAssessmentSide = 'SELL'
   const mismatchedResult = await generateCustomIntelligence(directInput)
   assert.equal(mismatchedResult.tradeAssessment?.side, 'SELL')
@@ -163,11 +177,13 @@ try {
   mockConfiguredTrustHang = false
   mockHang = true
   const callsBeforeHang = trustModes.length
-  await assert.rejects(
-    () => generateCustomIntelligence(directInput),
-    /configured trust failed.*timed out after 1000ms.*default trust failed.*timed out after 1\d{3}ms/i,
-  )
-  assert.equal(trustModes.length, callsBeforeHang + 2)
+  const degradedResult = await generateCustomIntelligence(directInput)
+  assert.equal(degradedResult.tradeAssessment?.stance, 'INSUFFICIENT')
+  assert.equal(degradedResult.tradeAssessment?.evidenceQuality, 'LOW')
+  assert.equal(degradedResult.proofMetadata?.degraded, true)
+  assert.equal(degradedResult.proofMetadata?.failureClass, 'all-direct-trade-models-unavailable')
+  assert.match(degradedResult.disclaimer, /does not authorize PolyDesk PREPARE/i)
+  assert.equal(trustModes.length, callsBeforeHang + 4)
   console.log('zeroscout direct-trade intelligence smoke ok')
 } finally {
   globalThis.fetch = originalFetch

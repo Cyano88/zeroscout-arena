@@ -43,8 +43,11 @@ export const config = {
   computeGeneralResearchModel: process.env.ZEROSCOUT_GENERAL_RESEARCH_MODEL ?? "gpt-5.6-sol",
   computeDirectTradeModelCandidates: commaSeparated(
     process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_CANDIDATES?.trim()
-      || "gpt-5.6-sol"
+      || "gpt-5.6-sol,claude-fable-5,deepseek-v4-pro,zai-org/GLM-5-FP8"
   ),
+  computeDirectTradeModelDiscovery: process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_DISCOVERY !== "false",
+  computeDirectTradeModelLimit: Math.max(1, Math.min(12, Number(process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_LIMIT ?? 6) || 6)),
+  computeDirectTradeTotalTimeoutMs: Math.max(10_000, Math.min(70_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_TOTAL_TIMEOUT_MS ?? 70_000) || 70_000)),
   computeDirectTradeAttemptTimeoutMs: Math.max(3_000, Math.min(60_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_ATTEMPT_TIMEOUT_MS ?? 30_000) || 30_000)),
   computeDirectTradeTrustProbeTimeoutMs: Math.max(1_000, Math.min(15_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_TRUST_PROBE_TIMEOUT_MS ?? 10_000) || 10_000)),
   computeHelperModel: process.env.ZEROSCOUT_HELPER_MODEL ?? process.env.ZG_COMPUTE_HELPER_MODEL ?? "claude-sonnet-5",
@@ -90,7 +93,13 @@ export function publicConfig() {
             configuredFallbacks: config.computeHelperModelCandidates,
             discoversRouterModels: config.computeHelperModelDiscovery
           },
-          directTrade: config.computeDirectTradeModel,
+          directTrade: {
+            preferred: config.computeDirectTradeModel,
+            configuredFallbacks: config.computeDirectTradeModelCandidates,
+            discoversRouterModels: config.computeDirectTradeModelDiscovery,
+            maximumAttempts: config.computeDirectTradeModelLimit,
+            totalTimeoutMs: config.computeDirectTradeTotalTimeoutMs,
+          },
           generalResearch: config.computeGeneralResearchModel,
           lpIntelligence: config.computeLpModel,
           lpVerifier: config.lpVerifierEnabled ? config.computeLpVerifierModel : undefined,
