@@ -371,7 +371,12 @@ function degradedDirectTradeIntelligence(
   };
 }
 
-async function generateDirectTradeIntelligence(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
+export async function diagnoseDirectTradeTokenBudget(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
+  // Operator-only process entrypoint; never selected by the HTTP request body.
+  return generateDirectTradeIntelligence(input, true);
+}
+
+async function generateDirectTradeIntelligence(input: CustomIntelligenceInput, diagnosticBudget = false): Promise<CustomIntelligenceResult> {
   const data = input.data && typeof input.data === "object" && !Array.isArray(input.data)
     ? input.data as Record<string, unknown>
     : {};
@@ -392,7 +397,10 @@ async function generateDirectTradeIntelligence(input: CustomIntelligenceInput): 
   }
   if (!config.computeApiKey) throw new Error("0G Compute Router is not configured for direct-trade intelligence.");
 
-  const modelCandidates = await resolveDirectTradeModelCandidates();
+  const modelCandidates = diagnosticBudget ? ['gpt-5.6-terra'] : await resolveDirectTradeModelCandidates();
+  const totalTimeoutMs = diagnosticBudget ? 60_000 : config.computeDirectTradeTotalTimeoutMs;
+  const attemptTimeoutMs = diagnosticBudget ? 60_000 : config.computeDirectTradeAttemptTimeoutMs;
+  const maxTokens = diagnosticBudget ? 4000 : 1200;
   const prompt = `Create a ZeroScout Direct Trade Intelligence brief for the PolyDesk OKX AI service.
 
 Partner: ${input.partner}
@@ -427,7 +435,7 @@ Rules:
   let selectedAi: AiChatClient | undefined;
   const errors: string[] = [];
   const attemptedModels: string[] = [];
-  const routingDeadline = Date.now() + config.computeDirectTradeTotalTimeoutMs;
+  const routingDeadline = Date.now() + totalTimeoutMs;
   for (let modelIndex = 0; modelIndex < modelCandidates.length; modelIndex += 1) {
     const model = modelCandidates[modelIndex];
     const remainingMs = routingDeadline - Date.now();
@@ -436,15 +444,15 @@ Rules:
       break;
     }
     // Leave half the original budget for another full model completion.
-    const attemptBudgetMs = Math.min(config.computeDirectTradeAttemptTimeoutMs, remainingMs,
-      modelCandidates.length > 1 ? config.computeDirectTradeTotalTimeoutMs / 2 : remainingMs);
+    const attemptBudgetMs = Math.min(attemptTimeoutMs, remainingMs,
+      modelCandidates.length > 1 ? totalTimeoutMs / 2 : remainingMs);
     const ai = { ...getComputeAiClientForModel(model, "Direct Trade Intelligence"), timeoutMs: attemptBudgetMs };
     attemptedModels.push(model);
     try {
       const completion = await completeDirectTradeJson(ai, [
         { role: "system", content: "You are ZeroScout's direct prediction-market trade intelligence verifier. Return strict JSON only. Never provide LP analysis or fabricate evidence." },
         { role: "user", content: prompt }
-      ]);
+      ], maxTokens);
       parsed = parseDirectTradeCompletion(completion.content);
       selectedAi = { ...ai, label: `${ai.label}; trust=${completion.trustMode}` };
       break;
@@ -1657,14 +1665,15 @@ async function withAiTimeout<T>(operation: (signal: AbortSignal) => Promise<T>, 
 
 async function completeDirectTradeJson(
   ai: AiChatClient,
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+  maxTokens = 1200
 ): Promise<{ content: string | undefined; trustMode: "configured" | "default" }> {
   const configuredTrust = Boolean(config.computeTrustMode && config.computeTrustMode !== "default");
   if (!configuredTrust) {
     const startedAt = Date.now();
     try {
       const content = await withAiTimeout(
-        signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 1200, reasoningEffort: "low" }),
+        signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens, diagnostic: true, reasoningEffort: "low" }),
         ai.timeoutMs,
         ai.model
       );
@@ -1694,7 +1703,7 @@ async function completeDirectTradeJson(
   let configuredError: unknown;
   try {
     const content = await withAiTimeout(
-      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, maxTokens: 1200, reasoningEffort: "low" }),
+      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, maxTokens, diagnostic: true, reasoningEffort: "low" }),
       trustProbeMs,
       `${ai.model} configured-trust probe`
     );
@@ -1727,7 +1736,7 @@ async function completeDirectTradeJson(
   try {
     const fallbackStartedAt = Date.now();
     const content = await withAiTimeout(
-      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens: 1200, reasoningEffort: "low" }),
+      signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, useDefaultTrustMode: true, maxTokens, diagnostic: true, reasoningEffort: "low" }),
       remainingMs,
       `${ai.model} default-trust fallback`
     );
@@ -1866,6 +1875,7 @@ async function completeJson(
     allowTrustFallback?: boolean;
     useDefaultTrustMode?: boolean;
     maxTokens?: number;
+    diagnostic?: boolean;
     reasoningEffort?: "low" | "medium" | "high";
   } = {},
 ): Promise<string | undefined> {
@@ -1886,13 +1896,13 @@ async function completeJson(
           }
         ];
     const format = formatOverride ?? ai.format;
-    if (options.maxTokens === 1200) console.info('[ai] direct-trade request metadata', {
+    if (options.diagnostic) console.info('[ai] direct-trade request metadata', {
       format, inputCharacters: JSON.stringify(finalMessages).length,
       outputTokenLimit: format === 'messages' ? 2400 : options.maxTokens,
       trustMode: useDefaultTrustMode ? 'default' : 'configured',
     });
     if (format === "messages") {
-      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs, options.signal, options.maxTokens === 1200);
+      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs, options.signal, options.diagnostic);
     }
     const response = await client.chat.completions.create({
       model: ai.model,
@@ -1902,7 +1912,7 @@ async function completeJson(
       ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
       ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {})
     }, options.signal ? { signal: options.signal } : undefined);
-    if (options.maxTokens === 1200) console.info('[ai] direct-trade response metadata', completionMetadata(response, 'chat-completions', JSON.stringify(finalMessages).length));
+    if (options.diagnostic) console.info('[ai] direct-trade response metadata', completionMetadata(response, 'chat-completions', JSON.stringify(finalMessages).length));
     return response.choices[0]?.message?.content ?? undefined;
   };
 

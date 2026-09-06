@@ -1,10 +1,12 @@
 import { loadCanonicalArtifact } from '../server/src/services/storage.js'
-import { generateCustomIntelligence } from '../server/src/services/ai.js'
+import { generateCustomIntelligence, diagnoseDirectTradeTokenBudget } from '../server/src/services/ai.js'
 import { verifiedResearchReplayInput } from '../server/src/services/research-replay-input.js'
 
 // This diagnostic is pinned to recovery attempt 2. No public endpoint, payment,
 // credit deduction, artifact upload, saved decision, or trade is invoked.
-if (process.argv.slice(2).join(' ') !== '--execute-research-only') {
+const args = process.argv.slice(2).join(' ')
+const expandedBudget = args === '--execute-research-only --expanded-budget'
+if (args !== '--execute-research-only' && !expandedBudget) {
   throw new Error('Pass --execute-research-only to authorize one compute-only diagnostic.')
 }
 const root = '0xa53947d21ceda295666d4e27543fc03beaad38da002f9ca6fabad0e94a4f542a'
@@ -15,7 +17,8 @@ try {
   const input = verifiedResearchReplayInput(archive.canonicalJson, hash, '7vxuxS4oQd')
   console.log(JSON.stringify({ diagnosticOnly: true, archivedEvidence: true, hashVerified: true, inputCharacters: JSON.stringify(input.data).length }))
   const started = Date.now()
-  const result = await generateCustomIntelligence(input)
+  console.log(JSON.stringify({ diagnosticOnly: true, expandedBudget, ...(expandedBudget ? { model: 'gpt-5.6-terra', maxTokens: 4000, totalTimeoutMs: 60000 } : {}) }))
+  const result = expandedBudget ? await diagnoseDirectTradeTokenBudget(input) : await generateCustomIntelligence(input)
   const degraded = result.proofMetadata?.degraded === true
   console.log(JSON.stringify({ diagnosticOnly: true, archivedEvidence: true, ok: !degraded,
     elapsedMs: Date.now() - started, provider: result.aiProvider,

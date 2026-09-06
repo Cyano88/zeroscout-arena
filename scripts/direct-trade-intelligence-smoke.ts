@@ -217,6 +217,12 @@ try {
   const catalogCandidates = await resolveDirectTradeModelCandidates()
   assert.deepEqual(catalogCandidates, ['gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'glm-5.3', 'qwen3.7-plus', 'gpt-5.6-sol'])
   assert(!catalogCandidates.includes('direct-trade-test-model'), 'Stale configured IDs must not consume attempts.')
+  const { diagnoseDirectTradeTokenBudget } = await import('../server/src/services/ai.js')
+  const diagnosticResult = await diagnoseDirectTradeTokenBudget(directInput)
+  assert.equal(diagnosticResult.proofMetadata?.degraded, undefined)
+  assert.equal(outputTokenLimits.at(-1), 4000)
+  await generateCustomIntelligence(directInput)
+  assert.equal(outputTokenLimits.at(-1), 1200, 'Diagnostic budget must not leak into subsequent normal requests.')
   console.log('zeroscout direct-trade intelligence smoke ok')
 } finally {
   globalThis.fetch = originalFetch
