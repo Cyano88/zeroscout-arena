@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { completionMetadata } from './completion-metadata.js';
 import type { Fetch as OpenAiCompatibleFetch } from "openai/core";
 import { config, directTradeFallbackModels } from "../config.js";
 import type { AiHealthResponse, CampaignPack, ProjectCapsule, ProjectCapsuleInput, SurvivalDelta, VideoReview } from "../../../shared/types.js";
@@ -1885,8 +1886,13 @@ async function completeJson(
           }
         ];
     const format = formatOverride ?? ai.format;
+    if (options.maxTokens === 1200) console.info('[ai] direct-trade request metadata', {
+      format, inputCharacters: JSON.stringify(finalMessages).length,
+      outputTokenLimit: format === 'messages' ? 2400 : options.maxTokens,
+      trustMode: useDefaultTrustMode ? 'default' : 'configured',
+    });
     if (format === "messages") {
-      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs, options.signal);
+      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs, options.signal, options.maxTokens === 1200);
     }
     const response = await client.chat.completions.create({
       model: ai.model,
@@ -1896,6 +1902,7 @@ async function completeJson(
       ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
       ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {})
     }, options.signal ? { signal: options.signal } : undefined);
+    if (options.maxTokens === 1200) console.info('[ai] direct-trade response metadata', completionMetadata(response, 'chat-completions', JSON.stringify(finalMessages).length));
     return response.choices[0]?.message?.content ?? undefined;
   };
 
@@ -1943,7 +1950,8 @@ async function completeJsonWithAnthropicFormat(
   messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
   useDefaultTrustMode: boolean,
   timeoutMs: number,
-  externalSignal?: AbortSignal
+  externalSignal?: AbortSignal,
+  diagnostic = false
 ): Promise<string | undefined> {
   const url = `${config.computeBaseUrl.replace(/\/$/, "")}/messages`;
   const system = messages
@@ -1987,6 +1995,7 @@ async function completeJsonWithAnthropicFormat(
     throw new Error(`${response.status} ${body.slice(0, 500)}`);
   }
   const parsed = JSON.parse(body) as { content?: Array<{ type?: string; text?: string }>; error?: unknown };
+  if (diagnostic) console.info('[ai] direct-trade response metadata', completionMetadata(parsed, 'messages', JSON.stringify(messages).length));
   return parsed.content
     ?.map((item) => typeof item.text === "string" ? item.text : "")
     .join("")
