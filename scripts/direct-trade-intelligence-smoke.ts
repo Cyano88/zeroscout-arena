@@ -28,6 +28,7 @@ let mockPrimaryUnusable = false
 let mockPrimaryContent: string | null = null
 let mockCatalog = false
 let mockBalanceFailure = false
+let mockVerifiedSlowSuccess = false
 
 globalThis.fetch = async (_url, init = {}) => {
   if (mockCatalog && String(_url).endsWith('/models')) {
@@ -69,10 +70,19 @@ globalThis.fetch = async (_url, init = {}) => {
       choices: [{ message: { role: 'assistant', content: 'incomplete non-JSON output' } }],
     }), { status: 200, headers: { 'content-type': 'application/json' } })
   }
-  if (trustMode) {
+  if (trustMode && !mockVerifiedSlowSuccess) {
     return new Response(JSON.stringify({ error: { message: mockTrustFailure ? 'No provider available for the requested trust mode' : 'Request timed out' } }), {
       status: 503,
       headers: { 'content-type': 'application/json' },
+    })
+  }
+  if (trustMode && mockVerifiedSlowSuccess) {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(resolve, 1_200)
+      init.signal?.addEventListener('abort', () => {
+        clearTimeout(timer)
+        reject(new DOMException('The operation was aborted.', 'AbortError'))
+      }, { once: true })
     })
   }
   return new Response(JSON.stringify({
@@ -199,7 +209,8 @@ try {
   const callsBeforeFallback = trustModes.length
   const fallbackResult = await generateCustomIntelligence(directInput)
   assert.equal(fallbackResult.tradeAssessment?.stance, 'INSUFFICIENT')
-  assert.deepEqual(trustModes.slice(callsBeforeFallback), ['verified', null])
+  assert.equal(fallbackResult.proofMetadata?.degraded, true)
+  assert.deepEqual(trustModes.slice(callsBeforeFallback), ['verified', 'verified'], 'A timed-out inference must not restart the same model without trust.')
   mockConfiguredTrustHang = false
   mockHang = true
   const callsBeforeHang = trustModes.length
@@ -210,8 +221,14 @@ try {
   assert.equal(degradedResult.proofMetadata?.failureClass, 'all-direct-trade-models-unavailable')
   assert.equal(getDirectTradeModelReadiness().state, 'unavailable')
   assert.match(degradedResult.disclaimer, /does not authorize PolyDesk PREPARE/i)
-  assert.equal(trustModes.length, callsBeforeHang + 4)
+  assert.equal(trustModes.length, callsBeforeHang + 2)
   mockHang = false
+  mockVerifiedSlowSuccess = true
+  const callsBeforeSlow = trustModes.length
+  const slowVerifiedResult = await generateCustomIntelligence(directInput)
+  assert.notEqual(slowVerifiedResult.proofMetadata?.degraded, true)
+  assert.deepEqual(trustModes.slice(callsBeforeSlow), ['verified'], 'Verified inference may finish after the old one-second probe limit without a duplicate call.')
+  mockVerifiedSlowSuccess = false
   const { config } = await import('../server/src/config.js')
   config.computeDirectTradeModelDiscovery = true
   config.computeDirectTradeModelLimit = 12

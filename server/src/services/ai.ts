@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { directTradeAttemptWindow } from './direct-trade-attempt-window.js';
 import { isComputeBalanceRejection } from './compute-balance-error.js';
 import { serializeDirectTradeEvidence } from './direct-trade-evidence.js';
 import { completionMetadata } from './completion-metadata.js';
@@ -447,9 +448,7 @@ Rules:
       errors.push(`Routing budget exhausted before ${model}.`);
       break;
     }
-    // Leave half the original budget for another full model completion.
-    const attemptBudgetMs = Math.min(attemptTimeoutMs, remainingMs,
-      modelCandidates.length > 1 ? totalTimeoutMs / 2 : remainingMs);
+    const attemptBudgetMs = directTradeAttemptWindow(remainingMs, attemptTimeoutMs);
     const ai = { ...getComputeAiClientForModel(model, "Direct Trade Intelligence"), timeoutMs: attemptBudgetMs };
     attemptedModels.push(model);
     try {
@@ -1712,13 +1711,14 @@ async function completeDirectTradeJson(
   }
 
   const startedAt = Date.now();
-  const trustProbeMs = Math.min(config.computeDirectTradeTrustProbeTimeoutMs, Math.max(1_000, ai.timeoutMs / 4));
+  // This performs full inference, not a health probe. Give it the same bounded
+  // allowance as unrestricted routing; fast failures can use the remainder.
   let configuredError: unknown;
   try {
     const content = await withAiTimeout(
       signal => completeJson(ai, messages, false, { signal, allowTrustFallback: false, maxTokens, diagnostic: true, reasoningEffort: "low" }),
-      trustProbeMs,
-      `${ai.model} configured-trust probe`
+      ai.timeoutMs,
+      `${ai.model} configured-trust inference`
     );
     parseDirectTradeCompletion(content);
     console.info("[ai] direct-trade completion", {
