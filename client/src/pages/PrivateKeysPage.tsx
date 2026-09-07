@@ -9,6 +9,7 @@ export default function PrivateKeysPage() {
   const [name,setName]=useState('polydesk-production')
   const [status,setStatus]=useState('Connect the designated owner wallet to manage private keys.')
   const [busy,setBusy]=useState(false)
+  const [loaded,setLoaded]=useState(false)
   const [daily,setDaily]=useState(100)
   const [minute,setMinute]=useState(5)
   const [concurrent,setConcurrent]=useState(2)
@@ -36,20 +37,40 @@ export default function PrivateKeysPage() {
     setBusy(true);setSecret('');setStatus('Approve the key-management message in your owner wallet. This is not a transaction.')
     try{await action()}catch(error){setStatus(error instanceof Error?error.message:'Request failed. Do not retry key creation blindly; list keys first.')}finally{setBusy(false)}
   }
-  return <main className="page" style={{maxWidth:820,margin:'40px auto',padding:24}}>
-    <h1>Private compute keys</h1>
-    <p>Only wallet <code>{owner}</code> can manage keys. Each action requires a fresh signature. No gas or token transfer.</p>
-    <p>Request quotas are not a monetary cap. Underlying compute and proof storage may consume service resources.</p>
-    <button disabled={busy} onClick={()=>perform(async()=>{const data=await request('GET','/api/private/keys');setKeys(data.keys);setStatus('Keys loaded.')})}>Connect owner and list keys</button>
+  return <main className="page dashboard-page private-keys-page">
+    <header className="page-heading compact-heading">
+      <span className="eyebrow">Private API Dashboard</span>
+      <h1>Create private API key</h1>
+      <p>Manage PolyDesk's private access to ZeroScout compute. Issue owner-signed keys with individual usage limits and expiry.</p>
+    </header>
+    <section className="dashboard-hero surface">
+      <div><span className="status-tag">Owner-controlled access</span>
+        <h2>PolyDesk private compute</h2>
+        <p>Only the designated wallet can create, list, or revoke keys.</p>
+        <code className="private-owner">{owner}</code>
+        <p>Use this wallet in your browser extension. Each action requires a fresh message signature, not a transaction or token approval.</p>
+      </div>
+      <button className="btn btn-primary" disabled={busy} onClick={()=>perform(async()=>{const data=await request('GET','/api/private/keys');setKeys(data.keys);setLoaded(true);setStatus('Keys loaded.')})}>{busy?'Awaiting authorization...':'Connect owner and list keys'}</button>
+    </section>
+    <section className="surface surface-pad private-key-policy">
+      <h2>Usage limits, not purchased credits</h2>
+      <p>Private keys bypass ZeroScout credit deductions. Set up to 100 requests/day, 5/minute, 2 concurrent requests, and 30 days of validity per key. You can choose lower limits.</p>
+      <p>All private keys share 500 requests/day and 4 concurrent requests, with at most 10 active keys. Daily and minute windows use UTC. Failed downstream requests also count.</p>
+      <p>These are request quotas, not spending caps. Underlying compute and proof storage may still consume service resources.</p>
+    </section>
     <form onSubmit={event=>{event.preventDefault();void perform(async()=>{const result=await request('POST','/api/private/keys',{name,limits:{daily,minute,concurrent,days}});setSecret(result.key);setStatus('Key created. Copy it into PolyDesk’s secret configuration now. It cannot be retrieved later.');})}}>
-      <h2>Create a key</h2>
-      <label>Name <input value={name} maxLength={80} onChange={e=>setName(e.target.value)} required/></label>
+      <h2>Create private API key</h2>
+      <p>Give each integration its own key so you can limit or revoke it independently.</p>
+      <fieldset disabled={busy} className="private-key-fields">
+      <label>Key name <input value={name} maxLength={80} onChange={e=>setName(e.target.value)} required/></label>
       {([['Requests/day',daily,setDaily,100],['Requests/minute',minute,setMinute,5],['Concurrent requests',concurrent,setConcurrent,2],['Expiry days',days,setDays,30]] as const).map(([label,value,setValue,max])=><label key={label} style={{display:'block',margin:'12px 0'}}>{label} <input type="number" min={1} max={max} value={value} onChange={e=>setValue(Number(e.target.value))} required/></label>)}
-      <button disabled={busy} type="submit">Sign and create key</button>
+      </fieldset>
+      <button className="btn btn-primary" disabled={busy||!name.trim()} type="submit">{busy?'Awaiting authorization...':'Create private API key'}</button>
     </form>
-    <p role="status">{status}</p>
+    <p className="surface surface-pad-sm" role="status" aria-live="polite">{status}</p>
     {secret&&<section><p>Shown once. Do not paste this key into chat.</p><textarea aria-label="New private API key" readOnly value={secret} rows={3} style={{width:'100%'}}/><button onClick={()=>{setSecret('');setStatus('Key hidden.')}}>Hide key</button></section>}
-    <h2>Existing keys</h2>
+    <h2>Manage private API keys</h2>
+    <p>{loaded ? (keys.length ? 'List keys again after creation to refresh this inventory.' : 'No private keys were returned. Create a key above, then refresh the list.') : 'Connect the owner and sign the list request to load your keys. Existing legacy keys are not shown here.'}</p>
     {keys.map(key=><section key={key.id} style={{margin:'16px 0'}}><strong>{key.name}</strong> <code>{key.id}</code><p>{key.revoked?'Revoked':`Expires ${key.expires_at}`} · {key.daily_limit}/day · {key.minute_limit}/minute · {key.concurrent_limit} concurrent</p><button disabled={busy||key.revoked} onClick={()=>{if(window.confirm('Revoke this key? Any integration using it will lose access.'))void perform(async()=>{await request('POST',`/api/private/keys/${key.id}/revoke`);setKeys(previous=>previous.map(item=>item.id===key.id?{...item,revoked:true}:item));setStatus('Key revoked.');})}}>Revoke key</button></section>)}
   </main>
 }

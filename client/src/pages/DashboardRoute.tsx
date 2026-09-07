@@ -1,10 +1,5 @@
-import { ZeroScoutPrivyProvider } from "../privy";
-import { DashboardPage } from "./DashboardPage";
+import PrivateKeysPage from "./PrivateKeysPage";
 
 export default function DashboardRoute() {
-  return (
-    <ZeroScoutPrivyProvider>
-      <DashboardPage />
-    </ZeroScoutPrivyProvider>
-  );
+  return <PrivateKeysPage />;
 }

@@ -1594,6 +1594,14 @@ input:focus, textarea:focus, select:focus {
 
 /* === API Dashboard === */
 .dashboard-page { max-width: 1040px; }
+.private-keys-page { display: grid; gap: 24px; }
+.private-keys-page .private-owner { overflow-wrap: anywhere; }
+.private-keys-page form { padding: 28px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.private-key-fields { border: 0; padding: 0; margin: 20px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 16px; }
+.private-key-fields label { display: grid; gap: 8px; min-width: 0; }
+.private-key-fields input { width: 100%; box-sizing: border-box; }
+.private-keys-page p { overflow-wrap: anywhere; }
+.private-keys-page textarea { box-sizing: border-box; }
 .compact-heading { max-width: 720px; }
 .dashboard-page,
 .dashboard-page * {
