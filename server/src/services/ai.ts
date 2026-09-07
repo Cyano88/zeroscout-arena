@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { serializeDirectTradeEvidence } from './direct-trade-evidence.js';
 import { completionMetadata } from './completion-metadata.js';
 import type { Fetch as OpenAiCompatibleFetch } from "openai/core";
 import { config, directTradeFallbackModels } from "../config.js";
@@ -400,7 +401,8 @@ async function generateDirectTradeIntelligence(input: CustomIntelligenceInput, d
   const modelCandidates = diagnosticBudget ? ['gpt-5.6-terra'] : await resolveDirectTradeModelCandidates();
   const totalTimeoutMs = diagnosticBudget ? 60_000 : config.computeDirectTradeTotalTimeoutMs;
   const attemptTimeoutMs = diagnosticBudget ? 60_000 : config.computeDirectTradeAttemptTimeoutMs;
-  const maxTokens = diagnosticBudget ? 4000 : 1200;
+  // Reasoning tokens share this budget with the visible JSON answer.
+  const maxTokens = 4000;
   const prompt = `Create a ZeroScout Direct Trade Intelligence brief for the PolyDesk OKX AI service.
 
 Partner: ${input.partner}
@@ -410,7 +412,7 @@ Objective: ${input.objective}
 Output style: ${input.outputStyle}
 
 Supplied direct-trade evidence:
-${JSON.stringify(data).slice(0, 16000)}
+${serializeDirectTradeEvidence(data)}
 
 Return exactly one JSON object with this shape and no other text:
 {"intelligenceScore":0,"confidence":0,"summary":"...","signals":["..."],"riskFlags":["..."],"recommendedActions":["..."],"dataGaps":["..."],"suggestedVisuals":["..."],"disclaimer":"...","tradeAssessment":{"stance":"SUPPORT|OPPOSE|INSUFFICIENT","side":"BUY|SELL","thesis":"...","counterThesis":"...","resolutionRisk":"...","evidenceQuality":"HIGH|MEDIUM|LOW"}}

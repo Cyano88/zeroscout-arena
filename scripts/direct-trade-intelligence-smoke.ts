@@ -178,7 +178,7 @@ try {
   assert.match(prompts.join('\n'), /RESOLUTION_AUTHORITY/i)
   assert.match(prompts.join('\n'), /Return exactly one JSON object with this shape/i)
   assert(responseFormats.every(value => value === undefined))
-  assert(outputTokenLimits.every(value => value === 1200))
+  assert(outputTokenLimits.every(value => value === 4000))
   assert(reasoningEfforts.every(value => value === 'low'))
   assert(trustModes.includes('verified'))
   assert(trustModes.includes(null))
@@ -222,7 +222,7 @@ try {
   assert.equal(diagnosticResult.proofMetadata?.degraded, undefined)
   assert.equal(outputTokenLimits.at(-1), 4000)
   await generateCustomIntelligence(directInput)
-  assert.equal(outputTokenLimits.at(-1), 1200, 'Diagnostic budget must not leak into subsequent normal requests.')
+  assert.equal(outputTokenLimits.at(-1), 4000, 'Normal research retains the bounded reasoning-plus-answer allowance.')
   console.log('zeroscout direct-trade intelligence smoke ok')
 } finally {
   globalThis.fetch = originalFetch
