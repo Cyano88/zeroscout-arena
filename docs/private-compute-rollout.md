@@ -38,8 +38,10 @@ Before activation:
 6. Verify top-up routes are inaccessible and remove old purchase UI references.
 
 Private mode permits static GET routes so the owner page and assets remain accessible;
-API routes remain default-deny. The owner page currently supports injected EVM browser
-wallets, not a separate Privy login. Do not paste API keys or signatures into chat.
+API routes remain default-deny. Both dashboard URLs support the configured Privy
+login (including its connected EVM wallets), with injected-wallet fallback when
+Privy is disabled. Only the designated owner wallet can authorize management.
+Login alone does not authorize a key action. Do not paste API keys or signatures into chat.
 
 This is an implementation checkpoint, not a production-readiness claim.
 

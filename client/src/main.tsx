@@ -16,7 +16,7 @@ import grailMark from "./assets/grail-mark.png";
 import "./styles.css";
 
 const DashboardRoute = React.lazy(() => import("./pages/DashboardRoute"));
-const PrivateKeysPage = React.lazy(() => import('./pages/PrivateKeysPage'));
+const PrivateKeysPage = DashboardRoute;
 
 function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("zeroscout-theme") ?? "dark");

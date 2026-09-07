@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { BrowserProvider, sha256, toUtf8Bytes } from 'ethers'
 import { privateServices, type PrivateService } from '../../../shared/private-services'
 
-const owner = '0xa2ae0a3b3ed7b30ab049685a934de587a0f51d66'
+export const owner = '0xa2ae0a3b3ed7b30ab049685a934de587a0f51d66'
 type Key = { id:string; name:string; platform:string; service:PrivateService; expires_at:string; revoked:boolean; daily_limit:number; minute_limit:number; concurrent_limit:number }
-export default function PrivateKeysPage() {
+export default function PrivateKeysPage({walletControls,connectionReady=true,getWalletProvider}: {walletControls?:ReactNode;connectionReady?:boolean;getWalletProvider?:()=>Promise<ConstructorParameters<typeof BrowserProvider>[0]>}={}) {
+  const mounted=useRef(true)
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
   const [keys,setKeys]=useState<Key[]>([])
   const [secret,setSecret]=useState('')
   const [name,setName]=useState('polydesk-production')
@@ -20,7 +22,7 @@ export default function PrivateKeysPage() {
 
   async function request(method:string,path:string,body:unknown={}) {
     if (method==='POST' && path==='/api/private/keys') body={...(body as object),platform,service}
-    const ethereum=(window as unknown as {ethereum?: ConstructorParameters<typeof BrowserProvider>[0]}).ethereum
+    const ethereum=getWalletProvider ? await getWalletProvider() : (window as unknown as {ethereum?: ConstructorParameters<typeof BrowserProvider>[0]}).ethereum
     if(!ethereum)throw new Error('Open this page in the browser with your owner wallet extension enabled.')
     const provider=new BrowserProvider(ethereum)
     await provider.send('eth_requestAccounts',[])
@@ -31,6 +33,7 @@ export default function PrivateKeysPage() {
     const bodyHash=sha256(toUtf8Bytes(JSON.stringify(body))).slice(2)
     const message=['ZeroScout private key administration','Owner: '+owner,'Method: '+method,'Path: '+path,'Body SHA256: '+bodyHash,'Nonce: '+nonce,'Expires: '+expires].join('\n')
     const signature=await signer.signMessage(message)
+    if(!mounted.current)throw new Error('Wallet session changed; request cancelled.')
     if((await provider.send('eth_accounts',[]))[0]?.toLowerCase()!==owner)throw new Error('Wallet changed; request cancelled.')
     const response=await fetch(path,{method,cache:'no-store',headers:{'content-type':'application/json','x-zs-nonce':nonce,'x-zs-expires':String(expires),'x-zs-signature':signature},...(method==='GET'?{}:{body:JSON.stringify(body)})})
     const result=await response.json()
@@ -38,6 +41,7 @@ export default function PrivateKeysPage() {
     return result
   }
   async function perform(action:()=>Promise<void>) {
+    if(!connectionReady){setStatus('Connect the designated owner wallet through Privy first.');return}
     setBusy(true);setSecret('');setStatus('Approve the key-management message in your owner wallet. This is not a transaction.')
     try{await action()}catch(error){setStatus(error instanceof Error?error.message:'Request failed. Do not retry key creation blindly; list keys first.')}finally{setBusy(false)}
   }
@@ -52,9 +56,11 @@ export default function PrivateKeysPage() {
         <h2>PolyDesk private compute</h2>
         <p>Only the designated wallet can create, list, or revoke keys.</p>
         <code className="private-owner">{owner}</code>
-        <p>Use this wallet in your browser extension. Each action requires a fresh message signature, not a transaction or token approval.</p>
+        <p>Connect this wallet through Privy or your browser wallet. Each key action requires a fresh message signature, not a transaction or token approval.</p>
       </div>
-      <button className="btn btn-primary" disabled={busy} onClick={()=>perform(async()=>{const data=await request('GET','/api/private/keys');setKeys(data.keys);setLoaded(true);setStatus('Keys loaded.')})}>{busy?'Awaiting authorization...':'Connect owner and list keys'}</button>
+      {walletControls}
+      <button className="btn btn-primary" disabled={busy||!connectionReady} onClick={()=>perform(async()=>{const data=await request('GET','/api/private/keys');setKeys(data.keys);setLoaded(true);setStatus('Keys loaded.')})}>{busy?'Awaiting authorization...':'Connect owner and list keys'}</button>
+      <p role="status" aria-live="polite">{status}</p>
     </section>
     <section className="surface surface-pad private-key-policy">
       <h2>Usage limits, not purchased credits</h2>
@@ -78,7 +84,7 @@ export default function PrivateKeysPage() {
         </div>
         <p>Full Platform API is not enabled in private mode. The selection above is enforced per endpoint; it is not an analysis-type or trading approval policy.</p>
       </fieldset>
-      <button className="btn btn-primary" disabled={busy||!name.trim()} type="submit">{busy?'Awaiting authorization...':'Create private API key'}</button>
+      <button className="btn btn-primary" disabled={busy||!connectionReady||!name.trim()} type="submit">{busy?'Awaiting authorization...':'Create private API key'}</button>
     </form>
     <p className="surface surface-pad-sm" role="status" aria-live="polite">{status}</p>
     {secret&&<section><p>Shown once. Do not paste this key into chat.</p><textarea aria-label="New private API key" readOnly value={secret} rows={3} style={{width:'100%'}}/><button onClick={()=>{setSecret('');setStatus('Key hidden.')}}>Hide key</button></section>}
