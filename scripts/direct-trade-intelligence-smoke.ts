@@ -27,6 +27,7 @@ let mockPrimaryModelFailure = false
 let mockPrimaryUnusable = false
 let mockPrimaryContent: string | null = null
 let mockCatalog = false
+let mockBalanceFailure = false
 
 globalThis.fetch = async (_url, init = {}) => {
   if (mockCatalog && String(_url).endsWith('/models')) {
@@ -38,6 +39,7 @@ globalThis.fetch = async (_url, init = {}) => {
   const headers = new Headers(init.headers)
   const trustMode = headers.get('x-0g-provider-trust-mode')
   trustModes.push(trustMode)
+  if (mockBalanceFailure) return new Response(JSON.stringify({error:{message:'BALANCE_INSUFFICIENT',code:'BALANCE_INSUFFICIENT'}}),{status:403,headers:{'content-type':'application/json'}})
   if (mockHang || (mockConfiguredTrustHang && trustMode)) {
     return new Promise<Response>((_resolve, reject) => {
       const signal = init.signal
@@ -224,6 +226,14 @@ try {
   await generateCustomIntelligence(directInput)
   assert.equal(outputTokenLimits.at(-1), 4000, 'Normal research retains the bounded reasoning-plus-answer allowance.')
   console.log('zeroscout direct-trade intelligence smoke ok')
+  mockBalanceFailure = true
+  const callsBeforeBalance = trustModes.length
+  const balanceResult = await generateCustomIntelligence(directInput)
+  assert.equal(trustModes.length, callsBeforeBalance + 1, 'Balance rejection must not cause trust or model fallback calls.')
+  assert.equal(balanceResult.proofMetadata?.degraded,true)
+  assert.equal(balanceResult.proofMetadata?.failureClass,'upstream-balance-rejection')
+  assert.equal(balanceResult.tradeAssessment?.stance,'INSUFFICIENT')
+  console.log('upstream balance rejection stops repeat inference: passed')
 } finally {
   globalThis.fetch = originalFetch
 }

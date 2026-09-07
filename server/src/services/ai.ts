@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { isComputeBalanceRejection } from './compute-balance-error.js';
 import { serializeDirectTradeEvidence } from './direct-trade-evidence.js';
 import { completionMetadata } from './completion-metadata.js';
 import type { Fetch as OpenAiCompatibleFetch } from "openai/core";
@@ -435,6 +436,7 @@ Rules:
 
   let parsed: Record<string, unknown> = {};
   let selectedAi: AiChatClient | undefined;
+  let balanceRejected = false;
   const errors: string[] = [];
   const attemptedModels: string[] = [];
   const routingDeadline = Date.now() + totalTimeoutMs;
@@ -460,9 +462,18 @@ Rules:
       break;
     } catch (error) {
       errors.push(`${ai.model}: ${sanitizeAiError(error)}`);
+      if (isComputeBalanceRejection(error)) {
+        balanceRejected = true;
+        errors.push('Routing stopped after upstream balance rejection; further models were not attempted.');
+        break;
+      }
     }
   }
-  if (!selectedAi) return degradedDirectTradeIntelligence(side as "BUY" | "SELL", attemptedModels, errors);
+  if (!selectedAi) {
+    const degraded = degradedDirectTradeIntelligence(side as "BUY" | "SELL", attemptedModels, errors);
+    if (balanceRejected) degraded.proofMetadata = { ...degraded.proofMetadata, failureClass: 'upstream-balance-rejection' };
+    return degraded;
+  }
 
   const rawAssessment = parsed.tradeAssessment && typeof parsed.tradeAssessment === "object"
     ? parsed.tradeAssessment as Record<string, unknown>
@@ -1720,6 +1731,7 @@ async function completeDirectTradeJson(
     return { content, trustMode: "configured" };
   } catch (error) {
     configuredError = error;
+    if (isComputeBalanceRejection(error)) throw error;
     console.warn("[ai] direct-trade completion", {
       model: ai.model,
       trustMode: "configured",
