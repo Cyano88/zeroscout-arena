@@ -1602,6 +1602,12 @@ input:focus, textarea:focus, select:focus {
 .private-key-fields input { width: 100%; box-sizing: border-box; }
 .private-keys-page p { overflow-wrap: anywhere; }
 .private-keys-page textarea { box-sizing: border-box; }
+.private-keys-page .dashboard-hero { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 16px; }
+.private-keys-page .dashboard-hero > * { min-width: 0; max-width: 100%; }
+.private-keys-page .dashboard-hero > .btn { justify-self: start; }
+.private-keys-page .wallet-actions { justify-content: flex-start; align-items: center; }
+.private-keys-page .wallet-actions p { flex-basis: 100%; margin: 0; }
+.private-keys-page button:disabled { cursor: not-allowed; opacity: .45; }
 .private-service-picker { border: 0; padding: 0; margin: 0 0 24px; min-width: 0; }
 .private-service-picker .preset-option:disabled { opacity: .5; cursor: not-allowed; }
 .private-service-picker .preset-picker { grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }
