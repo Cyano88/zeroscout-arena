@@ -16,6 +16,7 @@ import grailMark from "./assets/grail-mark.png";
 import "./styles.css";
 
 const DashboardRoute = React.lazy(() => import("./pages/DashboardRoute"));
+const PrivateKeysPage = React.lazy(() => import('./pages/PrivateKeysPage'));
 
 function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("zeroscout-theme") ?? "dark");
@@ -37,6 +38,7 @@ function App() {
       <div className="app-shell">
         {!isEmbed && <Topbar theme={theme} setTheme={setTheme} />}
         <Routes>
+          <Route path="/private-keys" element={<React.Suspense fallback={<p>Loading private key management…</p>}><PrivateKeysPage /></React.Suspense>} />
           <Route path="/" element={<ArenaPage />} />
           <Route path="/projects/:id" element={<CapsulePage />} />
           <Route path="/projects" element={<LeaderboardPage />} />

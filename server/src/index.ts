@@ -1,4 +1,5 @@
 import express from "express";
+import { privateAccess, privateIdentity, privateMode } from './private-access.js';
 import cors from "cors";
 import multer from "multer";
 import { nanoid } from "nanoid";
@@ -55,6 +56,7 @@ const upload = multer({
 
 app.use(cors({ origin: config.corsOrigin === "*" ? true : config.corsOrigin }));
 app.use(express.json({ limit: "1mb" }));
+app.use(privateAccess);
 
 app.get("/api/health", (_req, res) => {
   const body: HealthResponse = {
@@ -1468,6 +1470,12 @@ async function respondWithPlatformVideoScore(
 }
 
 async function assertIntegrationAccess(req: express.Request, requiredCredits: number, scope?: IntegrationScopeRequest): Promise<IntegrationAccess | undefined> {
+  if (privateIdentity(req)) return privateIdentity(req);
+  if (privateMode()) {
+    const identity = privateIdentity(req);
+    if (!identity) throw new Error('Unauthorized private integration request.');
+    return identity;
+  }
   const token = bearerToken(req);
   if (token) {
     const record = await findActiveIntegrationKeyByHash(hashSecret(token));
@@ -1494,6 +1502,12 @@ async function assertIntegrationAccess(req: express.Request, requiredCredits: nu
 }
 
 async function assertIntegrationIdentity(req: express.Request, scope?: IntegrationScopeRequest): Promise<IntegrationAccess | undefined> {
+  if (privateIdentity(req)) return privateIdentity(req);
+  if (privateMode()) {
+    const identity = privateIdentity(req);
+    if (!identity) throw new Error('Unauthorized private integration request.');
+    return identity;
+  }
   const token = bearerToken(req);
   if (token) {
     const record = await findActiveIntegrationKeyByHash(hashSecret(token));
