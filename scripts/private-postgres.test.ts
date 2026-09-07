@@ -64,7 +64,7 @@ test('isolated PostgreSQL private-access concurrency suite',async t=>{
     })
     await t.test('nonce replay across simultaneous management calls creates only one key',async()=>{
       await reset(); const nonce='ab'.repeat(32)
-      const results=await Promise.all(Array.from({length:8},()=>call('',management,'/api/private/keys',{name:'test'},nonce)))
+      const results=await Promise.all(Array.from({length:8},()=>call('',management,'/api/private/keys',{name:'test',service:'all-private'},nonce)))
       assert.equal(results.filter(r=>r.status===401).length,7)
       assert.equal((await db.query('SELECT count(*)::int n FROM zs_private_keys')).rows[0].n,1)
     })
@@ -77,6 +77,22 @@ test('isolated PostgreSQL private-access concurrency suite',async t=>{
       const revoked=await call('',management,`/api/private/keys/${id}/revoke`)
       assert.equal(revoked.response.body.revoked,true)
       assert.equal((await call(token)).status,401)
+    })
+    await t.test('scoped keys persist selection and deny other services before quota',async()=>{
+      await reset()
+      const created=await call('',management,'/api/private/keys',{name:'agreement',platform:'Owner app',service:'agreement-intelligence'})
+      assert.equal(created.response.body.service,'agreement-intelligence')
+      const token=created.response.body.key
+      assert.equal((await call(token)).status,403)
+      assert.equal((await db.query('SELECT count(*)::int n FROM zs_private_usage')).rows[0].n,0)
+      assert((await call(token,access,'/api/integrations/agreement-intelligence')).admitted)
+      const row=(await db.query('SELECT platform,service FROM zs_private_keys')).rows[0]
+      assert.equal(row.platform,'Owner app')
+      assert.equal(row.service,'agreement-intelligence')
+      const other=await seed('untouched')
+      await call('',management,`/api/private/keys/${created.response.body.id}/revoke`)
+      assert((await call(other)).admitted)
+      assert.equal((await call('',management,'/api/private/keys',{service:'video-scoring'})).status,400)
     })
     await t.test('database errors fail closed',async()=>{
       const failing=createPrivateAccess({database:async()=>{throw new Error('database unavailable')}})

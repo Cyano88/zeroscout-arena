@@ -42,3 +42,14 @@ API routes remain default-deny. The owner page currently supports injected EVM b
 wallets, not a separate Privy login. Do not paste API keys or signatures into chat.
 
 This is an implementation checkpoint, not a production-readiness claim.
+
+## Per-key service selection
+
+New keys require an explicit `service`: `lp-intelligence` (intelligence, readiness,
+general research), `agreement-intelligence` (agreement endpoint only), or
+`all-private` (both). Unknown or omitted selections fail closed. The signed body
+also includes a platform label. Permissions are endpoint-level, not analysis-type
+filters or trade approvals. Helper sponsorship, video, and passports remain denied.
+An additive database migration preserves existing private keys with `all-private`,
+matching their previous access. No keys are revoked by creation or migration.
+Legacy keys remain a separate store and are rejected only upon full-mode cutover.

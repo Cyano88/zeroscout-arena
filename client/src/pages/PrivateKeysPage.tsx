@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { BrowserProvider, sha256, toUtf8Bytes } from 'ethers'
+import { privateServices, type PrivateService } from '../../../shared/private-services'
 
 const owner = '0xa2ae0a3b3ed7b30ab049685a934de587a0f51d66'
-type Key = { id:string; name:string; expires_at:string; revoked:boolean; daily_limit:number; minute_limit:number; concurrent_limit:number }
+type Key = { id:string; name:string; platform:string; service:PrivateService; expires_at:string; revoked:boolean; daily_limit:number; minute_limit:number; concurrent_limit:number }
 export default function PrivateKeysPage() {
   const [keys,setKeys]=useState<Key[]>([])
   const [secret,setSecret]=useState('')
   const [name,setName]=useState('polydesk-production')
+  const [platform,setPlatform]=useState('PolyDesk')
+  const [service,setService]=useState<PrivateService>('lp-intelligence')
   const [status,setStatus]=useState('Connect the designated owner wallet to manage private keys.')
   const [busy,setBusy]=useState(false)
   const [loaded,setLoaded]=useState(false)
@@ -16,6 +19,7 @@ export default function PrivateKeysPage() {
   const [days,setDays]=useState(30)
 
   async function request(method:string,path:string,body:unknown={}) {
+    if (method==='POST' && path==='/api/private/keys') body={...(body as object),platform,service}
     const ethereum=(window as unknown as {ethereum?: ConstructorParameters<typeof BrowserProvider>[0]}).ethereum
     if(!ethereum)throw new Error('Open this page in the browser with your owner wallet extension enabled.')
     const provider=new BrowserProvider(ethereum)
@@ -63,13 +67,24 @@ export default function PrivateKeysPage() {
       <p>Give each integration its own key so you can limit or revoke it independently.</p>
       <fieldset disabled={busy} className="private-key-fields">
       <label>Key name <input value={name} maxLength={80} onChange={e=>setName(e.target.value)} required/></label>
+      <label>Platform <input value={platform} maxLength={80} onChange={e=>setPlatform(e.target.value)} required/></label>
       {([['Requests/day',daily,setDaily,100],['Requests/minute',minute,setMinute,5],['Concurrent requests',concurrent,setConcurrent,2],['Expiry days',days,setDays,30]] as const).map(([label,value,setValue,max])=><label key={label} style={{display:'block',margin:'12px 0'}}>{label} <input type="number" min={1} max={max} value={value} onChange={e=>setValue(Number(e.target.value))} required/></label>)}
+      </fieldset>
+      <fieldset disabled={busy} className="private-service-picker">
+        <legend>Service configuration</legend>
+        <div className="preset-picker">
+          {['Helper Sponsorship','Video Scoring'].map(label=><button key={label} type="button" className="preset-option" disabled><strong>{label}</strong><span>Unavailable for private keys. Existing legacy integrations are unchanged during staging.</span></button>)}
+          {privateServices.map(option=><button key={option.id} type="button" className={service===option.id?'preset-option on':'preset-option'} aria-pressed={service===option.id} onClick={()=>setService(option.id)}><strong>{option.label}</strong><span>{option.description}</span></button>)}
+        </div>
+        <p>Full Platform API is not enabled in private mode. The selection above is enforced per endpoint; it is not an analysis-type or trading approval policy.</p>
       </fieldset>
       <button className="btn btn-primary" disabled={busy||!name.trim()} type="submit">{busy?'Awaiting authorization...':'Create private API key'}</button>
     </form>
     <p className="surface surface-pad-sm" role="status" aria-live="polite">{status}</p>
     {secret&&<section><p>Shown once. Do not paste this key into chat.</p><textarea aria-label="New private API key" readOnly value={secret} rows={3} style={{width:'100%'}}/><button onClick={()=>{setSecret('');setStatus('Key hidden.')}}>Hide key</button></section>}
     <h2>Manage private API keys</h2>
+    <p>Creating a key does not revoke other keys. Revocation affects only the selected key. Full private-mode activation will reject legacy keys, including those owned by this wallet; migrate those integrations first.</p>
+    {keys.map(key=><p key={key.id}><strong>{key.name}</strong> · {key.platform} · {privateServices.find(option=>option.id===key.service)?.label || 'Unknown service (access denied)'}</p>)}
     <p>{loaded ? (keys.length ? 'List keys again after creation to refresh this inventory.' : 'No private keys were returned. Create a key above, then refresh the list.') : 'Connect the owner and sign the list request to load your keys. Existing legacy keys are not shown here.'}</p>
     {keys.map(key=><section key={key.id} style={{margin:'16px 0'}}><strong>{key.name}</strong> <code>{key.id}</code><p>{key.revoked?'Revoked':`Expires ${key.expires_at}`} · {key.daily_limit}/day · {key.minute_limit}/minute · {key.concurrent_limit} concurrent</p><button disabled={busy||key.revoked} onClick={()=>{if(window.confirm('Revoke this key? Any integration using it will lose access.'))void perform(async()=>{await request('POST',`/api/private/keys/${key.id}/revoke`);setKeys(previous=>previous.map(item=>item.id===key.id?{...item,revoked:true}:item));setStatus('Key revoked.');})}}>Revoke key</button></section>)}
   </main>

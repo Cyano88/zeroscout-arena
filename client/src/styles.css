@@ -1602,6 +1602,9 @@ input:focus, textarea:focus, select:focus {
 .private-key-fields input { width: 100%; box-sizing: border-box; }
 .private-keys-page p { overflow-wrap: anywhere; }
 .private-keys-page textarea { box-sizing: border-box; }
+.private-service-picker { border: 0; padding: 0; margin: 0 0 24px; min-width: 0; }
+.private-service-picker .preset-option:disabled { opacity: .5; cursor: not-allowed; }
+.private-service-picker .preset-picker { grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }
 .compact-heading { max-width: 720px; }
 .dashboard-page,
 .dashboard-page * {
