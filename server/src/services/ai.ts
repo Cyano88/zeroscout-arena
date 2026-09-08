@@ -448,7 +448,7 @@ Rules:
       errors.push(`Routing budget exhausted before ${model}.`);
       break;
     }
-    const attemptBudgetMs = directTradeAttemptWindow(remainingMs, attemptTimeoutMs);
+    const attemptBudgetMs = directTradeAttemptWindow(remainingMs, attemptTimeoutMs, modelIndex === 0 && modelCandidates.length > 1);
     const ai = { ...getComputeAiClientForModel(model, "Direct Trade Intelligence"), timeoutMs: attemptBudgetMs };
     attemptedModels.push(model);
     try {

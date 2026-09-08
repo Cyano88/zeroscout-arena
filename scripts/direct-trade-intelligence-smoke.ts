@@ -29,6 +29,7 @@ let mockPrimaryContent: string | null = null
 let mockCatalog = false
 let mockBalanceFailure = false
 let mockVerifiedSlowSuccess = false
+let mockPrimaryHang = false
 
 globalThis.fetch = async (_url, init = {}) => {
   if (mockCatalog && String(_url).endsWith('/models')) {
@@ -49,6 +50,12 @@ globalThis.fetch = async (_url, init = {}) => {
     })
   }
   const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; response_format?: unknown; max_tokens?: unknown; reasoning_effort?: unknown; messages?: Array<{ content?: string }> }
+  if (mockPrimaryHang && body.model === 'direct-trade-test-model') {
+    return new Promise<Response>((_resolve, reject) => {
+      if (init.signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'))
+      init.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    })
+  }
   if (mockPrimaryUnusable && body.model === 'direct-trade-test-model') {
     return new Response(JSON.stringify({ choices: [{ message: { content: mockPrimaryContent } }] }), {
       status: 200, headers: { 'content-type': 'application/json' },
@@ -230,6 +237,24 @@ try {
   assert.deepEqual(trustModes.slice(callsBeforeSlow), ['verified'], 'Verified inference may finish after the old one-second probe limit without a duplicate call.')
   mockVerifiedSlowSuccess = false
   const { config } = await import('../server/src/config.js')
+  // Exercise the actual routing loop, not just the budget helper: even a 60s
+  // misconfiguration must cancel a hanging primary and reach a usable fallback.
+  const savedRouting = { trust: config.computeTrustMode, total: config.computeDirectTradeTotalTimeoutMs, attempt: config.computeDirectTradeAttemptTimeoutMs }
+  config.computeTrustMode = 'default'
+  config.computeDirectTradeTotalTimeoutMs = 10_000
+  config.computeDirectTradeAttemptTimeoutMs = 60_000
+  mockPrimaryHang = true
+  const fallbackStarted = Date.now()
+  const callsBeforeReservedFallback = trustModes.length
+  const reservedFallbackResult = await generateCustomIntelligence(directInput)
+  assert.notEqual(reservedFallbackResult.proofMetadata?.degraded, true)
+  assert.match(reservedFallbackResult.aiProvider, /direct-trade-fallback-model/)
+  assert.deepEqual(trustModes.slice(callsBeforeReservedFallback), [null, null])
+  assert(Date.now() - fallbackStarted < 9_000, 'Fallback should complete inside the total deadline')
+  mockPrimaryHang = false
+  config.computeTrustMode = savedRouting.trust
+  config.computeDirectTradeTotalTimeoutMs = savedRouting.total
+  config.computeDirectTradeAttemptTimeoutMs = savedRouting.attempt
   config.computeDirectTradeModelDiscovery = true
   config.computeDirectTradeModelLimit = 12
   mockCatalog = true

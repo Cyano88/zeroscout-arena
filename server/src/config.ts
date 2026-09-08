@@ -50,7 +50,7 @@ export const config = {
   computeDirectTradeModelDiscovery: process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_DISCOVERY !== "false",
   computeDirectTradeModelLimit: Math.max(1, Math.min(12, Number(process.env.ZEROSCOUT_DIRECT_TRADE_MODEL_LIMIT ?? 6) || 6)),
   computeDirectTradeTotalTimeoutMs: Math.max(10_000, Math.min(40_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_TOTAL_TIMEOUT_MS ?? 40_000) || 40_000)),
-  computeDirectTradeAttemptTimeoutMs: Math.max(3_000, Math.min(60_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_ATTEMPT_TIMEOUT_MS ?? 30_000) || 30_000)),
+  computeDirectTradeAttemptTimeoutMs: Math.max(3_000, Math.min(60_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_ATTEMPT_TIMEOUT_MS ?? 20_000) || 20_000)),
   computeDirectTradeTrustProbeTimeoutMs: Math.max(1_000, Math.min(15_000, Number(process.env.ZEROSCOUT_DIRECT_TRADE_TRUST_PROBE_TIMEOUT_MS ?? 10_000) || 10_000)),
   computeHelperModel: process.env.ZEROSCOUT_HELPER_MODEL ?? process.env.ZG_COMPUTE_HELPER_MODEL ?? "claude-sonnet-5",
   computeHelperModelCandidates: commaSeparated(
@@ -64,7 +64,8 @@ export const config = {
   computeLpModel: process.env.ZEROSCOUT_LP_MODEL ?? process.env.ZG_COMPUTE_LP_MODEL ?? "claude-fable-5",
   computeLpVerifierModel: process.env.ZEROSCOUT_LP_VERIFIER_MODEL ?? process.env.ZG_COMPUTE_LP_VERIFIER_MODEL ?? "deepseek-v4-pro",
   computeVideoModel: process.env.ZEROSCOUT_HASHWATCH_MEDIA_MODEL ?? process.env.ZG_COMPUTE_VIDEO_MODEL ?? "qwen3-vl-30b",
-  computeTrustMode: process.env.ZG_COMPUTE_TRUST_MODE ?? "verified",
+  // Omitted/empty means standard routing; verified/private remain explicit opt-ins.
+  computeTrustMode: process.env.ZG_COMPUTE_TRUST_MODE?.trim() || "default",
   lpVerifierEnabled: process.env.ZEROSCOUT_LP_VERIFIER_ENABLED === "true",
   integrationSecret: process.env.ZEROSCOUT_INTEGRATION_SECRET,
   adminToken: process.env.ZEROSCOUT_ADMIN_TOKEN,
