@@ -1594,20 +1594,18 @@ input:focus, textarea:focus, select:focus {
 
 /* === API Dashboard === */
 .dashboard-page { max-width: 1040px; }
-.private-keys-page { display: grid; gap: 24px; }
-.private-keys-page .private-owner { overflow-wrap: anywhere; }
-.private-keys-page form { padding: 28px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
-.private-key-fields { border: 0; padding: 0; margin: 20px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 16px; }
-.private-key-fields label { display: grid; gap: 8px; min-width: 0; }
-.private-key-fields input { width: 100%; box-sizing: border-box; }
-.private-keys-page p { overflow-wrap: anywhere; }
-.private-keys-page textarea { box-sizing: border-box; }
-.private-keys-page .dashboard-hero { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 16px; }
-.private-keys-page .dashboard-hero > * { min-width: 0; max-width: 100%; }
-.private-keys-page .dashboard-hero > .btn { justify-self: start; }
-.private-keys-page .wallet-actions { justify-content: flex-start; align-items: center; }
+.private-keys-page .private-owner { display: block; overflow-wrap: anywhere; margin-top: 8px; }
+.private-keys-page .private-owner-details { margin-top: 12px; color: var(--muted); font-size: 12px; }
+.private-keys-page .dashboard-hero > * { min-width: 0; }
+.private-keys-page .wallet-actions { max-width: 360px; }
 .private-keys-page .wallet-actions p { flex-basis: 100%; margin: 0; }
+.private-key-fields, .private-service-picker { border: 0; padding: 0; margin: 0; min-width: 0; }
+.private-service-picker legend { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
+.private-keys-page .key-table h2 { font-size: 16px; margin: 0; }
+.private-keys-page .key-row code { overflow-wrap: anywhere; font-size: 11px; color: var(--muted); }
+.private-keys-page .secret-box textarea { width: 100%; box-sizing: border-box; color: var(--text); background: var(--bg); border: 1px solid var(--line); padding: 12px; }
 .private-keys-page button:disabled { cursor: not-allowed; opacity: .45; }
+
 .private-service-picker { border: 0; padding: 0; margin: 0 0 24px; min-width: 0; }
 .private-service-picker .preset-option:disabled { opacity: .5; cursor: not-allowed; }
 .private-service-picker .preset-picker { grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { BrowserProvider, sha256, toUtf8Bytes } from 'ethers'
+import { KeyRound, RefreshCw, Copy, ShieldCheck } from 'lucide-react'
 import { privateServices, type PrivateService } from '../../../shared/private-services'
 
 export const owner = '0xa2ae0a3b3ed7b30ab049685a934de587a0f51d66'
@@ -12,7 +13,7 @@ export default function PrivateKeysPage({walletControls,connectionReady=true,get
   const [name,setName]=useState('polydesk-production')
   const [platform,setPlatform]=useState('PolyDesk')
   const [service,setService]=useState<PrivateService>('lp-intelligence')
-  const [status,setStatus]=useState('Connect the designated owner wallet to manage private keys.')
+  const [status,setStatus]=useState('')
   const [busy,setBusy]=useState(false)
   const [loaded,setLoaded]=useState(false)
   const [daily,setDaily]=useState(100)
@@ -47,51 +48,68 @@ export default function PrivateKeysPage({walletControls,connectionReady=true,get
   }
   return <main className="page dashboard-page private-keys-page">
     <header className="page-heading compact-heading">
-      <span className="eyebrow">Private API Dashboard</span>
-      <h1>Create private API key</h1>
-      <p>Manage PolyDesk's private access to ZeroScout compute. Issue owner-signed keys with individual usage limits and expiry.</p>
+      <span className="eyebrow">API Dashboard</span>
+      <h1>Your ZeroScout API keys</h1>
+      <p>Manage your integrations, services, and usage limits.</p>
     </header>
     <section className="dashboard-hero surface">
-      <div><span className="status-tag">Owner-controlled access</span>
-        <h2>PolyDesk private compute</h2>
-        <p>Only the designated wallet can create, list, or revoke keys.</p>
-        <code className="private-owner">{owner}</code>
-        <p>Connect this wallet through Privy or your browser wallet. Each key action requires a fresh message signature, not a transaction or token approval.</p>
+      <div>
+        <span className="status-tag"><ShieldCheck size={12}/> Private access</span>
+        <h2>{connectionReady && walletControls ? 'Owner wallet connected' : 'Connect owner wallet'}</h2>
+        <p>Your owner wallet authorizes key management.</p>
+        <details className="private-owner-details"><summary>Designated owner</summary><code className="private-owner">{owner}</code><p>Each action requires a signed message. No transaction or token approval.</p></details>
       </div>
       {walletControls}
-      <button className="btn btn-primary" disabled={busy||!connectionReady} onClick={()=>perform(async()=>{const data=await request('GET','/api/private/keys');setKeys(data.keys);setLoaded(true);setStatus('Keys loaded.')})}>{busy?'Awaiting authorization...':'Connect owner and list keys'}</button>
-      <p role="status" aria-live="polite">{status}</p>
     </section>
-    <section className="surface surface-pad private-key-policy">
-      <h2>Usage limits, not purchased credits</h2>
-      <p>Private keys bypass ZeroScout credit deductions. Set up to 100 requests/day, 5/minute, 2 concurrent requests, and 30 days of validity per key. You can choose lower limits.</p>
-      <p>All private keys share 500 requests/day and 4 concurrent requests, with at most 10 active keys. Daily and minute windows use UTC. Failed downstream requests also count.</p>
-      <p>These are request quotas, not spending caps. Underlying compute and proof storage may still consume service resources.</p>
-    </section>
-    <form onSubmit={event=>{event.preventDefault();void perform(async()=>{const result=await request('POST','/api/private/keys',{name,limits:{daily,minute,concurrent,days}});setSecret(result.key);setStatus('Key created. Copy it into PolyDesk’s secret configuration now. It cannot be retrieved later.');})}}>
-      <h2>Create private API key</h2>
-      <p>Give each integration its own key so you can limit or revoke it independently.</p>
-      <fieldset disabled={busy} className="private-key-fields">
-      <label>Key name <input value={name} maxLength={80} onChange={e=>setName(e.target.value)} required/></label>
-      <label>Platform <input value={platform} maxLength={80} onChange={e=>setPlatform(e.target.value)} required/></label>
-      {([['Requests/day',daily,setDaily,100],['Requests/minute',minute,setMinute,5],['Concurrent requests',concurrent,setConcurrent,2],['Expiry days',days,setDays,30]] as const).map(([label,value,setValue,max])=><label key={label} style={{display:'block',margin:'12px 0'}}>{label} <input type="number" min={1} max={max} value={value} onChange={e=>setValue(Number(e.target.value))} required/></label>)}
-      </fieldset>
-      <fieldset disabled={busy} className="private-service-picker">
-        <legend>Service configuration</legend>
-        <div className="preset-picker">
-          {['Helper Sponsorship','Video Scoring'].map(label=><button key={label} type="button" className="preset-option" disabled><strong>{label}</strong><span>Unavailable for private keys. Existing legacy integrations are unchanged during staging.</span></button>)}
-          {privateServices.map(option=><button key={option.id} type="button" className={service===option.id?'preset-option on':'preset-option'} aria-pressed={service===option.id} onClick={()=>setService(option.id)}><strong>{option.label}</strong><span>{option.description}</span></button>)}
+
+    <section className="surface key-table" aria-labelledby="private-keys-title">
+      <div className="panel-head">
+        <h2 id="private-keys-title">Your API keys</h2>
+        <button className="btn btn-ghost btn-sm" disabled={busy||!connectionReady} onClick={()=>perform(async()=>{const data=await request('GET','/api/private/keys');setKeys(data.keys);setLoaded(true);setStatus('Keys loaded.')})}><RefreshCw size={13}/>{busy?'Awaiting authorization...':loaded?'Refresh keys':'Load keys'}</button>
+      </div>
+      {!loaded && !keys.length ? <p className="muted-copy">{connectionReady ? 'Load keys and approve the owner signature to view your private key inventory.' : 'Connect the designated owner wallet to view your keys. Signing in alone does not grant access.'}</p> : !keys.length ? <p className="muted-copy">No private keys found. Create a key below.</p> : keys.map(key=>{
+        const expired=new Date(key.expires_at).getTime()<=Date.now()
+        return <div className="key-row" key={key.id}>
+          <div><strong>{key.name}</strong><span>{key.platform} ? {privateServices.find(option=>option.id===key.service)?.label || 'Unknown service (access denied)'}</span><code>{key.id}</code></div>
+          <div><b>{key.daily_limit}/day</b><span>{key.minute_limit}/min ? {key.concurrent_limit} concurrent</span></div>
+          <div><b>{new Date(key.expires_at).toLocaleDateString()}</b><span>Expires</span></div>
+          <span className={key.revoked||expired?'pill danger':'pill'}>{key.revoked?'Revoked':expired?'Expired':'Active'}</span>
+          <div className="key-actions"><button className="btn btn-ghost btn-sm danger-action" disabled={busy||!connectionReady||key.revoked} onClick={()=>{if(window.confirm('Revoke this key? Any integration using it will lose access.'))void perform(async()=>{await request('POST',`/api/private/keys/${key.id}/revoke`);setKeys(previous=>previous.map(item=>item.id===key.id?{...item,revoked:true}:item));setStatus('Key revoked.');})}}>Revoke key</button></div>
         </div>
-        <p>Full Platform API is not enabled in private mode. The selection above is enforced per endpoint; it is not an analysis-type or trading approval policy.</p>
-      </fieldset>
-      <button className="btn btn-primary" disabled={busy||!connectionReady||!name.trim()} type="submit">{busy?'Awaiting authorization...':'Create private API key'}</button>
+      })}
+      <p className="table-note">Private keys only. Legacy keys are not listed. Full key values are shown once when created.</p>
+    </section>
+
+    <form className="dashboard-grid" onSubmit={event=>{event.preventDefault();void perform(async()=>{
+      const result=await request('POST','/api/private/keys',{name,limits:{daily,minute,concurrent,days}})
+      setSecret(result.key)
+      setKeys(previous=>[...previous,{id:result.id,name,platform:result.platform,service:result.service,expires_at:result.expiresAt,revoked:false,daily_limit:result.limits.daily,minute_limit:result.limits.minute,concurrent_limit:result.limits.concurrent}])
+      setStatus('Key created. Copy it into your backend secret configuration. It cannot be retrieved later.')
+    })}}>
+      <div className="surface dashboard-panel">
+        <div className="panel-head"><span className="eyebrow">Create key</span><KeyRound size={16}/></div>
+        <fieldset disabled={busy} className="private-key-fields">
+          <label>Key name<input value={name} maxLength={80} onChange={e=>setName(e.target.value)} required/></label>
+          <label>Platform<input value={platform} maxLength={80} onChange={e=>setPlatform(e.target.value)} required/></label>
+        </fieldset>
+        <fieldset disabled={busy} className="private-service-picker">
+          <legend>Service configuration</legend>
+          <div className="preset-picker">
+            {privateServices.map(option=><button key={option.id} type="button" className={service===option.id?'preset-option on':'preset-option'} aria-pressed={service===option.id} onClick={()=>setService(option.id)}><strong>{option.label}</strong><span>{option.description}</span></button>)}
+          </div>
+        </fieldset>
+        <button className="btn btn-primary" disabled={busy||!connectionReady||!name.trim()} type="submit">{busy?'Awaiting authorization...':'Create private API key'}</button>
+        {secret&&<div className="secret-box"><span>Shown once</span><textarea aria-label="New private API key" readOnly value={secret} rows={3}/><div className="key-actions"><button className="btn btn-ghost btn-sm" type="button" onClick={()=>{void navigator.clipboard.writeText(secret).then(()=>setStatus('Key copied.'),()=>setStatus('Copy failed. Select and copy the key manually.'))}}><Copy size={13}/>Copy key</button><button className="btn btn-ghost btn-sm" type="button" onClick={()=>{setSecret('');setStatus('Key hidden.')}}>Hide key</button></div><p>Save this key in your backend secret configuration.</p></div>}
+      </div>
+      <div className="surface dashboard-panel">
+        <div className="panel-head"><span className="eyebrow">Usage limits</span><ShieldCheck size={16}/></div>
+        <p className="muted-copy">Set a quota and expiry for this integration. Private keys do not use purchased credits.</p>
+        <fieldset disabled={busy} className="private-key-fields">
+          {([['Requests/day',daily,setDaily,100],['Requests/minute',minute,setMinute,5],['Concurrent requests',concurrent,setConcurrent,2],['Expiry days',days,setDays,30]] as const).map(([label,value,setValue,max])=><label key={label}>{label}<input type="number" min={1} max={max} value={value} onChange={e=>setValue(Number(e.target.value))} required/></label>)}
+        </fieldset>
+        <details className="recovery-box"><summary>Service and usage policy</summary><p className="muted-copy">All private keys share 500 requests/day and 4 concurrent requests, with at most 10 active keys. Limits use UTC; failed downstream requests count. Quotas are not spending caps.</p><p className="muted-copy">Helper Sponsorship and Video Scoring are unavailable for private keys. Service selection is enforced per endpoint. Creating a key does not revoke existing keys.</p></details>
+      </div>
     </form>
-    <p className="surface surface-pad-sm" role="status" aria-live="polite">{status}</p>
-    {secret&&<section><p>Shown once. Do not paste this key into chat.</p><textarea aria-label="New private API key" readOnly value={secret} rows={3} style={{width:'100%'}}/><button onClick={()=>{setSecret('');setStatus('Key hidden.')}}>Hide key</button></section>}
-    <h2>Manage private API keys</h2>
-    <p>Creating a key does not revoke other keys. Revocation affects only the selected key. Full private-mode activation will reject legacy keys, including those owned by this wallet; migrate those integrations first.</p>
-    {keys.map(key=><p key={key.id}><strong>{key.name}</strong> · {key.platform} · {privateServices.find(option=>option.id===key.service)?.label || 'Unknown service (access denied)'}</p>)}
-    <p>{loaded ? (keys.length ? 'List keys again after creation to refresh this inventory.' : 'No private keys were returned. Create a key above, then refresh the list.') : 'Connect the owner and sign the list request to load your keys. Existing legacy keys are not shown here.'}</p>
-    {keys.map(key=><section key={key.id} style={{margin:'16px 0'}}><strong>{key.name}</strong> <code>{key.id}</code><p>{key.revoked?'Revoked':`Expires ${key.expires_at}`} · {key.daily_limit}/day · {key.minute_limit}/minute · {key.concurrent_limit} concurrent</p><button disabled={busy||key.revoked} onClick={()=>{if(window.confirm('Revoke this key? Any integration using it will lose access.'))void perform(async()=>{await request('POST',`/api/private/keys/${key.id}/revoke`);setKeys(previous=>previous.map(item=>item.id===key.id?{...item,revoked:true}:item));setStatus('Key revoked.');})}}>Revoke key</button></section>)}
+    <p className="private-key-status" role="status" aria-live="polite">{status}</p>
   </main>
 }
