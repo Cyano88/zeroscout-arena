@@ -37,6 +37,23 @@ test('does not let the same month and day from an older year pass as current', (
 test('non-fixture research keeps the existing bounded behavior', () => {
   assert.equal(fixtureEvidence('Will rates change?', candidate('Rate decision evidence'), false), 'Rate decision evidence');
 });
+test('rejects transfer rumours and generic policy or season-odds pages', () => {
+  for (const title of ['Transfer news: Manchester United suffer blow - Paper Talk', '2026/27 Premier League Odds - Contenders & Predictions', 'How do other competitions fixtures affect Premier League clubs']) {
+    assert.equal(fixtureEvidence(question, candidate('Sunday 13 September Manchester United v Manchester City', title), true), null);
+  }
+});
+test('does not treat an undated team-title article as evidence for the fixture', () => {
+  assert.equal(fixtureEvidence(question, candidate('They started the season with one win, one draw and one loss. News about Manchester United.', 'Man United Manchester City', 'https://news.example/ambiguous'), false), null);
+});
+test('supports ordinal and abbreviated date headings and excludes subsequent dates', () => {
+  for (const day of ['Sunday 13th September 2026', 'Sun 13 Sep']) {
+    const result = fixtureEvidence(question, candidate('Thursday 10 September Manchester United versus Sabah. ' + day + ' Manchester United versus Manchester City Monday 14 September Leeds versus Newcastle'), true)!;
+    assert(result.includes(day));
+    assert(!result.includes('Sabah'));
+    assert(!result.includes('Leeds'));
+    assert.match(result, /Team attribution requires an explicit subject/);
+  }
+});
 test('actual retrieval pipeline preserves current and conflicting fixture passages and drops unrelated previews', async () => {
   const { config } = await import('../server/src/config.js');
   const { fetchPolyDeskGeneralResearch } = await import('../server/src/services/polydesk-general-research.js');

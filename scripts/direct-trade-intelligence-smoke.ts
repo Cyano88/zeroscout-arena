@@ -212,6 +212,8 @@ try {
   assert.match(prompts.join('\n'), /downstream execution gates/i)
   assert.match(prompts.join('\n'), /must not be reported as a research data gap/i)
   assert.match(prompts.join('\n'), /RESOLUTION_AUTHORITY/i)
+  assert.match(prompts.join('\n'), /unresolved 'we', 'our', 'they' or 'their' is not a subject/)
+  assert.match(prompts.join('\n'), /Never flip scores/)
   assert.match(prompts.join('\n'), /Return exactly one JSON object with this shape/i)
   assert(responseFormats.every(value => value === undefined))
   assert(outputTokenLimits.every(value => value === 4000))
