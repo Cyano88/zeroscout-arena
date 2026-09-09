@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { config } from '../config.js';
+import { fixtureEvidence } from './fixture-evidence.js';
 
 export const polyDeskGeneralResearchRequestSchema = z.object({
   schema: z.literal('zeroscout.polydesk-general-research.request'),
@@ -293,7 +294,10 @@ export async function fetchPolyDeskGeneralResearch(
     for (const candidate of batch.results) {
       if (isExcludedEvidenceUrl(candidate.url, input.market.resolutionSource)) continue;
       if (!/^https?:\/\//i.test(candidate.url)) continue;
-      candidates.push({ ...candidate, queryRole: batch.query.role });
+      const description = fixtureEvidence(input.market.question, candidate,
+        sourceHost(candidate.url).toLowerCase() === sourceHost(input.market.resolutionSource).toLowerCase());
+      if (!description) continue;
+      candidates.push({ ...candidate, raw_content: description, content: description, queryRole: batch.query.role });
     }
   }
   const retrievedAt = new Date().toISOString();

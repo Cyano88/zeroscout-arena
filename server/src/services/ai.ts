@@ -434,6 +434,7 @@ Rules:
 - Separate observed facts from inference. Never invent prices, depth, news, wallet activity, resolution rules, fills, balances, or profit probabilities.
 - This is pre-trade directional research. Wallet access, balances, preview, typed confirmation, signing, submission, and fills are downstream execution gates. Their absence must not be reported as a research data gap or reduce stance, evidenceQuality, or confidence.
 - A missing publication date is a freshness gap, but do not automatically rate evidence LOW when the source is explicitly tagged RESOLUTION_AUTHORITY and its retrievedAt timestamp is current. Never misrepresent retrievedAt as a publication date.
+- A search-provider retrieval timestamp does not prove a fixture schedule was updated. Compare fixture-specific dated official updates with season-release schedules. Cite the exact passages and retain any unresolved conflict; never assume an old schedule is current merely because its domain is official, or invent a rescheduling notice.
 - Evaluate the requested side. SUPPORT only when supplied evidence supports it and material risks are disclosed. OPPOSE when evidence cuts against it. INSUFFICIENT when evidence, rules, or freshness are inadequate.
 - A smart-money tag is corroborating public-flow evidence, never proof of profit.
 - Flag stale or one-sided books, wide spread, shallow depth, ambiguous resolution, near expiry, source disagreement, missing citations, and headline risk.
