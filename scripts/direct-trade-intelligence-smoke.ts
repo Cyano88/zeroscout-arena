@@ -164,6 +164,23 @@ try {
   assert.equal(result.tradeAssessment?.side, 'BUY')
   assert.match(result.riskFlags?.[0] ?? '', /Resolution and headline risk remain/)
   assert.notEqual(result.riskFlags?.[0], '[object Object]')
+  const researchOnlyInput = { ...directInput, data: { ...directInput.data, researchOnly: true, mandate: null } }
+  const uncapped = await generateCustomIntelligence(researchOnlyInput)
+  assert.equal(uncapped.tradeAssessment?.stance, 'SUPPORT')
+  assert.match(prompts.at(-1) ?? '', /RESEARCH ONLY: No buyer trading mandate exists/)
+  assert((prompts.at(-1) ?? '').includes(JSON.stringify({ mandate: null }).slice(1, -1)))
+  for (const data of [
+    { ...directInput.data, mandate: null },
+    { ...directInput.data, mandate: null, researchOnly: false },
+    { ...directInput.data, mandate: null, researchOnly: 'true' },
+    { ...directInput.data, researchOnly: true },
+    { ...researchOnlyInput.data, outcome: { tokenId: '', label: 'Yes' } },
+    { ...researchOnlyInput.data, execution: {} },
+  ]) {
+    const before = trustModes.length
+    await assert.rejects(() => generateCustomIntelligence({ ...directInput, data }))
+    assert.equal(trustModes.length, before, 'Invalid contract must fail before inference')
+  }
   mockPrimaryModelFailure = true
   const modelFallbackResult = await generateCustomIntelligence(directInput)
   assert.match(modelFallbackResult.aiProvider, /direct-trade-fallback-model/i)
