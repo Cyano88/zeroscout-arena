@@ -30,6 +30,7 @@ let mockCatalog = false
 let mockBalanceFailure = false
 let mockVerifiedSlowSuccess = false
 let mockPrimaryHang = false
+let mockSecondHang = false
 
 globalThis.fetch = async (_url, init = {}) => {
   if (mockCatalog && String(_url).endsWith('/models')) {
@@ -50,7 +51,7 @@ globalThis.fetch = async (_url, init = {}) => {
     })
   }
   const body = JSON.parse(String(init.body ?? '{}')) as { model?: string; response_format?: unknown; max_tokens?: unknown; reasoning_effort?: unknown; messages?: Array<{ content?: string }> }
-  if (mockPrimaryHang && body.model === 'direct-trade-test-model') {
+  if ((mockPrimaryHang && body.model === 'direct-trade-test-model') || (mockSecondHang && body.model === 'direct-trade-second-model')) {
     return new Promise<Response>((_resolve, reject) => {
       if (init.signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'))
       init.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
@@ -270,6 +271,22 @@ try {
   assert.match(reservedFallbackResult.aiProvider, /direct-trade-fallback-model/)
   assert.deepEqual(trustModes.slice(callsBeforeReservedFallback), [null, null])
   assert(Date.now() - fallbackStarted < 9_000, 'Fallback should complete inside the total deadline')
+  // Regression: two slow routes must not prevent the third route from running.
+  const savedCandidates = config.computeDirectTradeModelCandidates
+  const savedLimit = config.computeDirectTradeModelLimit
+  config.computeDirectTradeModelCandidates = ['direct-trade-test-model', 'direct-trade-second-model', 'direct-trade-fallback-model']
+  config.computeDirectTradeModelLimit = 3
+  mockSecondHang = true
+  const thirdStarted = Date.now()
+  const callsBeforeThird = trustModes.length
+  const thirdResult = await generateCustomIntelligence(directInput)
+  assert.notEqual(thirdResult.proofMetadata?.degraded, true)
+  assert.match(thirdResult.aiProvider, /direct-trade-fallback-model/)
+  assert.equal(trustModes.length - callsBeforeThird, 3)
+  assert(Date.now() - thirdStarted < 10_000, 'Third route must finish within the original deadline')
+  mockSecondHang = false
+  config.computeDirectTradeModelCandidates = savedCandidates
+  config.computeDirectTradeModelLimit = savedLimit
   mockPrimaryHang = false
   config.computeTrustMode = savedRouting.trust
   config.computeDirectTradeTotalTimeoutMs = savedRouting.total

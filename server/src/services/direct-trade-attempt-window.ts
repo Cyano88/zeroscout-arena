@@ -1,7 +1,8 @@
-// Reserve one viable fallback on the first attempt; later attempts may use the
-// remainder. Do not divide the budget among every discovered catalog model.
+// Reserve a useful fallback without dividing the deadline among the whole
+// discovered catalog. Scale the reserve down for short configured deadlines.
 export function directTradeAttemptWindow(remainingMs: number, attemptCapMs: number, reserveFallback = false): number {
   if (!Number.isFinite(remainingMs) || !Number.isFinite(attemptCapMs)) return 0
-  const availableMs = reserveFallback ? Math.floor(remainingMs / 2) : remainingMs
+  const fallbackMs = Math.min(10_000, Math.floor(remainingMs / 2), Math.max(0, attemptCapMs))
+  const availableMs = reserveFallback ? remainingMs - fallbackMs : remainingMs
   return Math.max(0, Math.min(availableMs, attemptCapMs))
 }

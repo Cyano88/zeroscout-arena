@@ -112,7 +112,7 @@ function recordDirectTradeModelReadiness(result: CustomIntelligenceResult): Dire
     state: degraded ? "unavailable" : "available",
     checkedAt: new Date().toISOString(),
     model: degraded ? undefined : result.aiProvider,
-    reason: degraded ? "Every configured or discovered direct-trade model route failed." : undefined,
+    reason: degraded ? "No usable assessment was obtained within the bounded model attempts." : undefined,
     retryAfterSeconds: degraded ? 60 : 0,
   };
   return directTradeModelReadiness;
@@ -340,7 +340,7 @@ function degradedDirectTradeIntelligence(
   attemptedModels: string[],
   errors: string[],
 ): CustomIntelligenceResult {
-  console.error("[ai] every direct-trade model failed; returning a non-authorizing degraded receipt", {
+  console.error("[ai] bounded direct-trade attempts failed; returning a non-authorizing degraded receipt", {
     attemptedModels,
     errors,
   });
@@ -350,7 +350,7 @@ function degradedDirectTradeIntelligence(
     confidence: 0,
     summary: "ZeroScout could not obtain a model-backed directional assessment. Market data may still be reviewed, but this receipt does not approve a trade.",
     signals: [],
-    riskFlags: ["All available 0G direct-trade model routes were unavailable or returned unusable output."],
+    riskFlags: ["No usable AI assessment was obtained within the routing deadline; attempted models failed or timed out, and some candidates may not have been attempted."],
     recommendedActions: ["Review the market manually or retry after model availability recovers. Any manual trade still requires its own preview and explicit confirmation."],
     dataGaps: ["No model-backed interpretation of the supplied evidence was available."],
     suggestedVisuals: ["Show the market and execution snapshot with a prominent intelligence-unavailable notice."],
@@ -458,7 +458,7 @@ Rules:
       errors.push(`Routing budget exhausted before ${model}.`);
       break;
     }
-    const attemptBudgetMs = directTradeAttemptWindow(remainingMs, attemptTimeoutMs, modelIndex === 0 && modelCandidates.length > 1);
+    const attemptBudgetMs = directTradeAttemptWindow(remainingMs, attemptTimeoutMs, modelIndex < Math.min(3, modelCandidates.length) - 1);
     const ai = { ...getComputeAiClientForModel(model, "Direct Trade Intelligence"), timeoutMs: attemptBudgetMs };
     attemptedModels.push(model);
     try {
