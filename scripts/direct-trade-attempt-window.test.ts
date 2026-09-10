@@ -12,7 +12,7 @@ test('later attempts cannot overrun the remaining deadline', () => {
 })
 
 test('oversized attempt configuration preserves a useful final fallback', () => {
-  assert.equal(directTradeAttemptWindow(40_000, 60_000, true), 30_000)
+  assert.equal(directTradeAttemptWindow(40_000, 60_000, true), 20_000)
   assert.equal(directTradeAttemptWindow(19_800, 60_000), 19_800)
   assert.equal(directTradeAttemptWindow(40_000, 3_000, true), 3_000)
   assert.equal(directTradeAttemptWindow(40_000, 60_000), 40_000)
@@ -32,9 +32,21 @@ test('two slow models leave a full third-model window inside the original deadli
 })
 
 test('fast failures and a short remaining window do not fragment useful inference time', () => {
-  assert.equal(directTradeAttemptWindow(39_000, 20_000, true), 20_000)
+  assert.equal(directTradeAttemptWindow(39_000, 20_000, true), 19_500)
   assert.equal(directTradeAttemptWindow(10_000, 20_000, true), 5_000)
   assert.equal(directTradeAttemptWindow(2_000, 20_000), 2_000)
   assert.equal(directTradeAttemptWindow(40_000, -1, true), 0)
   assert.equal(directTradeAttemptWindow(Infinity, 20_000, true), 0)
+})
+
+test('production budget leaves realistic inference windows for three slow routes', () => {
+  let remaining = 90_000
+  const budgets: number[] = []
+  for (let index = 0; index < 3; index++) {
+    const budget = directTradeAttemptWindow(remaining, 35_000, index < 2)
+    budgets.push(budget)
+    remaining -= budget
+  }
+  assert.deepEqual(budgets, [35_000, 35_000, 20_000])
+  assert.equal(remaining, 0)
 })
