@@ -84,6 +84,7 @@ return async function privateAccess(req: Request, res: Response, next: NextFunct
     if (!/^zs_private_[A-Za-z0-9_-]{43}$/.test(token)) return res.status(401).json({ error: 'Private API key required' })
     const db = await getDatabase()
     const client = await db.connect()
+    const readiness = req.path === '/api/integrations/intelligence/readiness'
     const lease = randomBytes(16).toString('hex')
     let identity: { id: string; name: string; partner: string }
     try {
@@ -99,15 +100,23 @@ return async function privateAccess(req: Request, res: Response, next: NextFunct
       const time = (await client.query("SELECT to_char(now() AT TIME ZONE 'UTC','YYYY-MM-DD') AS day, to_char(now() AT TIME ZONE 'UTC','YYYY-MM-DD-HH24-MI') AS minute")).rows[0]
       for (const [bucket, cap] of [[`global:${time.day}`,500],[`${key.id}:day:${time.day}`,key.daily_limit],[`${key.id}:minute:${time.minute}`,key.minute_limit]] as [string,number][]) {
         const current = (await client.query('SELECT used FROM zs_private_usage WHERE bucket=$1', [bucket])).rows[0]?.used || 0
-        if (current >= cap) throw new Error('Private usage limit reached')
+        const required = readiness && (req.body?.analysisType === 'polydesk-smart-market-research' || req.body?.proofClass === 'polydesk_smart_market_research') ? 2 : 1
+        if (current + required > cap) throw new Error('Private usage limit reached')
+        if (readiness) continue
         await client.query('INSERT INTO zs_private_usage(bucket,used) VALUES($1,1) ON CONFLICT(bucket) DO UPDATE SET used=zs_private_usage.used+1', [bucket])
       }
-      await client.query("INSERT INTO zs_private_leases(id,key_id,expires_at) VALUES($1,$2,now()+interval '10 minutes')", [lease,key.id])
+      if (readiness) {
+        const bucket = `${key.id}:readiness:${time.minute}`
+        const used = (await client.query('SELECT used FROM zs_private_usage WHERE bucket=$1', [bucket])).rows[0]?.used || 0
+        if (used >= 30) throw new Error('Private usage limit reached')
+        await client.query('INSERT INTO zs_private_usage(bucket,used) VALUES($1,1) ON CONFLICT(bucket) DO UPDATE SET used=zs_private_usage.used+1', [bucket])
+      }
+      if (!readiness) await client.query("INSERT INTO zs_private_leases(id,key_id,expires_at) VALUES($1,$2,now()+interval '10 minutes')", [lease,key.id])
       identity = { id: key.id, name: key.name, partner: key.platform }
       await client.query('COMMIT')
     } catch(error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
     identities.set(req, identity)
-    res.once('finish', () => { void db.query('DELETE FROM zs_private_leases WHERE id=$1', [lease]).catch(() => undefined) })
+    if (!readiness) res.once('finish', () => { void db.query('DELETE FROM zs_private_leases WHERE id=$1', [lease]).catch(() => undefined) })
     return next()
   } catch(error) {
     const message = error instanceof Error ? error.message : ''
