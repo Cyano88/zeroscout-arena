@@ -592,7 +592,7 @@ Rules:
           content: "You are ZeroScout's LP Intelligence verifier for paid prediction-market agent services. Return strict JSON only. Never fabricate market data."
         },
         { role: "user", content: prompt }
-      ]);
+      ], true, { lpCompatibility: true });
       parsed = parseJsonObject(content ?? "{}");
       selectedAi = ai;
       break;
@@ -624,7 +624,7 @@ Rules:
   };
 
   if (config.lpVerifierEnabled) {
-    result.modelReview = await reviewCustomIntelligenceWithCompute(input, result, config.computeLpVerifierModel, "LP verifier");
+    result.modelReview = await reviewCustomIntelligenceWithCompute(input, result, config.computeLpVerifierModel, "LP verifier", true);
   }
 
   return result;
@@ -1826,7 +1826,8 @@ async function reviewCustomIntelligenceWithCompute(
   input: CustomIntelligenceInput,
   result: CustomIntelligenceResult,
   model: string,
-  label: string
+  label: string,
+  lpCompatibility = false
 ): Promise<NonNullable<CustomIntelligenceResult["modelReview"]>> {
   const ai = getComputeAiClientForModel(model, label);
   const content = await completeJson(ai, [
@@ -1861,7 +1862,7 @@ Rules:
 - Reward clear maker-quote safety, stale-book warnings, and no-guarantee language.
 - Penalize fabricated prices, overconfident profit claims, market-order encouragement, and missing human verification steps.`
     }
-  ]);
+  ], true, { lpCompatibility });
   const parsed = parseJsonObject(content ?? "{}");
   return {
     provider: `0G Compute Router ${label} (${readString(model) || config.computeModel})`,
@@ -1900,6 +1901,7 @@ async function completeJson(
     useDefaultTrustMode?: boolean;
     maxTokens?: number;
     diagnostic?: boolean;
+    lpCompatibility?: boolean;
     reasoningEffort?: "low" | "medium" | "high";
   } = {},
 ): Promise<string | undefined> {
@@ -1926,11 +1928,11 @@ async function completeJson(
       trustMode: useDefaultTrustMode ? 'default' : 'configured',
     });
     if (format === "messages") {
-      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs, options.signal, options.diagnostic);
+      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs, options.signal, options.diagnostic, options.lpCompatibility === true);
     }
     const response = await client.chat.completions.create({
       model: ai.model,
-      temperature: 0.35,
+      ...(options.lpCompatibility && ai.model.toLowerCase().startsWith("claude-") ? {} : { temperature: 0.35 }),
       ...(enforceJson ? { response_format: { type: "json_object" as const } } : {}),
       messages: finalMessages,
       ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
@@ -1985,7 +1987,8 @@ async function completeJsonWithAnthropicFormat(
   useDefaultTrustMode: boolean,
   timeoutMs: number,
   externalSignal?: AbortSignal,
-  diagnostic = false
+  diagnostic = false,
+  lpCompatibility = false
 ): Promise<string | undefined> {
   const url = `${config.computeBaseUrl.replace(/\/$/, "")}/messages`;
   const system = messages
@@ -2014,7 +2017,7 @@ async function completeJsonWithAnthropicFormat(
     body: JSON.stringify({
       model,
       max_tokens: 2400,
-      temperature: 0.35,
+      ...(lpCompatibility && model.toLowerCase().startsWith("claude-") ? {} : { temperature: 0.35 }),
       ...(system ? { system } : {}),
       messages: chatMessages.length
         ? chatMessages
