@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { LpComputeBudget } from "./lp-compute-budget.js";
 import { directTradeAttemptWindow } from './direct-trade-attempt-window.js';
 import { isComputeBalanceRejection } from './compute-balance-error.js';
 import { serializeDirectTradeEvidence } from './direct-trade-evidence.js';
@@ -525,6 +526,7 @@ Rules:
 }
 
 async function generateLpMarketIntelligence(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
+  const budget = new LpComputeBudget();
   const modelCandidates = uniqueStrings([
     config.computeLpModel,
     config.computeModel,
@@ -586,13 +588,13 @@ Rules:
   for (const model of modelCandidates) {
     const ai = getComputeAiClientForModel(model, "LP Intelligence");
     try {
-      const content = await completeJson(ai, [
+      const content = await budget.run(signal => completeJson(ai, [
         {
           role: "system",
           content: "You are ZeroScout's LP Intelligence verifier for paid prediction-market agent services. Return strict JSON only. Never fabricate market data."
         },
         { role: "user", content: prompt }
-      ], true, { lpCompatibility: true });
+      ], true, { lpCompatibility: true, signal }));
       parsed = parseJsonObject(content ?? "{}");
       selectedAi = ai;
       break;
@@ -624,7 +626,7 @@ Rules:
   };
 
   if (config.lpVerifierEnabled) {
-    result.modelReview = await reviewCustomIntelligenceWithCompute(input, result, config.computeLpVerifierModel, "LP verifier", true);
+    result.modelReview = await budget.run(signal => reviewCustomIntelligenceWithCompute(input, result, config.computeLpVerifierModel, "LP verifier", true, signal));
   }
 
   return result;
@@ -1827,7 +1829,8 @@ async function reviewCustomIntelligenceWithCompute(
   result: CustomIntelligenceResult,
   model: string,
   label: string,
-  lpCompatibility = false
+  lpCompatibility = false,
+  signal?: AbortSignal
 ): Promise<NonNullable<CustomIntelligenceResult["modelReview"]>> {
   const ai = getComputeAiClientForModel(model, label);
   const content = await completeJson(ai, [
@@ -1862,7 +1865,7 @@ Rules:
 - Reward clear maker-quote safety, stale-book warnings, and no-guarantee language.
 - Penalize fabricated prices, overconfident profit claims, market-order encouragement, and missing human verification steps.`
     }
-  ], true, { lpCompatibility });
+  ], true, { lpCompatibility, signal });
   const parsed = parseJsonObject(content ?? "{}");
   return {
     provider: `0G Compute Router ${label} (${readString(model) || config.computeModel})`,
@@ -1912,6 +1915,7 @@ async function completeJson(
     useDefaultTrustMode = false,
     formatOverride?: ComputeApiFormat
   ) => {
+    if (options.lpCompatibility) options.signal?.throwIfAborted();
     const finalMessages = enforceJson
       ? messages
       : [
