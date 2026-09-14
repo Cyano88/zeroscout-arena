@@ -552,6 +552,10 @@ Output style: ${input.outputStyle}
 Supplied paid scout data:
 ${evidenceJson}
 
+Return one compact JSON object, under 1000 words total. Do not repeat the supplied candidate rows or payment proof.
+Keep each text field under 400 characters and each array to at most 5 short entries.
+Summarize scan counts, observed rejection reasons and missing evidence once; avoid repeating the same explanation across fields.
+Use suggestedVisuals: [] unless a visual is essential, and keep proofMetadata to a compact reference object.
 Return strict JSON with keys:
 intelligenceScore number 0-100,
 confidence number 0-100,
@@ -596,8 +600,8 @@ Rules:
           content: "You are ZeroScout's LP Intelligence verifier for paid prediction-market agent services. Return strict JSON only. Never fabricate market data."
         },
         { role: "user", content: prompt }
-      ], true, { lpCompatibility: true, signal }));
-      parsed = parseJsonObject(content ?? "{}");
+      ], true, { lpCompatibility: true, signal, maxTokens: 4096 }));
+      parsed = parseLpJsonObject(content ?? "");
       selectedAi = ai;
       break;
     } catch (error) {
@@ -1867,8 +1871,8 @@ Rules:
 - Reward clear maker-quote safety, stale-book warnings, and no-guarantee language.
 - Penalize fabricated prices, overconfident profit claims, market-order encouragement, and missing human verification steps.`
     }
-  ], true, { lpCompatibility, signal });
-  const parsed = parseJsonObject(content ?? "{}");
+  ], true, { lpCompatibility, signal, maxTokens: lpCompatibility ? 2048 : undefined });
+  const parsed = lpCompatibility ? parseLpJsonObject(content ?? "") : parseJsonObject(content ?? "{}");
   return {
     provider: `0G Compute Router ${label} (${readString(model) || config.computeModel})`,
     intelligenceRating: clampScore(parsed.intelligenceRating, 10, 7),
@@ -1930,11 +1934,11 @@ async function completeJson(
     const format = formatOverride ?? ai.format;
     if (options.diagnostic) console.info('[ai] direct-trade request metadata', {
       format, inputCharacters: JSON.stringify(finalMessages).length,
-      outputTokenLimit: format === 'messages' ? 2400 : options.maxTokens,
+      outputTokenLimit: format === 'messages' ? (options.lpCompatibility ? options.maxTokens ?? 4096 : 2400) : options.maxTokens,
       trustMode: useDefaultTrustMode ? 'default' : 'configured',
     });
     if (format === "messages") {
-      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs, options.signal, options.diagnostic, options.lpCompatibility === true);
+      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs, options.signal, options.diagnostic, options.lpCompatibility === true, options.lpCompatibility ? options.maxTokens ?? 4096 : 2400);
     }
     const response = await client.chat.completions.create({
       model: ai.model,
@@ -1944,6 +1948,9 @@ async function completeJson(
       ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
       ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {})
     }, options.signal ? { signal: options.signal } : undefined);
+    if (options.lpCompatibility && response.choices[0]?.finish_reason === 'length') {
+      throw Object.assign(new Error('LP provider exhausted its output token limit; truncated JSON was rejected.'), { code: 'LP_OUTPUT_TRUNCATED' });
+    }
     if (options.diagnostic) console.info('[ai] direct-trade response metadata', completionMetadata(response, 'chat-completions', JSON.stringify(finalMessages).length));
     return response.choices[0]?.message?.content ?? undefined;
   };
@@ -1952,6 +1959,7 @@ async function completeJson(
     const initialClient = options.useDefaultTrustMode ? getDefaultTrustComputeClient(ai.timeoutMs) : ai.client;
     return await run(initialClient, enforceResponseFormat, options.useDefaultTrustMode);
   } catch (firstError) {
+    if (options.lpCompatibility && (firstError as { code?: string })?.code === 'LP_OUTPUT_TRUNCATED') throw firstError;
     if (!allowTrustFallback) throw firstError;
     const formatRetry = alternateFormatForError(firstError, ai.format);
     if (formatRetry) {
@@ -1959,6 +1967,7 @@ async function completeJson(
         const content = await run(ai.client, true, false, formatRetry);
         if (content) return content;
       } catch (formatError) {
+        if (options.lpCompatibility && (formatError as { code?: string })?.code === 'LP_OUTPUT_TRUNCATED') throw formatError;
         const retryFormatWithoutTrustMode = shouldRetryWithoutTrustMode(formatError);
         if (!retryFormatWithoutTrustMode) throw formatError;
         const content = await run(getDefaultTrustComputeClient(ai.timeoutMs), true, true, formatRetry);
@@ -1974,6 +1983,7 @@ async function completeJson(
       if (!content) throw firstError;
       return content;
     } catch (secondError) {
+      if (options.lpCompatibility && (secondError as { code?: string })?.code === 'LP_OUTPUT_TRUNCATED') throw secondError;
       if (retryWithoutTrustMode) {
         const content = await run(client, false, true);
         if (!content) throw secondError;
@@ -1994,7 +2004,8 @@ async function completeJsonWithAnthropicFormat(
   timeoutMs: number,
   externalSignal?: AbortSignal,
   diagnostic = false,
-  lpCompatibility = false
+  lpCompatibility = false,
+  outputTokenLimit = 2400
 ): Promise<string | undefined> {
   const url = `${config.computeBaseUrl.replace(/\/$/, "")}/messages`;
   const system = messages
@@ -2022,7 +2033,7 @@ async function completeJsonWithAnthropicFormat(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 2400,
+      max_tokens: outputTokenLimit,
       ...(lpCompatibility && model.toLowerCase().startsWith("claude-") ? {} : { temperature: 0.35 }),
       ...(system ? { system } : {}),
       messages: chatMessages.length
@@ -2037,7 +2048,10 @@ async function completeJsonWithAnthropicFormat(
   if (!response.ok) {
     throw new Error(`${response.status} ${body.slice(0, 500)}`);
   }
-  const parsed = JSON.parse(body) as { content?: Array<{ type?: string; text?: string }>; error?: unknown };
+  const parsed = JSON.parse(body) as { content?: Array<{ type?: string; text?: string }>; error?: unknown; stop_reason?: string };
+  if (lpCompatibility && parsed.stop_reason === 'max_tokens') {
+    throw Object.assign(new Error('LP provider exhausted its output token limit; truncated JSON was rejected.'), { code: 'LP_OUTPUT_TRUNCATED' });
+  }
   if (diagnostic) console.info('[ai] direct-trade response metadata', completionMetadata(parsed, 'messages', JSON.stringify(messages).length));
   return parsed.content
     ?.map((item) => typeof item.text === "string" ? item.text : "")
@@ -2084,6 +2098,17 @@ function getDefaultTrustComputeClient(timeoutMs: number): OpenAI {
     fetch: globalThis.fetch as unknown as OpenAiCompatibleFetch,
     timeout: timeoutMs
   });
+}
+
+function parseLpJsonObject(content: string): Record<string, unknown> {
+  const trimmed = content.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Object.keys(parsed).length) throw new Error('Empty/non-object LP output');
+    return parsed as Record<string, unknown>;
+  } catch {
+    throw new Error('LP provider returned incomplete or invalid JSON; no partial report was accepted.');
+  }
 }
 
 function parseJsonObject(content: string): Record<string, unknown> {

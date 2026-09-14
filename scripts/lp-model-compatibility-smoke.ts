@@ -22,7 +22,8 @@ try {
  assert.equal(first.summary,result.summary)
  assert.equal(captured.length,2)
  assert(captured.every(r=>!('temperature' in r.body)))
- assert(captured.every(r=>r.body.max_tokens===2400))
+ assert.equal(captured[0].body.max_tokens,4096)
+ assert.equal(captured[1].body.max_tokens,2048)
  assert(first.modelReview)
  captured.length=0;chatOnly=true
  const alternate=await generateCustomIntelligence(lp)
@@ -35,5 +36,6 @@ try {
  await generateCustomIntelligence({...lp,productType:'custom-platform',analysisType:'custom-intelligence',data:{message:'normal schema control'}})
  assert(captured.length>0)
  assert(captured.every(r=>r.body.temperature===0.35),'Non-LP transport must keep previous parameters')
+ assert(captured.every(r=>r.body.max_tokens===2400),'Normal Messages token budget must remain unchanged')
  console.log('LP primary + verifier omit deprecated sampling in both transports; normal intelligence parameters and result shape preserved. No live compute.')
 } finally {globalThis.fetch=originalFetch}
