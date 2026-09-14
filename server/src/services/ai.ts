@@ -526,6 +526,8 @@ Rules:
 }
 
 async function generateLpMarketIntelligence(input: CustomIntelligenceInput): Promise<CustomIntelligenceResult> {
+  const evidenceJson = JSON.stringify(input.data ?? {});
+  if (evidenceJson.length > 32_000) throw new Error('LP evidence exceeds 32000 characters; refusing to truncate paid evidence.');
   const budget = new LpComputeBudget();
   const modelCandidates = uniqueStrings([
     config.computeLpModel,
@@ -548,7 +550,7 @@ Objective: ${input.objective}
 Output style: ${input.outputStyle}
 
 Supplied paid scout data:
-${JSON.stringify(input.data ?? {}).slice(0, 18000)}
+${evidenceJson}
 
 Return strict JSON with keys:
 intelligenceScore number 0-100,

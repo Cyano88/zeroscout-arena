@@ -30,6 +30,8 @@ try {
  assert(captured.some(r=>r.url.endsWith('/chat/completions')))
  assert(captured.every(r=>!('temperature' in r.body)))
  captured.length=0;chatOnly=false
+ await assert.rejects(generateCustomIntelligence({...lp,data:{evidence:'x'.repeat(32001)}}), /refusing to truncate/)
+ assert.equal(captured.length,0,'Oversized LP evidence must fail before any inference')
  await generateCustomIntelligence({...lp,productType:'custom-platform',analysisType:'custom-intelligence',data:{message:'normal schema control'}})
  assert(captured.length>0)
  assert(captured.every(r=>r.body.temperature===0.35),'Non-LP transport must keep previous parameters')
