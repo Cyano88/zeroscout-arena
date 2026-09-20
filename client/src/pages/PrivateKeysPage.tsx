@@ -10,9 +10,10 @@ export default function PrivateKeysPage({walletControls,connectionReady=true,get
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
   const [keys,setKeys]=useState<Key[]>([])
   const [secret,setSecret]=useState('')
-  const [name,setName]=useState('polydesk-production')
-  const [platform,setPlatform]=useState('PolyDesk')
-  const [service,setService]=useState<PrivateService>('lp-intelligence')
+  const auditSetup = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('service') === 'smart-contract-auditing'
+  const [name,setName]=useState(auditSetup ? 'grail-contract-auditing' : 'polydesk-production')
+  const [platform,setPlatform]=useState(auditSetup ? 'Grail' : 'PolyDesk')
+  const [service,setService]=useState<PrivateService>(auditSetup ? 'smart-contract-auditing' : 'lp-intelligence')
   const [status,setStatus]=useState('')
   const [busy,setBusy]=useState(false)
   const [loaded,setLoaded]=useState(false)
@@ -107,7 +108,7 @@ export default function PrivateKeysPage({walletControls,connectionReady=true,get
         <fieldset disabled={busy} className="private-key-fields">
           {([['Requests/day',daily,setDaily,100],['Requests/minute',minute,setMinute,5],['Concurrent requests',concurrent,setConcurrent,2],['Expiry days',days,setDays,30]] as const).map(([label,value,setValue,max])=><label key={label}>{label}<input type="number" min={1} max={max} value={value} onChange={e=>setValue(Number(e.target.value))} required/></label>)}
         </fieldset>
-        <details className="recovery-box"><summary>Service and usage policy</summary><p className="muted-copy">All private keys share 500 requests/day and 4 concurrent requests, with at most 10 active keys. Limits use UTC; failed downstream requests count. Quotas are not spending caps.</p><p className="muted-copy">Helper Sponsorship and Video Scoring are unavailable for private keys. Service selection is enforced per endpoint. Creating a key does not revoke existing keys.</p></details>
+        <details className="recovery-box"><summary>Service and usage policy</summary><p className="muted-copy">All private keys share 500 requests/day and 4 concurrent requests, with at most 10 active keys. Limits use UTC; failed downstream requests count. Quotas are not spending caps.</p><p className="muted-copy">Smart Contract Auditing uses a dedicated key and is excluded from LP + Agreement. Helper Sponsorship and Video Scoring are unavailable for private keys. Service selection is enforced per endpoint. Creating a key does not revoke existing keys.</p></details>
       </div>
     </form>
     <p className="private-key-status" role="status" aria-live="polite">{status}</p>

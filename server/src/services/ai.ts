@@ -1796,6 +1796,19 @@ async function completeDirectTradeJson(
   }
 }
 
+// Dedicated structured review transport; no fallback to a weaker trust mode.
+export async function completeSmartContractReview(system: string, payload: unknown, signal: AbortSignal): Promise<{content: string; provider: string}> {
+  if (!config.computeApiKey) throw new Error('0G Compute is not configured');
+  const model = process.env.ZEROSCOUT_CONTRACT_AUDIT_MODEL?.trim() || config.computeModel;
+  const ai = getComputeAiClientForModel(model, 'Smart Contract Auditing');
+  const content = await completeJson(ai, [
+    { role: 'system', content: system },
+    { role: 'user', content: JSON.stringify(payload) },
+  ], true, { signal, allowTrustFallback: false, maxTokens: 10000, lpCompatibility: true });
+  if (!content) throw new Error('Empty audit response');
+  return { content, provider: ai.label };
+}
+
 function getFullPlatformAiClient(): AiChatClient | undefined {
   if (!config.computeApiKey) return undefined;
   return getComputeAiClientForModel(config.computeModel, "full platform");

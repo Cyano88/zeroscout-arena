@@ -1,3 +1,4 @@
+import { contractAuditHandler } from './contract-audit-route.js';
 import express from "express";
 import { privateAccess, privateIdentity, privateMode } from './private-access.js';
 import cors from "cors";
@@ -57,6 +58,7 @@ const upload = multer({
 app.use(cors({ origin: config.corsOrigin === "*" ? true : config.corsOrigin }));
 app.use(express.json({ limit: "1mb" }));
 app.use(privateAccess);
+app.post('/api/integrations/smart-contract-audit', contractAuditHandler());
 
 app.get("/api/health", (_req, res) => {
   const body: HealthResponse = {
