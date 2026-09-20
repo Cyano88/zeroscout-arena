@@ -1,3 +1,4 @@
+import {auditDiagnostic} from './audit-diagnostics.js'
 import { createHash } from 'node:crypto'
 import { auditDraftSchema, auditJudgementSchema, contractAuditRequestSchema, type ContractAuditRequest, type auditEvidenceSchema } from '../../../shared/contract-audit.js'
 import type { z } from 'zod'
@@ -34,8 +35,14 @@ export function validAuditEvidence(e: Evidence, sources: ContractAuditRequest['s
 
 export async function generateContractAudit(raw: unknown, complete = completeSmartContractReview, signal: AbortSignal = AbortSignal.timeout(75000)) {
   const input = contractAuditRequestSchema.parse(raw)
-  const review = await complete(instructions, { sources: input.sources, context: input.context }, signal)
-  const draft = auditDraftSchema.parse(parseAuditJson(review.content))
+  const started=Date.now()
+  let review: Awaited<ReturnType<typeof completeSmartContractReview>>
+  let draft: z.infer<typeof auditDraftSchema>
+  try {
+    review = await complete(instructions, { sources: input.sources, context: input.context }, signal)
+    draft = auditDraftSchema.parse(parseAuditJson(review.content))
+    auditDiagnostic('review',started)
+  } catch(error) { auditDiagnostic('review',started,error,signal);throw error }
   const ids = draft.candidates.map(c => c.id)
   if (new Set(ids).size !== ids.length) throw new Error('Duplicate candidate IDs')
   const sourceGaps: string[] = []
@@ -50,6 +57,7 @@ export async function generateContractAudit(raw: unknown, complete = completeSma
   let adjudication: 'complete' | 'unavailable' | 'not-needed' = supported.length ? 'unavailable' : 'not-needed'
   let judgeProvider: string | undefined
   if (supported.length) {
+    const judgeStarted=Date.now()
     try {
       signal.throwIfAborted()
       const judge = await complete(judgeInstructions, {sources:input.sources, candidates:supported}, signal)
@@ -58,7 +66,8 @@ export async function generateContractAudit(raw: unknown, complete = completeSma
       decisions = parsed.decisions
       judgeProvider = judge.provider
       adjudication = 'complete'
-    } catch { sourceGaps.push('The challenge pass was unavailable or invalid. All remaining candidates require manual verification.') }
+      auditDiagnostic('challenge',judgeStarted)
+    } catch(error) { auditDiagnostic('challenge',judgeStarted,error,signal);sourceGaps.push('The challenge pass was unavailable or invalid. All remaining candidates require manual verification.') }
   }
   const leads: Array<z.infer<typeof auditDraftSchema>['candidates'][number] & {status:string; assessment:string}> = []
   const falsePositives: Array<{id:string;title:string;status:string;reason:string;evidence:Evidence[]}> = []
@@ -78,4 +87,3 @@ export async function generateContractAudit(raw: unknown, complete = completeSma
     disclaimer:'AI-assisted review, not a security certification or a Pashov audit. Unverified leads may be false positives; no findings are confirmed.',
   }
 }
-

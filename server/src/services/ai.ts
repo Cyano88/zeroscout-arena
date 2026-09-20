@@ -1,3 +1,4 @@
+import {assertAuditCompletion} from './audit-diagnostics.js';
 import OpenAI from "openai";
 import { LpComputeBudget } from "./lp-compute-budget.js";
 import { directTradeAttemptWindow } from './direct-trade-attempt-window.js';
@@ -1804,7 +1805,7 @@ export async function completeSmartContractReview(system: string, payload: unkno
   const content = await completeJson(ai, [
     { role: 'system', content: system },
     { role: 'user', content: JSON.stringify(payload) },
-  ], true, { signal, allowTrustFallback: false, maxTokens: 10000, lpCompatibility: true });
+  ], true, { signal, allowTrustFallback: false, maxTokens: 10000, lpCompatibility: true, diagnostic: true, contractAudit: true });
   if (!content) throw new Error('Empty audit response');
   return { content, provider: ai.label };
 }
@@ -1923,6 +1924,7 @@ async function completeJson(
     useDefaultTrustMode?: boolean;
     maxTokens?: number;
     diagnostic?: boolean;
+    contractAudit?: boolean;
     lpCompatibility?: boolean;
     reasoningEffort?: "low" | "medium" | "high";
   } = {},
@@ -1951,7 +1953,7 @@ async function completeJson(
       trustMode: useDefaultTrustMode ? 'default' : 'configured',
     });
     if (format === "messages") {
-      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs, options.signal, options.diagnostic, options.lpCompatibility === true, options.lpCompatibility ? options.maxTokens ?? 4096 : 2400);
+      return completeJsonWithAnthropicFormat(ai.model, finalMessages, useDefaultTrustMode, ai.timeoutMs, options.signal, options.diagnostic, options.lpCompatibility === true, options.lpCompatibility ? options.maxTokens ?? 4096 : 2400, options.contractAudit === true);
     }
     const response = await client.chat.completions.create({
       model: ai.model,
@@ -1961,6 +1963,7 @@ async function completeJson(
       ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
       ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {})
     }, options.signal ? { signal: options.signal } : undefined);
+    if (options.contractAudit) assertAuditCompletion(response, 'chat-completions');
     if (options.lpCompatibility && response.choices[0]?.finish_reason === 'length') {
       throw Object.assign(new Error('LP provider exhausted its output token limit; truncated JSON was rejected.'), { code: 'LP_OUTPUT_TRUNCATED' });
     }
@@ -2018,7 +2021,8 @@ async function completeJsonWithAnthropicFormat(
   externalSignal?: AbortSignal,
   diagnostic = false,
   lpCompatibility = false,
-  outputTokenLimit = 2400
+  outputTokenLimit = 2400,
+  contractAudit = false
 ): Promise<string | undefined> {
   const url = `${config.computeBaseUrl.replace(/\/$/, "")}/messages`;
   const system = messages
@@ -2062,6 +2066,7 @@ async function completeJsonWithAnthropicFormat(
     throw new Error(`${response.status} ${body.slice(0, 500)}`);
   }
   const parsed = JSON.parse(body) as { content?: Array<{ type?: string; text?: string }>; error?: unknown; stop_reason?: string };
+  if (contractAudit) assertAuditCompletion(parsed, 'messages');
   if (lpCompatibility && parsed.stop_reason === 'max_tokens') {
     throw Object.assign(new Error('LP provider exhausted its output token limit; truncated JSON was rejected.'), { code: 'LP_OUTPUT_TRUNCATED' });
   }
