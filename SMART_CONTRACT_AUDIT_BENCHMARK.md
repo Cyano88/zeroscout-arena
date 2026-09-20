@@ -60,3 +60,26 @@ Live replay of A1 returned stop_reason=refusal, with only 311 output characters.
 The service now classifies provider refusal explicitly and rejects even complete-looking text when the provider marks it refused. Audit-only diagnostics emit allowlisted stage, duration, status and error codes; source, raw output, exception messages and credentials are excluded. Grail distinguishes refusal from timeout and busy responses. Failed reviews continue to release reservations.
 
 13 focused audit tests and 85 Grail tests passed. These fixes improve failure handling and diagnosis; they do not establish improved benchmark completion. Durable background processing and a provider-supported completion path remain outstanding. Do not describe this benchmark as passed.
+
+## Candidate comparison and selected audit route: 2026-09-20
+Live catalog verified through the existing account: qwen3-coder-plus, glm-5.3-flash and gpt-5.6-sol were listed. Current production configuration before this change: claude-fable-5, default trust. Official catalog: https://pc.0g.ai/models ; trust-mode guidance: https://build.0g.ai/compute . Catalog presence is not an auditing certification.
+
+Qwen completed quickly but initially lost every finding to invalid source citations. Explicit numbered source lines fixed quotation matching. With numbering, it detected both target weaknesses but retained unrelated/privileged-power claims on both controls, including intended treasury-owner control and an owner withdrawal that would revert for insufficient funds. It was not selected.
+
+GLM-5.3-flash did not complete within the current 30-second per-call transport deadline. Initial local network failures were kept separate. This is an availability result, not an accuracy assessment.
+
+The 0G gpt-5.6-sol route explicitly rejects response_format=json_object with HTTP 400. For that exact model only, request JSON via the prompt and omit that unsupported wire parameter; strict JSON parsing, schema validation, evidence validation and challenge checks remain mandatory. Use low reasoning effort for this audited route. No trust-mode downgrade or automatic fallback is introduced.
+
+Selected candidate run: output/audit-candidates/2026-09-20T21-19-50-896Z/results.json.
+Same four Solidity fixtures, with explicit source-line numbering. Both model and input presentation differ from the original baseline; results do not isolate model choice alone.
+
+| Case | Time | Retained leads | Evidence | Manual assessment |
+| --- | --- | --- | --- | --- |
+| A1 | 36.7 s | 1 | Matching | Identifies unprivileged treasury overwrite and transfer of others' funds |
+| A2 | 21.1 s | 0 | Matching function map | Does not flag intended owner configuration or distribution |
+| B1 | 34.0 s | 1 | Matching | Identifies forwarding attack and explicitly requires owner-originated interaction |
+| B2 | 13.8 s | 0 | Matching function map | Does not flag blocked forwarding or normal owner withdrawal |
+
+This single diagnostic run completed 4/4, detected the target path in 2/2 vulnerable fixtures, and retained no findings on 2/2 controls. Do not generalize these tiny denominators to production precision, recall or security assurance. Findings are still unverified leads; no exploit was executed. Broader held-out tests, repeated runs, isolated execution and background job processing remain required work.
+
+The production switch is scoped to ZEROSCOUT_CONTRACT_AUDIT_MODEL=gpt-5.6-sol, not general research, LP, agreement, or other services. A fully rejected function map now fails closed rather than returning empty coverage as a completed report.

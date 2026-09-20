@@ -20,3 +20,14 @@ test('endpoint refuses anonymous access even when global private mode is disable
 
 test('whole-response fences preserve review and challenge validation',async()=>{let calls=0;const r=await generateContractAudit(input,async()=>({content:'```json\n'+JSON.stringify(calls++===0?draft:{decisions:[{id:'C1',decision:'reject',reason:'No body effects',evidence:[evidence]}]})+'\n```',provider:'fixture'}));assert.equal(r.adjudication,'complete');assert.equal(r.falsePositives.length,1);assert.deepEqual(r.confirmedFindings,[])})
 test('wrapper handling rejects prose, multiple blocks and invalid schema',async()=>{for(const text of ['Explanation\n```json\n{}\n```','```json\n{}\n```\n```json\n{}\n```','```json\n{broken}\n```'])assert.throws(()=>parseAuditJson(text));await assert.rejects(()=>generateContractAudit(input,async()=>({content:'```json\n{}\n```',provider:'fixture'})))})
+
+test('source line metadata preserves exact text and original source binding',async()=>{
+ let received:any;
+ const r=await generateContractAudit(input,async(_system,payload)=>{received=payload;return {content:JSON.stringify({...draft,candidates:[]}),provider:'fixture'}});
+ assert.deepEqual(received.sources,[{path:'Example.sol',lines:[{number:1,text:quote}]}]);
+ assert.equal(r.sources[0].path,'Example.sol');assert.equal(r.sources[0].sha256.length,64);
+});
+test('a wholly rejected function map fails instead of charging for empty coverage',async()=>{
+ const entry={contract:'Example',function:'f',visibility:'external',callers:'Anyone',modifiers:[],stateChanges:[],externalPath:['f'],uncertainties:[],evidence:[{...evidence,quote:'fabricated'}]};
+ await assert.rejects(()=>generateContractAudit(input,async()=>({content:JSON.stringify({...draft,candidates:[],accessMap:[entry]}),provider:'fixture'})),(e:any)=>e.code==='AUDIT_EVIDENCE_REJECTED');
+});

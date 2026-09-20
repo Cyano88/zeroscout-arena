@@ -1805,7 +1805,7 @@ export async function completeSmartContractReview(system: string, payload: unkno
   const content = await completeJson(ai, [
     { role: 'system', content: system },
     { role: 'user', content: JSON.stringify(payload) },
-  ], true, { signal, allowTrustFallback: false, maxTokens: 10000, lpCompatibility: true, diagnostic: true, contractAudit: true });
+  ], model !== "gpt-5.6-sol", { signal, allowTrustFallback: false, maxTokens: 10000, lpCompatibility: true, diagnostic: true, contractAudit: true, reasoningEffort: model === "gpt-5.6-sol" ? "low" : undefined });
   if (!content) throw new Error('Empty audit response');
   return { content, provider: ai.label };
 }
