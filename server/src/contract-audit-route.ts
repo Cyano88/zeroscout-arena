@@ -11,7 +11,7 @@ export function contractAuditHandler(generate = generateContractAudit, identity 
     const parsed = contractAuditRequestSchema.safeParse(req.body)
     if (!parsed.success) { res.status(400).json({error:'Invalid smart-contract audit request. Check schema, unique source files, size and sharing consent.'}); return }
     const abort = new AbortController()
-    const timer = setTimeout(()=>abort.abort(),75000)
+    const timer = setTimeout(()=>abort.abort(),185000)
     const disconnect = () => { if (!res.writableEnded) abort.abort() }
     res.once('close',disconnect)
     try { const result = await generate(parsed.data, undefined, abort.signal); if (!abort.signal.aborted) res.json(result); else if (!res.destroyed) res.status(504).json({error:'Contract review timed out. No completed report was produced.'}) }

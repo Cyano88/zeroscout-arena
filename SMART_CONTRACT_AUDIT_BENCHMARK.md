@@ -83,3 +83,8 @@ Same four Solidity fixtures, with explicit source-line numbering. Both model and
 This single diagnostic run completed 4/4, detected the target path in 2/2 vulnerable fixtures, and retained no findings on 2/2 controls. Do not generalize these tiny denominators to production precision, recall or security assurance. Findings are still unverified leads; no exploit was executed. Broader held-out tests, repeated runs, isolated execution and background job processing remain required work.
 
 The production switch is scoped to ZEROSCOUT_CONTRACT_AUDIT_MODEL=gpt-5.6-sol, not general research, LP, agreement, or other services. A fully rejected function map now fails closed rather than returning empty coverage as a completed report.
+
+## Larger flattened-source runtime check: 2026-09-20
+Production diagnostic evidence showed the first pass ending at 30,004 ms. A private 35,216-character flattened vault input then completed locally against the live provider in 72.1 seconds (59.3 seconds first pass, 12.8 seconds challenge), with a valid source-bound report. Source and report are kept out of this repository's tracked files.
+
+Audit-only transport now permits 90 seconds per pass and 185 seconds for the service request. Grail waits up to 195 seconds inside a 240-second server function and holds the account reservation for 240 seconds. Other inference lanes are unchanged. SDK timeout subclasses are classified explicitly even when their Error.name is generic. This remains synchronous processing; durable background work is not implemented. Runtime observations do not imply the contract is secure.

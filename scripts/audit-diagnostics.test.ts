@@ -25,3 +25,8 @@ test('provider refusal rejects partial text and complete-looking JSON alike',()=
  assert.throws(()=>assertAuditCompletion({choices:[{finish_reason:'stop',message:{refusal:'declined'}}]},'chat-completions'));
  assert.doesNotThrow(()=>assertAuditCompletion({stop_reason:'end_turn'},'messages'));
 });
+
+test('SDK timeout subclasses are classified even when Error.name is generic',()=>{
+ class APIConnectionTimeoutError extends Error {}
+ assert.equal(auditFailureCode(new APIConnectionTimeoutError('private request text')),'provider_timeout');
+});

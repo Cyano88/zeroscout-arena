@@ -1823,7 +1823,7 @@ function getLpAiClient(): AiChatClient | undefined {
 function getComputeAiClientForModel(modelInput: string, laneLabel: string): AiChatClient {
   const model = readString(modelInput) || config.computeModel;
   const format = computeApiFormatForModel(model);
-  const timeoutMs = laneLabel === "helper"
+  const timeoutMs = laneLabel === "Smart Contract Auditing" ? 90_000 : laneLabel === "helper"
     ? config.computeHelperAttemptTimeoutMs
     : laneLabel === "Direct Trade Intelligence"
       ? config.computeDirectTradeAttemptTimeoutMs

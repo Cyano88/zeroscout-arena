@@ -2,12 +2,12 @@ export function auditFailureCode(error: unknown, signal?: AbortSignal): string {
  if(signal?.aborted)return 'deadline_exceeded';
  if(error instanceof SyntaxError)return 'invalid_json';
  if(error&&typeof error==='object'){
-  const e=error as {name?:string;code?:string;status?:number};
+  const e=error as {name?:string;code?:string;status?:number;constructor?:{name?:string}};
   if(e.name==='ZodError')return 'invalid_schema';
   if(e.code==='AUDIT_EVIDENCE_REJECTED')return 'invalid_evidence';
   if(e.code==='AUDIT_PROVIDER_REFUSAL')return 'provider_refusal';
   if(e.code==='LP_OUTPUT_TRUNCATED')return 'output_truncated';
-  if(['AbortError','TimeoutError','APIConnectionTimeoutError'].includes(e.name||''))return 'provider_timeout';
+  if(e.constructor?.name==='APIConnectionTimeoutError'||['AbortError','TimeoutError','APIConnectionTimeoutError'].includes(e.name||''))return 'provider_timeout';
   if(typeof e.status==='number'&&Number.isInteger(e.status)&&e.status>=400&&e.status<=599)return 'provider_http_'+e.status;
  }
  return 'provider_or_validation_failure';

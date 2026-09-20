@@ -33,7 +33,7 @@ export function validAuditEvidence(e: Evidence, sources: ContractAuditRequest['s
   return lines.slice(e.lineStart - 1, e.lineEnd).join('\n').trim() === e.quote.replace(/\r\n/g, '\n').trim()
 }
 
-export async function generateContractAudit(raw: unknown, complete = completeSmartContractReview, signal: AbortSignal = AbortSignal.timeout(75000)) {
+export async function generateContractAudit(raw: unknown, complete = completeSmartContractReview, signal: AbortSignal = AbortSignal.timeout(185000)) {
   const input = contractAuditRequestSchema.parse(raw)
   const numberedSources=input.sources.map(s=>({path:s.path,lines:s.content.replace(/\r\n/g,'\n').split('\n').map((text,index)=>({number:index+1,text}))}))
   const started=Date.now()
