@@ -1,4 +1,4 @@
-﻿import { createHash } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { auditDraftSchema, auditJudgementSchema, contractAuditRequestSchema, type ContractAuditRequest, type auditEvidenceSchema } from '../../../shared/contract-audit.js'
 import type { z } from 'zod'
 import { completeSmartContractReview } from './ai.js'
@@ -18,6 +18,12 @@ const judgeInstructions = `Independently challenge these proposed Solidity issue
 Provide exactly one decision per candidate ID. Reject a proposed attack when exact guards or impossible state block it, or it merely restates an intended admin power with no access gap or unprivileged amplifier. Quote exact blocking source lines when rejecting. Retain only plausible reachable leads, never certify exploits. Use uncertain where authority, dispatch, dependencies or state cannot be established. Trace from external caller to material victim impact. No test execution occurred. No new candidates. Maximum 12 evidence items per decision and 2000 characters per string.`
 
 type Evidence = z.infer<typeof auditEvidenceSchema>
+// Accept only a single whole-response JSON fence, never fragments from prose.
+export function parseAuditJson(content: string): unknown {
+  const text = content.trim()
+  const fence = /^```(?:json)?\s*\r?\n([\s\S]*?)\r?\n```$/i.exec(text)
+  return JSON.parse(fence ? fence[1] : text)
+}
 export function validAuditEvidence(e: Evidence, sources: ContractAuditRequest['sources']): boolean {
   const source = sources.find(s => s.path === e.file)
   if (!source || e.lineEnd < e.lineStart || e.lineEnd - e.lineStart > 100) return false
@@ -29,7 +35,7 @@ export function validAuditEvidence(e: Evidence, sources: ContractAuditRequest['s
 export async function generateContractAudit(raw: unknown, complete = completeSmartContractReview, signal: AbortSignal = AbortSignal.timeout(75000)) {
   const input = contractAuditRequestSchema.parse(raw)
   const review = await complete(instructions, { sources: input.sources, context: input.context }, signal)
-  const draft = auditDraftSchema.parse(JSON.parse(review.content))
+  const draft = auditDraftSchema.parse(parseAuditJson(review.content))
   const ids = draft.candidates.map(c => c.id)
   if (new Set(ids).size !== ids.length) throw new Error('Duplicate candidate IDs')
   const sourceGaps: string[] = []
@@ -47,7 +53,7 @@ export async function generateContractAudit(raw: unknown, complete = completeSma
     try {
       signal.throwIfAborted()
       const judge = await complete(judgeInstructions, {sources:input.sources, candidates:supported}, signal)
-      const parsed = auditJudgementSchema.parse(JSON.parse(judge.content))
+      const parsed = auditJudgementSchema.parse(parseAuditJson(judge.content))
       if (new Set(parsed.decisions.map(d=>d.id)).size !== supported.length || parsed.decisions.length !== supported.length || parsed.decisions.some(d=>!supported.some(c=>c.id===d.id))) throw new Error('Incomplete adjudication')
       decisions = parsed.decisions
       judgeProvider = judge.provider
@@ -72,3 +78,4 @@ export async function generateContractAudit(raw: unknown, complete = completeSma
     disclaimer:'AI-assisted review, not a security certification or a Pashov audit. Unverified leads may be false positives; no findings are confirmed.',
   }
 }
+

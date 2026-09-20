@@ -1,7 +1,7 @@
-﻿import test from 'node:test'
+import test from 'node:test'
 import assert from 'node:assert/strict'
 import { contractAuditRequestSchema } from '../shared/contract-audit.js'
-import { generateContractAudit } from '../server/src/services/smart-contract-audit.js'
+import { generateContractAudit, parseAuditJson } from '../server/src/services/smart-contract-audit.js'
 import { privateServiceAllows } from '../shared/private-services.js'
 import { contractAuditHandler } from '../server/src/contract-audit-route.js'
 const quote='contract Example { function f() external {} }'
@@ -17,3 +17,6 @@ test('fabricated blocking evidence cannot dismiss a lead',async()=>{let calls=0;
 test('judge failure preserves unverified leads and declares degraded coverage',async()=>{let calls=0;const r=await generateContractAudit(input,async()=>{if(calls++)throw Error('offline');return {content:JSON.stringify(draft),provider:'fixture'}});assert.equal(r.adjudication,'unavailable');assert.equal(r.leads.length,1);assert.deepEqual(r.confirmedFindings,[])})
 test('initial provider failure and malformed JSON never produce a report',async()=>{await assert.rejects(()=>generateContractAudit(input,async()=>{throw Error('offline')}));await assert.rejects(()=>generateContractAudit(input,async()=>({content:'{}',provider:'fixture'})))})
 test('endpoint refuses anonymous access even when global private mode is disabled',async()=>{let called=false,status=0;const res={setHeader(){},status(n:number){status=n;return this},json(){return this}};await contractAuditHandler(async()=>{called=true;throw Error()},()=>undefined)({body:input} as any,res as any);assert.equal(status,401);assert.equal(called,false)})
+
+test('whole-response fences preserve review and challenge validation',async()=>{let calls=0;const r=await generateContractAudit(input,async()=>({content:'```json\n'+JSON.stringify(calls++===0?draft:{decisions:[{id:'C1',decision:'reject',reason:'No body effects',evidence:[evidence]}]})+'\n```',provider:'fixture'}));assert.equal(r.adjudication,'complete');assert.equal(r.falsePositives.length,1);assert.deepEqual(r.confirmedFindings,[])})
+test('wrapper handling rejects prose, multiple blocks and invalid schema',async()=>{for(const text of ['Explanation\n```json\n{}\n```','```json\n{}\n```\n```json\n{}\n```','```json\n{broken}\n```'])assert.throws(()=>parseAuditJson(text));await assert.rejects(()=>generateContractAudit(input,async()=>({content:'```json\n{}\n```',provider:'fixture'})))})
