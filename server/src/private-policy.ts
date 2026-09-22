@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { ethers } from 'ethers'
 
 export const PRIVATE_OWNER = '0xa2ae0a3b3ed7b30ab049685a934de587a0f51d66'
-export const PRIVATE_PATHS = ['/api/integrations/smart-contract-audit', '/api/integrations/intelligence', '/api/integrations/intelligence/readiness', '/api/integrations/polydesk-general-research', '/api/integrations/agreement-intelligence']
+export const PRIVATE_PATHS = ['/api/integrations/crypto-fundraising', '/api/integrations/smart-contract-audit', '/api/integrations/intelligence', '/api/integrations/intelligence/readiness', '/api/integrations/polydesk-general-research', '/api/integrations/agreement-intelligence']
 export const DEFAULT_PRIVATE_LIMITS = { daily: 100, minute: 5, concurrent: 2, days: 30 }
 export function privateLimits(raw: Record<string, unknown> = {}) {
   const values = { ...DEFAULT_PRIVATE_LIMITS, ...raw }

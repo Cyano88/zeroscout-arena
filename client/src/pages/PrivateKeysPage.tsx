@@ -10,10 +10,11 @@ export default function PrivateKeysPage({walletControls,connectionReady=true,get
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false}},[])
   const [keys,setKeys]=useState<Key[]>([])
   const [secret,setSecret]=useState('')
+  const fundraisingSetup = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('service') === 'crypto-fundraising'
   const auditSetup = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('service') === 'smart-contract-auditing'
-  const [name,setName]=useState(auditSetup ? 'grail-contract-auditing' : 'polydesk-production')
-  const [platform,setPlatform]=useState(auditSetup ? 'Grail' : 'PolyDesk')
-  const [service,setService]=useState<PrivateService>(auditSetup ? 'smart-contract-auditing' : 'lp-intelligence')
+  const [name,setName]=useState(fundraisingSetup ? 'grail-fundraising-research' : auditSetup ? 'grail-contract-auditing' : 'polydesk-production')
+  const [platform,setPlatform]=useState(fundraisingSetup || auditSetup ? 'Grail' : 'PolyDesk')
+  const [service,setService]=useState<PrivateService>(fundraisingSetup ? 'crypto-fundraising' : auditSetup ? 'smart-contract-auditing' : 'lp-intelligence')
   const [status,setStatus]=useState('')
   const [busy,setBusy]=useState(false)
   const [loaded,setLoaded]=useState(false)

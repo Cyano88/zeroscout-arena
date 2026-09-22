@@ -1823,7 +1823,7 @@ function getLpAiClient(): AiChatClient | undefined {
 function getComputeAiClientForModel(modelInput: string, laneLabel: string): AiChatClient {
   const model = readString(modelInput) || config.computeModel;
   const format = computeApiFormatForModel(model);
-  const timeoutMs = laneLabel === "Smart Contract Auditing" ? 90_000 : laneLabel === "helper"
+  const timeoutMs = (laneLabel === "Smart Contract Auditing" || laneLabel === "Crypto Fundraising Intelligence") ? 90_000 : laneLabel === "helper"
     ? config.computeHelperAttemptTimeoutMs
     : laneLabel === "Direct Trade Intelligence"
       ? config.computeDirectTradeAttemptTimeoutMs
@@ -2342,4 +2342,14 @@ function summaryForAi(capsule: ProjectCapsule) {
     nextRoundTasks: capsule.nextRoundTasks,
     storageRoot: capsule.storageRoot
   };
+}
+
+// Isolated fundraising extraction lane; inherits existing transport trust policy, never falls back.
+export async function completeFundraisingResearch(system:string,payload:unknown,signal:AbortSignal):Promise<{content:string;provider:string}>{
+ if(!config.computeApiKey)throw new Error('Compute unavailable');
+ const model=process.env.ZEROSCOUT_FUNDRAISING_MODEL?.trim()||'gpt-5.6-sol';
+ const ai=getComputeAiClientForModel(model,'Crypto Fundraising Intelligence');
+ const content=await completeJson(ai,[{role:'system',content:system},{role:'user',content:JSON.stringify(payload)}],model!=='gpt-5.6-sol',{signal,allowTrustFallback:false,maxTokens:10000,lpCompatibility:true,reasoningEffort:model==='gpt-5.6-sol'?'low':undefined});
+ if(!content)throw new Error('Empty fundraising response');
+ return {content,provider:ai.label};
 }
